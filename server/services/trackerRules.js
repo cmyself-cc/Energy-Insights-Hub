@@ -1,4 +1,5 @@
 export function isWithinLookback(item, hours) {
+  if (!Number.isFinite(hours) || hours <= 0) return true;
   const date = item.publishDate || item.publish_date;
   if (!date) return true;
   const cutoff = Date.now() - hours * 60 * 60 * 1000;

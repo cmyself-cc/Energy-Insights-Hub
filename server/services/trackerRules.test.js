@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { isWithinLookback, matchesExclusions, limitPerSource, matchesInclusions, applyPreFilter } from "./trackerRules.js";
+import { isWithinLookback, matchesExclusions, limitPerSource, matchesInclusions, applyPreFilter, applyPostFilter } from "./trackerRules.js";
 
 describe("trackerRules", () => {
   it("isWithinLookback returns true for recent item", () => {
@@ -117,5 +117,55 @@ describe("trackerRules", () => {
       return acc;
     }, {});
     assert.deepStrictEqual(bySource, { A: 2, B: 2, C: 2 });
+  });
+
+  it("applyPostFilter passes all non-empty-title insights when inclusion lists are empty", () => {
+    const insights = [
+      { title: "Energy News", businessDomain: "石油", features: ["市场"] },
+      { title: "Another Insight", businessDomain: "化工", features: ["政策"] }
+    ];
+    const result = applyPostFilter(insights, {});
+    assert.strictEqual(result.length, 2);
+  });
+
+  it("applyPostFilter keeps only insights matching includeBusinessDomains", () => {
+    const insights = [
+      { title: "Energy News", businessDomain: "能源转型", features: [] },
+      { title: "Chemical Update", businessDomain: "化工", features: [] }
+    ];
+    const result = applyPostFilter(insights, { includeBusinessDomains: ["能源"] });
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].title, "Energy News");
+  });
+
+  it("applyPostFilter keeps insights with matching features when includeCategories is set", () => {
+    const insights = [
+      { title: "Policy News", businessDomain: "", features: ["政策"] },
+      { title: "Market News", businessDomain: "", features: ["市场"] }
+    ];
+    const result = applyPostFilter(insights, { includeCategories: ["政策"] });
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].title, "Policy News");
+  });
+
+  it("applyPostFilter removes insights with empty titles regardless of inclusions", () => {
+    const insights = [
+      { title: "Valid Title", businessDomain: "能源转型", features: [] },
+      { title: "", businessDomain: "能源转型", features: [] },
+      { title: "   ", businessDomain: "能源转型", features: [] }
+    ];
+    const result = applyPostFilter(insights, { includeBusinessDomains: ["能源转型"] });
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].title, "Valid Title");
+  });
+
+  it("applyPostFilter removes insights containing exclude keywords", () => {
+    const insights = [
+      { title: "Clean Energy", businessDomain: "", features: [] },
+      { title: "Stock Market", businessDomain: "", features: [] }
+    ];
+    const result = applyPostFilter(insights, { excludeKeywords: ["stock"] });
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].title, "Clean Energy");
   });
 });
