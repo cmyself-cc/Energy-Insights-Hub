@@ -13,9 +13,25 @@ export function matchesExclusions(item, excludeKeywords) {
 
 export function limitPerSource(items, max) {
   if (!max || max <= 0) return items;
-  return [...items]
-    .sort((a, b) => new Date(b.publishDate || b.publish_date || 0) - new Date(a.publishDate || a.publish_date || 0))
-    .slice(0, max);
+
+  const groups = new Map();
+  for (const item of items) {
+    const key = item.sourceId || item.source || "_default";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+
+  const result = [];
+  for (const group of groups.values()) {
+    const sorted = [...group].sort((a, b) => {
+      const dateA = new Date(a.publishDate || a.publish_date || 0).getTime();
+      const dateB = new Date(b.publishDate || b.publish_date || 0).getTime();
+      return dateB - dateA;
+    });
+    result.push(...sorted.slice(0, max));
+  }
+
+  return result;
 }
 
 function normalizeArray(value) {
@@ -50,6 +66,22 @@ export function matchesInclusions(insight, settings) {
 export function applyPreFilter(items, settings) {
   let candidates = items.filter(item => isWithinLookback(item, settings.lookbackHours));
   candidates = candidates.filter(item => !matchesExclusions(item, settings.excludeKeywords));
+
+  const seen = new Set();
+  candidates = candidates.filter(item => {
+    const keys = [];
+    if (item.url) keys.push(`url:${item.url}`);
+
+    const normalizedTitle = typeof item.title === "string" ? item.title.trim().toLowerCase() : "";
+    if (normalizedTitle) keys.push(`title:${normalizedTitle}`);
+
+    if (keys.length === 0) return true;
+    if (keys.some(k => seen.has(k))) return false;
+
+    for (const key of keys) seen.add(key);
+    return true;
+  });
+
   candidates = limitPerSource(candidates, settings.maxPerSource);
   return candidates;
 }
