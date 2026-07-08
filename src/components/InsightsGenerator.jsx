@@ -2,13 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 
-function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenerate }) {
+function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenerate, onSaveReport }) {
   const [downloading, setDownloading] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState(defaultLanguage || "en");
   const [displayNewsletter, setDisplayNewsletter] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [activeSection, setActiveSection] = useState("overview");
   const [, setExpandedSections] = useState({});
+  const [savingReport, setSavingReport] = useState(false);
   const contentRef = useRef(null);
 
   const handleLanguageChange = async (newLang) => {
@@ -16,6 +17,22 @@ function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenera
     if (onGenerate) {
       await generateNewsletter(newLang);
     }
+  };
+
+  const handleSaveReport = async () => {
+    if (!displayNewsletter || !onSaveReport) return;
+    setSavingReport(true);
+    try {
+      await onSaveReport({
+        title: displayNewsletter.split("\n")[0].replace(/^#\s*/, "").slice(0, 120) || tl.newsletter.title,
+        content: displayNewsletter,
+        items,
+        language: currentLanguage
+      });
+    } catch (e) {
+      console.error("Save report failed:", e);
+    }
+    setSavingReport(false);
   };
 
   const generateNewsletter = async (lang = currentLanguage) => {
@@ -388,6 +405,21 @@ function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenera
             >
               {downloading ? tl.buttons.generatingPDF : tl.buttons.downloadPDF}
             </button>
+            {onSaveReport && (
+              <button
+                onClick={handleSaveReport}
+                disabled={savingReport || !displayNewsletter}
+                style={{
+                  padding: "9px 18px", borderRadius: BORDER_RADIUS.md, border: "none",
+                  background: savingReport ? "rgba(255,255,255,0.5)" : "#fff",
+                  color: COLORS.primary, fontWeight: 700, fontSize: FONT_SIZES.md,
+                  cursor: savingReport || !displayNewsletter ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", gap: 5
+                }}
+              >
+                {savingReport ? "💾 ..." : "💾 Save"}
+              </button>
+            )}
             <button
               onClick={onClose}
               style={{

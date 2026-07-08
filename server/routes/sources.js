@@ -1,0 +1,78 @@
+import { Router } from "express";
+import db from "../db.js";
+
+const router = Router();
+
+function parseConfig(config) {
+  if (!config) return null;
+  if (typeof config === "string") {
+    try {
+      return JSON.parse(config);
+    } catch {
+      return null;
+    }
+  }
+  return config;
+}
+
+router.get("/", (_req, res) => {
+  try {
+    const sources = db.prepare("SELECT * FROM sources ORDER BY created_at DESC").all();
+    res.json({ data: sources.map(s => ({ ...s, config: parseConfig(s.config) })) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/:id", (req, res) => {
+  try {
+    const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(req.params.id);
+    if (!source) return res.status(404).json({ error: "Source not found" });
+    res.json({ data: { ...source, config: parseConfig(source.config) } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/", (req, res) => {
+  try {
+    const { name, url, type = "rss", active = 1, config } = req.body;
+    if (!name || !url) {
+      return res.status(400).json({ error: "name and url are required" });
+    }
+    const configStr = config ? JSON.stringify(config) : null;
+    const result = db.prepare(
+      "INSERT INTO sources (name, url, type, active, config) VALUES (?, ?, ?, ?, ?)"
+    ).run(name, url, type, active ? 1 : 0, configStr);
+    const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(result.lastInsertRowid);
+    res.status(201).json({ data: { ...source, config: parseConfig(source.config) } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put("/:id", (req, res) => {
+  try {
+    const { name, url, type, active, config } = req.body;
+    const configStr = config ? JSON.stringify(config) : null;
+    db.prepare(
+      "UPDATE sources SET name = ?, url = ?, type = ?, active = ?, config = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(name, url, type, active ? 1 : 0, configStr, req.params.id);
+    const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(req.params.id);
+    if (!source) return res.status(404).json({ error: "Source not found" });
+    res.json({ data: { ...source, config: parseConfig(source.config) } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete("/:id", (req, res) => {
+  try {
+    db.prepare("DELETE FROM sources WHERE id = ?").run(req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+export default router;

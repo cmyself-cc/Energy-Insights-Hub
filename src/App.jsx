@@ -6,9 +6,12 @@ import Sidebar from "./components/Sidebar";
 import FilterBar from "./components/FilterBar";
 import InsightCard from "./components/InsightCard";
 import AiDrawer from "./components/AiDrawer";
+import ReportsPage from "./components/ReportsPage";
+import SourcesPage from "./components/SourcesPage";
 import { ToastContainer } from "./components/Toast";
 import { storage } from "./utils/storage";
 import { api } from "./utils/api";
+import { backendApi } from "./utils/backendApi";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "./constants/theme";
 import { i18n } from "./constants/i18n";
 import { DEFAULT_FILTERS } from "./constants/taxonomy";
@@ -47,7 +50,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [bookmarks, setBookmarks] = useState([]);
   const [hidden, setHidden] = useState([]);
-  const [activeTab, setActiveTab] = useState("feed");
+  const [activeTab, setActiveTab] = useState("intelligence");
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [apiConfig, setApiConfig] = useState(null);
   const [language, setLanguage] = useState("en");
@@ -64,7 +67,23 @@ export default function App() {
     setApiConfig(storage.getApiConfig());
     const savedLanguage = storage.getLanguage();
     setLanguage(savedLanguage);
+    loadInsightsFromBackend();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadInsightsFromBackend = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await backendApi.getInsights({ pageSize: 100 });
+      setInsights(res.data || []);
+      setFetched(true);
+    } catch (e) {
+      setError(language === "zh" ? "无法连接到后端服务，请确认已运行 npm run dev:server" : "Cannot connect to backend. Please run npm run dev:server");
+      console.error("Backend load failed:", e);
+    }
+    setLoading(false);
+  };
 
   const addToast = (message, type = "success") => {
     const id = Date.now();
@@ -93,10 +112,17 @@ export default function App() {
     addToast(newBookmarks.length > bookmarks.length ? t.toasts.addedToBookmarks : t.toasts.removedFromBookmarks, "success");
   };
 
-  const hideItem = (item) => {
-    const newHidden = [...hidden, item.title];
-    setHidden(newHidden);
-    addToast(language === "zh" ? "已隐藏该文章" : "Article hidden", "info");
+  const hideItem = async (item) => {
+    try {
+      if (item.id) {
+        await backendApi.hideInsight(item.id);
+      }
+      const newHidden = [...hidden, item.title];
+      setHidden(newHidden);
+      addToast(language === "zh" ? "已隐藏该文章" : "Article hidden", "info");
+    } catch (e) {
+      console.error("Hide failed:", e);
+    }
   };
 
   const handleDarkModeToggle = () => {
@@ -118,33 +144,23 @@ export default function App() {
   };
 
   const fetchInsights = useCallback(async () => {
-    if (!apiConfig || !apiConfig.apiKey) {
-      setShowApiConfig(true);
-      addToast(t.toasts.apiKeyRequired, "error");
-      return;
-    }
-
     setLoading(true);
     setError(null);
-    setInsights([]);
 
     try {
-      const newItems = await api.fetchInsights({
-        selectedFocus: [],
-        selectedRegions: [],
-        search: filters.query,
-        dateRange: filters.dateRange,
-        businessDomain: filters.businessDomain,
-        enterpriseType: filters.enterpriseType,
-        sourceType: filters.sourceType
-      }, language);
-
-      const cartTitles = new Set(cart.map(c => c.title));
-      const dedupedItems = newItems.filter(item => !cartTitles.has(item.title));
-      setInsights(dedupedItems);
+      const params = {
+        pageSize: 100,
+        search: filters.query || undefined,
+        businessDomain: filters.businessDomain !== "all" ? filters.businessDomain : undefined,
+        enterpriseType: filters.enterpriseType !== "all" ? filters.enterpriseType : undefined,
+        sourceType: filters.sourceType !== "all" ? filters.sourceType : undefined
+      };
+      const res = await backendApi.getInsights(params);
+      setInsights(res.data || []);
       setFetched(true);
+      const count = res.data?.length || 0;
       const message = typeof t.toasts.insightsFetched === "function"
-        ? t.toasts.insightsFetched(newItems.length)
+        ? t.toasts.insightsFetched(count)
         : t.toasts.insightsFetched;
       addToast(message, "success");
     } catch (e) {
@@ -152,7 +168,7 @@ export default function App() {
       addToast(t.toasts.insightsFailed, "error");
     }
     setLoading(false);
-  }, [filters, apiConfig, language, cart, t]);
+  }, [filters, t]);
 
   const generateNewsletter = useCallback(async (overrideLang) => {
     if (!cart.length) return;
@@ -184,8 +200,22 @@ export default function App() {
     setSelectedArticle(null);
   };
 
+  const saveReport = async (report) => {
+    try {
+      await backendApi.createReport(report);
+      addToast(language === "zh" ? "报告已保存" : "Report saved", "success");
+    } catch (e) {
+      addToast(language === "zh" ? "保存报告失败" : "Failed to save report", "error");
+      throw e;
+    }
+  };
+
   const displayItems = activeTab === "bookmarks" ? bookmarks : insights;
   const visibleItems = displayItems.filter(item => !hidden.includes(item.title));
+  const showIntelligence = activeTab === "intelligence";
+  const showBookmarks = activeTab === "bookmarks";
+  const showReports = activeTab === "reports";
+  const showSources = activeTab === "sources";
 
   const bg = darkMode ? COLORS.background.dark : "#f8f8fc";
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
@@ -209,7 +239,12 @@ export default function App() {
       />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <Sidebar darkMode={darkMode} language={language} />
+        <Sidebar
+          darkMode={darkMode}
+          language={language}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
 
         <main style={{
           flex: 1,
@@ -231,7 +266,13 @@ export default function App() {
               color: text,
               margin: 0
             }}>
-              {t.competitiveIntelligence.pageTitle}
+              {activeTab === "reports"
+                ? (language === "zh" ? "报告" : "Reports")
+                : activeTab === "sources"
+                  ? (language === "zh" ? "数据来源" : "Data Sources")
+                  : activeTab === "bookmarks"
+                    ? t.tabs.bookmarks
+                    : t.competitiveIntelligence.pageTitle}
             </h1>
 
             <div style={{
@@ -242,7 +283,7 @@ export default function App() {
               padding: 4,
               border: `1px solid ${border}`
             }}>
-              {["feed", "bookmarks"].map(tab => (
+              {["intelligence", "sources", "reports", "bookmarks"].map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)} style={{
                   padding: "6px 14px",
                   borderRadius: 7,
@@ -253,13 +294,19 @@ export default function App() {
                   fontSize: FONT_SIZES.md,
                   cursor: "pointer"
                 }}>
-                  {tab === "feed" ? t.tabs.feed : `${t.tabs.bookmarks} (${bookmarks.length})`}
+                  {tab === "intelligence"
+                    ? t.tabs.feed
+                    : tab === "sources"
+                      ? (language === "zh" ? "来源" : "Sources")
+                      : tab === "reports"
+                        ? (language === "zh" ? "报告" : "Reports")
+                        : `${t.tabs.bookmarks} (${bookmarks.length})`}
                 </button>
               ))}
             </div>
           </div>
 
-          {activeTab === "feed" && (
+          {showIntelligence && (
             <FilterBar
               darkMode={darkMode}
               language={language}
@@ -270,7 +317,7 @@ export default function App() {
             />
           )}
 
-          {cart.length > 0 && activeTab === "feed" && (
+          {cart.length > 0 && showIntelligence && (
             <div style={{
               background: COLORS.primaryLight,
               border: `1.5px solid ${COLORS.primary}`,
@@ -349,7 +396,7 @@ export default function App() {
                 marginBottom: 12
               }}>
                 <div style={{ fontSize: FONT_SIZES.sm, color: sub }}>
-                  {activeTab === "feed" ? t.hints.clickToAdd : ""}
+                  {showIntelligence ? t.hints.clickToAdd : ""}
                 </div>
                 <div style={{ fontSize: FONT_SIZES.sm, color: sub }}>
                   {visibleItems.length} {language === "zh" ? "条结果" : "results"}
@@ -404,21 +451,35 @@ export default function App() {
             </>
           )}
 
-          {!loading && activeTab === "bookmarks" && bookmarks.length === 0 && (
+          {!loading && showBookmarks && bookmarks.length === 0 && (
             <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🔖</div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.placeholders.noBookmarks}</div>
             </div>
           )}
 
-          {!loading && !fetched && activeTab === "feed" && (
+          {!loading && showReports && (
+            <ReportsPage
+              darkMode={darkMode}
+              language={language}
+              onViewReport={(report) => {
+                setNewsletter(report.content);
+              }}
+            />
+          )}
+
+          {!loading && showSources && (
+            <SourcesPage darkMode={darkMode} language={language} />
+          )}
+
+          {!loading && showIntelligence && !fetched && (
             <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>⚡</div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.placeholders.noInsights}</div>
             </div>
           )}
 
-          {!loading && fetched && activeTab === "feed" && visibleItems.length === 0 && (
+          {!loading && showIntelligence && fetched && visibleItems.length === 0 && (
             <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.competitiveIntelligence.noResults}</div>
@@ -434,6 +495,7 @@ export default function App() {
           darkMode={darkMode}
           defaultLanguage={language}
           t={t}
+          onSaveReport={saveReport}
           onGenerate={async (newLang) => {
             try {
               const txt = await api.generateNewsletter(cart, newLang);

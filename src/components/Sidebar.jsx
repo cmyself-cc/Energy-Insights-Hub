@@ -1,7 +1,15 @@
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 
-export default function Sidebar({ darkMode, language, collapsed = false }) {
+const MENU_ITEMS = [
+  { key: "intelligence", icon: "📊", i18nKey: "sidebarTitle" },
+  { key: "sources", icon: "🌐", i18nKey: "sources" },
+  { key: "reports", icon: "📝", i18nKey: "reports" },
+  { key: "bookmarks", icon: "🔖", i18nKey: "bookmarks" }
+];
+
+
+export default function Sidebar({ darkMode, language, activeTab, onTabChange, collapsed = false }) {
   const t = i18n[language];
 
   return (
@@ -16,22 +24,34 @@ export default function Sidebar({ darkMode, language, collapsed = false }) {
       transition: `width ${TRANSITIONS.normal}`
     }}>
       <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px" }}>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "10px 12px",
-          borderRadius: BORDER_RADIUS.md,
-          background: COLORS.primary,
-          color: "#fff",
-          fontSize: FONT_SIZES.md,
-          fontWeight: 600,
-          cursor: "pointer",
-          transition: `all ${TRANSITIONS.fast}`
-        }}>
-          <span>📊</span>
-          {!collapsed && <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.competitiveIntelligence.sidebarTitle}</span>}
-        </div>
+        {MENU_ITEMS.map(item => {
+          const active = activeTab === item.key;
+          const label = t.competitiveIntelligence[item.i18nKey];
+          return (
+            <button
+              key={item.key}
+              onClick={() => onTabChange(item.key)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                borderRadius: BORDER_RADIUS.md,
+                border: "none",
+                background: active ? COLORS.primary : "transparent",
+                color: active ? "#fff" : darkMode ? "#e8e8e8" : COLORS.text.primary,
+                fontSize: FONT_SIZES.md,
+                fontWeight: active ? 600 : 500,
+                cursor: "pointer",
+                transition: `all ${TRANSITIONS.fast}`,
+                textAlign: "left"
+              }}
+            >
+              <span>{item.icon}</span>
+              {!collapsed && <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>}
+            </button>
+          );
+        })}
       </nav>
 
       {!collapsed && (
