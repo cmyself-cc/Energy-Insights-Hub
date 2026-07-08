@@ -22,7 +22,13 @@ export const backendApi = {
 
   // Insights
   getInsights: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
+    const filtered = Object.entries(params).reduce((acc, [key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
+    const query = new URLSearchParams(filtered).toString();
     return request(`/insights?${query}`);
   },
   hideInsight: (id) => request(`/insights/${id}/hide`, { method: "POST" }),
