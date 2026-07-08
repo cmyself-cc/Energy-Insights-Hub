@@ -3,6 +3,8 @@ import db from "../db.js";
 import { fetchRss } from "./rssFetcher.js";
 import { fetchScrape } from "./scraper.js";
 import { processInsight } from "./llmProcessor.js";
+import { loadSettings } from "../routes/settings.js";
+import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 
 const BATCH_SIZE = 5; // 并发数，避免触发频率限制
 const LANGUAGE = process.env.DEFAULT_LANGUAGE || "zh";
@@ -37,6 +39,8 @@ async function processBatch(items, language) {
 }
 
 export async function runTracker(runId = null) {
+  const settings = loadSettings();
+
   const sources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
   if (sources.length === 0) {
     console.log("[tracker] No active sources to track.");
@@ -76,7 +80,19 @@ export async function runTracker(runId = null) {
 
       if (newItems.length === 0) continue;
 
-      const processed = await processBatch(newItems, LANGUAGE);
+      const candidates = applyPreFilter(newItems, settings);
+      if (candidates.length === 0) {
+        console.log(`[tracker] Source ${source.name}: no candidates after pre-filter`);
+        continue;
+      }
+
+      const processed = await processBatch(candidates, LANGUAGE);
+      const kept = applyPostFilter(processed, settings);
+      if (kept.length === 0) {
+        console.log(`[tracker] Source ${source.name}: no insights after post-filter`);
+        continue;
+      }
+
       const insert = db.prepare(
         `INSERT INTO insights (
           source_id, title, summary, url, publish_date, source_type,
@@ -103,9 +119,9 @@ export async function runTracker(runId = null) {
         }
       });
 
-      insertMany(processed);
-      insightsCreated += processed.length;
-      console.log(`[tracker] Source ${source.name}: created ${processed.length} insights`);
+      insertMany(kept);
+      insightsCreated += kept.length;
+      console.log(`[tracker] Source ${source.name}: created ${kept.length} insights`);
     } catch (e) {
       failedCount++;
       errors.push(`${source.name}: ${e.message}`);
