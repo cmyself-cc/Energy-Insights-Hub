@@ -12,8 +12,17 @@ function fromCsv(str) {
   return str.split(",").map(s => s.trim()).filter(Boolean);
 }
 
+const DEFAULT_SETTINGS = {
+  lookbackHours: 24,
+  maxPerSource: 3,
+  includeBusinessDomains: "",
+  includeEnterpriseTypes: "",
+  includeCategories: "",
+  excludeKeywords: ""
+};
+
 export default function TrackerSettingsPage({ darkMode, language }) {
-  const [settings, setSettings] = useState(null);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);

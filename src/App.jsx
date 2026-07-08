@@ -303,7 +303,7 @@ export default function App() {
                       : tab === "reports"
                         ? (language === "zh" ? "报告" : "Reports")
                         : tab === "settings"
-                          ? (language === "zh" ? "设置" : "Settings")
+                          ? t.competitiveIntelligence.settings
                           : `${t.tabs.bookmarks} (${bookmarks.length})`}
                 </button>
               ))}
