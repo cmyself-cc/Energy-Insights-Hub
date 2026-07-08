@@ -1,0 +1,270 @@
+export const i18n = {
+  en: {
+    header: {
+      title: "⚡ Energy Insights",
+      subtitle: "Stay updated with the latest energy news & trends"
+    },
+    tabs: {
+      feed: "📡 Feed",
+      bookmarks: "🔖 Bookmarks"
+    },
+    search: {
+      placeholder: "Search a specific topic (e.g. battery storage, LNG exports...)"
+    },
+    filters: {
+      focusAreas: "Focus Areas",
+      regions: "Regions",
+      timeRange: "Time Range"
+    },
+    timeRanges: {
+      pastWeek:   "Past Week",
+      pastMonth:  "Past Month",
+      past3Months: "Past 3 Months",
+      pastYear:   "Past Year",
+      noLimit:    "No Limit"
+    },
+    buttons: {
+      getInsights: "⚡ Get Energy Insights",
+      refreshInsights: "🔄 Refresh Insights",
+      fetching: "Fetching insights...",
+      summarize: "📰 Summarize",
+      generating: "Generating...",
+      clearCart: "Clear",
+      generateNewsletter: "📰 Generate Newsletter",
+      apiConfig: "⚙️ API Config",
+      searchConfig: "🔍 Search Config",
+      testConnection: "🧪 Test Connection",
+      testing: "Testing...",
+      saveConfig: "💾 Save Config",
+      darkMode: "🌙 Dark",
+      lightMode: "☀ Light",
+      language: "🌐 Language",
+      close: "Close",
+      downloadPDF: "⬇ PDF",
+      generatingPDF: "Generating..."
+    },
+    cart: {
+      itemsSelected: "selected — ready to generate newsletter"
+    },
+    apiConfig: {
+      title: "⚙️ API Configuration",
+      subtitle: "Configure LLM and Search APIs",
+      tabLlm: "🤖 LLM Config",
+      tabSearch: "🔍 Search Config",
+      apiProvider: "API Provider",
+      model: "Model Selection",
+      apiKey: "API Key",
+      apiKeyPlaceholder: "Enter your API Key",
+      apiKeyInfo: "API Key will be securely stored in your browser's local storage",
+      searchProvider: "Search Provider",
+      searchApiKey: "Search API Key",
+      searchApiKeyPlaceholder: "Enter {provider} API Key",
+      searchApiKeyInfo: "Search API Key will be securely stored in your browser's local storage",
+      resetAll: "🗑️ Reset All Config",
+      resetConfirm: "Are you sure you want to reset all API configurations? This will clear both LLM and Search API settings."
+    },
+    searchConfig: {
+      title: "Search API Configuration",
+      subtitle: "Configure search provider for enhanced results",
+      provider: "Search Provider",
+      apiKeyPlaceholder: "Enter {provider} API Key"
+    },
+    newsletter: {
+      title: "⚡ Energy Insights Generator",
+      language: "Language:",
+      generatingMessage: "Generating insights analysis...",
+      generatingWait: "This may take a few seconds, please wait...",
+      readyMessage: "Ready to generate insights",
+      generateButton: "Generate Analysis",
+      generatedFrom: (count) => `Generated from ${count} insights`,
+      contents: "Contents",
+      sections: "Sections",
+      sidebarTitle: "Energy Insights — Contents",
+      overview: "📊 Overview",
+      keyInsights: "💡 Key Insights",
+      outlook: "🔮 Outlook & Recommendations",
+      dataSummary: "📈 Data Summary"
+    },
+    placeholders: {
+      noBookmarks: "No bookmarks yet. Bookmark insights from the feed.",
+      noInsights: "Select your filters and hit Get Energy Insights"
+    },
+    toasts: {
+      addedToCart: "Added to cart",
+      removedFromCart: "Removed from cart",
+      addedToBookmarks: "Added to bookmarks",
+      removedFromBookmarks: "Removed from bookmarks",
+      cartCleared: "Cart cleared",
+      apiConfigSaved: "API configuration saved",
+      searchConfigSaved: "Search configuration saved",
+      connectionSuccess: "Connection successful!",
+      connectionFailed: "Connection failed",
+      insightsFetched: (count) => `Successfully fetched ${count} energy insights`,
+      insightsFailed: "Failed to fetch insights",
+      newsletterGenerated: "Newsletter generated successfully",
+      newsletterFailed: "Failed to generate newsletter: ",
+      apiKeyRequired: "Please configure API Key first",
+      searchApiKeyRequired: "Please configure search API Key first"
+    },
+    errors: {
+      fetchFailed: "Failed to fetch insights: ",
+      newsletterFailed: "Failed to generate newsletter: ",
+      pdfFailed: "PDF generation failed: ",
+      apiKeyRequired: "Please configure your API Key first",
+      invalidResponse: "AI returned invalid data format, please retry",
+      invalidResponseArray: "AI returned invalid data format: expected an array",
+      apiFailed: "API call failed"
+    },
+    errorBoundary: {
+      title: "Something went wrong",
+      message: "The app encountered an unexpected error. Please try refreshing the page.",
+      refreshButton: "Refresh Page"
+    },
+    insightCard: {
+      viewOriginal: "🔗 View original"
+    },
+    hints: {
+      clickToAdd: "💡 Click a card to add it to your newsletter selection"
+    }
+  },
+  zh: {
+    header: {
+      title: "⚡ 能源洞察",
+      subtitle: "及时了解最新能源新闻和趋势"
+    },
+    tabs: {
+      feed: "📡 信息流",
+      bookmarks: "🔖 书签"
+    },
+    search: {
+      placeholder: "搜索特定主题（例如：电池存储、LNG出口...）"
+    },
+    filters: {
+      focusAreas: "关注领域",
+      regions: "地区",
+      timeRange: "时间范围"
+    },
+    timeRanges: {
+      pastWeek:   "过去一周",
+      pastMonth:  "过去一个月",
+      past3Months: "过去三个月",
+      pastYear:   "过去一年",
+      noLimit:    "不限"
+    },
+    buttons: {
+      getInsights: "⚡ 获取能源洞察",
+      refreshInsights: "🔄 刷新洞察",
+      fetching: "获取中...",
+      summarize: "📰 汇总",
+      generating: "生成中...",
+      clearCart: "清空",
+      generateNewsletter: "📰 生成简报",
+      apiConfig: "⚙️ API配置",
+      searchConfig: "🔍 搜索配置",
+      testConnection: "🧪 测试连接",
+      testing: "测试中...",
+      saveConfig: "💾 保存配置",
+      darkMode: "🌙 深色",
+      lightMode: "☀ 浅色",
+      language: "🌐 语言",
+      close: "关闭",
+      downloadPDF: "⬇ PDF",
+      generatingPDF: "生成中..."
+    },
+    cart: {
+      itemsSelected: "已选择 — 准备生成简报"
+    },
+    apiConfig: {
+      title: "⚙️ API配置",
+      subtitle: "配置大模型和搜索API",
+      tabLlm: "🤖 大模型配置",
+      tabSearch: "🔍 搜索配置",
+      apiProvider: "API提供商",
+      model: "模型选择",
+      apiKey: "API Key",
+      apiKeyPlaceholder: "输入您的API Key",
+      apiKeyInfo: "API Key将安全保存在您的浏览器本地存储中",
+      searchProvider: "搜索提供商",
+      searchApiKey: "搜索API Key",
+      searchApiKeyPlaceholder: "输入{provider}的API Key",
+      searchApiKeyInfo: "搜索API Key将安全保存在您的浏览器本地存储中",
+      resetAll: "🗑️ 重置所有配置",
+      resetConfirm: "确定要重置所有API配置吗？这将清除大模型和搜索API的配置。"
+    },
+    searchConfig: {
+      title: "搜索API配置",
+      subtitle: "配置搜索提供商以增强结果",
+      provider: "搜索提供商",
+      apiKeyPlaceholder: "输入{provider}的API Key"
+    },
+    newsletter: {
+      title: "⚡ 能源洞察生成器",
+      language: "语言:",
+      generatingMessage: "正在生成洞察分析...",
+      generatingWait: "这可能需要几秒钟时间，请稍候...",
+      readyMessage: "准备生成洞察分析",
+      generateButton: "生成分析",
+      generatedFrom: (count) => `基于 ${count} 个洞察生成`,
+      contents: "目录",
+      sections: "章节",
+      sidebarTitle: "能源洞察-目录",
+      overview: "📊 概览",
+      keyInsights: "💡 核心洞察",
+      outlook: "🔮 展望与建议",
+      dataSummary: "📈 数据汇总"
+    },
+    placeholders: {
+      noBookmarks: "暂无书签。从信息流中添加书签。",
+      noInsights: "选择筛选条件并点击获取能源洞察"
+    },
+    toasts: {
+      addedToCart: "已添加到购物车",
+      removedFromCart: "已从购物车移除",
+      addedToBookmarks: "已添加到书签",
+      removedFromBookmarks: "已从书签移除",
+      cartCleared: "购物车已清空",
+      apiConfigSaved: "API配置已保存",
+      searchConfigSaved: "搜索配置已保存",
+      connectionSuccess: "连接成功！",
+      connectionFailed: "连接失败",
+      insightsFetched: (count) => `成功获取${count}条能源洞察`,
+      insightsFailed: "获取洞察失败",
+      newsletterGenerated: "简报生成成功",
+      newsletterFailed: "生成简报失败: ",
+      apiKeyRequired: "请先配置API Key",
+      searchApiKeyRequired: "请先配置搜索API Key"
+    },
+    errors: {
+      fetchFailed: "获取洞察失败: ",
+      newsletterFailed: "生成简报失败: ",
+      pdfFailed: "PDF生成失败: ",
+      apiKeyRequired: "请先配置API Key",
+      invalidResponse: "AI返回的数据格式不正确，请重试",
+      invalidResponseArray: "AI返回的数据格式不正确：期望数组",
+      apiFailed: "API调用失败"
+    },
+    errorBoundary: {
+      title: "出错了",
+      message: "应用遇到了意外错误。请尝试刷新页面。",
+      refreshButton: "刷新页面"
+    },
+    insightCard: {
+      viewOriginal: "🔗 查看原文"
+    },
+    hints: {
+      clickToAdd: "💡 点击卡片将其添加到简报选择中"
+    }
+  }
+};
+
+export const TIME_RANGE_KEYS = ["noLimit", "pastWeek", "pastMonth", "past3Months", "pastYear"];
+
+export const FOCUS_AREAS = {
+  en: ["Solar", "Wind", "Oil & Gas", "Nuclear", "Energy Storage", "Low-Carbon Fuels", "Carbon Removal", "Hydrogen", "Electric Vehicles", "Chemicals", "Petroleum Products"],
+  zh: ["太阳能", "风能", "石油天然气", "核能", "能源存储", "低碳燃料", "碳移除", "氢能", "电动汽车", "化工", "汽柴油"]
+};
+
+export const REGIONS = {
+  en: ["Global", "China", "North America", "Europe", "Asia Pacific", "Middle East", "Africa", "Latin America"],
+  zh: ["全球", "中国", "北美洲", "欧洲", "亚太地区", "中东", "非洲", "拉丁美洲"]
+};

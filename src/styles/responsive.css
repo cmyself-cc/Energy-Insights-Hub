@@ -1,0 +1,189 @@
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .header {
+    padding: 12px 16px !important;
+  }
+
+  .header-title {
+    font-size: 16px !important;
+  }
+
+  .header-subtitle {
+    font-size: 11px !important;
+  }
+
+  .container {
+    padding: 20px 16px !important;
+  }
+
+  .card {
+    padding: 16px !important;
+  }
+
+  .filter-section {
+    padding: 16px !important;
+  }
+
+  .chip {
+    padding: 5px 12px !important;
+    font-size: 12px !important;
+  }
+
+  .search-input {
+    font-size: 14px !important;
+    padding: 10px 14px !important;
+  }
+
+  .button {
+    padding: 11px !important;
+    font-size: 14px !important;
+  }
+
+  .modal {
+    padding: 20px !important;
+    width: 95% !important;
+    max-width: none !important;
+  }
+
+  .modal-header {
+    padding: 16px 20px !important;
+  }
+
+  .modal-content {
+    padding: 20px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .header-actions {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .tabs {
+    width: 100% !important;
+  }
+
+  .tab-button {
+    flex: 1 !important;
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+  }
+
+  .cart-summary {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: stretch !important;
+  }
+
+  .cart-actions {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+}
+
+/* 平板设备 */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .container {
+    max-width: 800px !important;
+  }
+}
+
+/* 大屏幕 */
+@media (min-width: 1281px) {
+  .container {
+    max-width: 1100px !important;
+  }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .chip,
+  .button,
+  .card {
+    min-height: 44px !important;
+  }
+
+  .card {
+    padding: 24px !important;
+  }
+}
+
+/* 暗色模式响应式 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #0f1117;
+    --bg-secondary: #1c1f2b;
+    --text-primary: #e8e8e8;
+    --text-secondary: #aaa;
+    --border-color: #2a2d3a;
+  }
+}
+
+/* 打印样式 */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* 暗色模式滚动条 */
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-track {
+    background: #1c1f2b;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #3a3d4a;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #4a4d5a;
+  }
+}
+
+/* 焦点可见性 */
+*:focus-visible {
+  outline: 2px solid #1a6b3c;
+  outline-offset: 2px;
+}
+
+/* 减少动画（用户偏好） */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
