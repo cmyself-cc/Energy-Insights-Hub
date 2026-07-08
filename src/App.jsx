@@ -8,6 +8,7 @@ import InsightCard from "./components/InsightCard";
 import AiDrawer from "./components/AiDrawer";
 import ReportsPage from "./components/ReportsPage";
 import SourcesPage from "./components/SourcesPage";
+import TrackerSettingsPage from "./components/TrackerSettingsPage";
 import { ToastContainer } from "./components/Toast";
 import { storage } from "./utils/storage";
 import { api } from "./utils/api";
@@ -216,6 +217,7 @@ export default function App() {
   const showBookmarks = activeTab === "bookmarks";
   const showReports = activeTab === "reports";
   const showSources = activeTab === "sources";
+  const showSettings = activeTab === "settings";
 
   const bg = darkMode ? COLORS.background.dark : "#f8f8fc";
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
@@ -283,7 +285,7 @@ export default function App() {
               padding: 4,
               border: `1px solid ${border}`
             }}>
-              {["intelligence", "sources", "reports", "bookmarks"].map(tab => (
+              {["intelligence", "sources", "reports", "bookmarks", "settings"].map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)} style={{
                   padding: "6px 14px",
                   borderRadius: 7,
@@ -300,7 +302,9 @@ export default function App() {
                       ? (language === "zh" ? "来源" : "Sources")
                       : tab === "reports"
                         ? (language === "zh" ? "报告" : "Reports")
-                        : `${t.tabs.bookmarks} (${bookmarks.length})`}
+                        : tab === "settings"
+                          ? (language === "zh" ? "设置" : "Settings")
+                          : `${t.tabs.bookmarks} (${bookmarks.length})`}
                 </button>
               ))}
             </div>
@@ -470,6 +474,10 @@ export default function App() {
 
           {!loading && showSources && (
             <SourcesPage darkMode={darkMode} language={language} />
+          )}
+
+          {!loading && showSettings && (
+            <TrackerSettingsPage darkMode={darkMode} language={language} />
           )}
 
           {!loading && showIntelligence && !fetched && (

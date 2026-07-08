@@ -5,7 +5,8 @@ const MENU_ITEMS = [
   { key: "intelligence", icon: "📊", i18nKey: "sidebarTitle" },
   { key: "sources", icon: "🌐", i18nKey: "sources" },
   { key: "reports", icon: "📝", i18nKey: "reports" },
-  { key: "bookmarks", icon: "🔖", i18nKey: "bookmarks" }
+  { key: "bookmarks", icon: "🔖", i18nKey: "bookmarks" },
+  { key: "settings", icon: "⚙️", i18nKey: "settings" }
 ];
 
 
