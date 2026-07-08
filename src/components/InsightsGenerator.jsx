@@ -68,7 +68,7 @@ function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenera
   // isScreen=true uses screen styling; false uses PDF styling.
   const renderTableBlock = (block, isScreen) => {
     const lines = block.trim().split("\n");
-    const dataRows = lines.filter(l => !/^\|[\s:|\-]+\|$/.test(l.trim()));
+    const dataRows = lines.filter(l => !/^\|[\s:|-]+\|$/.test(l.trim()));
     if (!dataRows.length) return "";
     const rows = dataRows.map((line, i) => {
       const cells = line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(s => s.trim());

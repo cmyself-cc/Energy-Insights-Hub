@@ -187,3 +187,64 @@
     transition-duration: 0.01ms !important;
   }
 }
+/* ── 新布局动画 ── */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* ── 新布局响应式 ── */
+@media (max-width: 1024px) {
+  .insight-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  aside {
+    width: 64px !important;
+  }
+
+  aside > nav > div > span:last-child,
+  aside > div:last-child {
+    display: none !important;
+  }
+
+  main {
+    padding: 16px !important;
+  }
+
+  .insight-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  header > div:first-child > div:last-child {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  header {
+    padding: "0 12px" !important;
+  }
+
+  header > div:last-child > div:first-child,
+  header > div:last-child > button:first-of-type {
+    display: none !important;
+  }
+}

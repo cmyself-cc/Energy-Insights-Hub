@@ -61,10 +61,32 @@ export const api = {
       throw new Error("API_KEY_REQUIRED");
     }
 
-    const { selectedFocus, selectedRegions, search, timeRange = "noLimit" } = filters;
-    const focusStr = selectedFocus.length ? selectedFocus.join(", ") : "all energy topics";
-    const regionStr = selectedRegions.length ? selectedRegions.join(", ") : "globally";
-    const searchStr = search.trim() ? ` specifically about "${search.trim()}"` : "";
+    const {
+      selectedFocus,
+      selectedRegions,
+      search,
+      timeRange = "noLimit",
+      dateRange,
+      businessDomain,
+      enterpriseType,
+      sourceType
+    } = filters;
+    const focusStr = selectedFocus?.length ? selectedFocus.join(", ") : "all energy topics";
+    const regionStr = selectedRegions?.length ? selectedRegions.join(", ") : "globally";
+    const searchStr = search?.trim() ? ` specifically about "${search.trim()}"` : "";
+    const businessDomainStr = businessDomain && businessDomain !== "all" ? ` in the business domain "${businessDomain}"` : "";
+    const enterpriseTypeStr = enterpriseType && enterpriseType !== "all" ? ` involving enterprise type "${enterpriseType}"` : "";
+    const sourceTypeStr = sourceType && sourceType !== "all" ? ` from source type "${sourceType}"` : "";
+
+    // Map new dateRange values (from the Competitive Intelligence UI) to days / legacy timeRange.
+    const dateRangeDays = {
+      yesterday: 1,
+      last7: 7,
+      last30: 30,
+      last90: 90,
+      last180: 180
+    };
+    const effectiveDays = dateRange ? dateRangeDays[dateRange] : null;
 
     const now = new Date();
     const cutoffDate = (daysBack) => {
@@ -79,11 +101,13 @@ export const api = {
       pastYear:    `published on or after ${cutoffDate(365)}`,
       noLimit:     "",
     };
-    const timeConstraint = timeRangeMap[timeRange] || "";
+    const timeConstraint = effectiveDays
+      ? `published on or after ${cutoffDate(effectiveDays)}`
+      : timeRangeMap[timeRange] || "";
 
     // Only search when there's a query
     let searchResults = "";
-    if (search.trim()) {
+    if (search?.trim()) {
       try {
         const searchController = new AbortController();
         const timeoutId = setTimeout(() => searchController.abort(), 10000);
@@ -101,7 +125,7 @@ export const api = {
 
     const hasSearch = !!searchResults;
     const timeNote = timeConstraint ? ` (${timeConstraint})` : "";
-    const prompt = `You are an energy industry analyst. Provide 8 of the latest and most important energy insights${searchStr} focused on: ${focusStr}, covering regions: ${regionStr}${timeNote}.
+    const prompt = `You are an energy industry analyst. Provide 8 of the latest and most important energy insights${searchStr} focused on: ${focusStr}, covering regions: ${regionStr}${businessDomainStr}${enterpriseTypeStr}${sourceTypeStr}${timeNote}.
 
 ${hasSearch ? `Relevant search results — use these as your primary sources. Extract titles, facts, and URLs directly from these results:
 ${searchResults}
@@ -116,6 +140,11 @@ Requirements:
    - date: string (article publication date in "Month DD, YYYY"${timeConstraint ? `, ${timeConstraint}` : ", within last 30 days from March 2026"})
    - tags: array of 1-3 strings (in ${language === "zh" ? "Chinese" : "English"})
    - url: string${hasSearch ? ' (copy the exact URL from the matching search result above — must be a direct article link, not a homepage or category page)' : ' (leave as empty string ""; do NOT fabricate or guess any URL)'}
+   - businessDomain: string (in ${language === "zh" ? "Chinese" : "English"}, e.g. 能源转型 / Energy Transition, 化工 / Chemicals, 收并购 / M&A)
+   - enterpriseType: string (in ${language === "zh" ? "Chinese" : "English"}, e.g. 国有企业 / SOE, 民营企业 / Private, 中石油 / PetroChina, 宁德时代 / CATL)
+   - sourceType: string (in ${language === "zh" ? "Chinese" : "English"}, e.g. 微信公众号 / WeChat Official Account, 新闻门户 / News Portal)
+   - entities: array of 2-5 strings (key companies, organizations, or technologies mentioned, in ${language === "zh" ? "Chinese" : "English"})
+   - features: array of 1-3 strings (category tags like 化工 / Chemicals, LNG, 电力/氢能 / Power & Hydrogen, in ${language === "zh" ? "Chinese" : "English"})
 3. All content should be in ${language === "zh" ? "Chinese" : "English"}
 4. CRITICAL for URLs: ${hasSearch ? 'Only use URLs that appear verbatim in the search results above. If a result has no matching URL, set url to "". Never construct or modify URLs.' : 'Always set url to "" — never invent URLs.'}`;
 
@@ -298,6 +327,68 @@ Formatting Requirements:
       return content + sourcesSection;
     } catch (error) {
       console.error("Generate newsletter error:", error);
+      throw error;
+    }
+  },
+
+  interpretArticle: async (item, question = "", language = "en", history = [], signal = null) => {
+    const config = storage.getApiConfig();
+    if (!config || !config.apiKey) {
+      throw new Error("API_KEY_REQUIRED");
+    }
+
+    const isZh = language === "zh";
+    const systemPrompt = isZh
+      ? "你是一位能源行业分析师。请基于提供的文章信息给出专业、简洁的解读。"
+      : "You are an energy industry analyst. Provide a professional, concise interpretation based on the article information provided.";
+
+    const articleContext = `Title: ${item.title}
+Summary: ${item.summary || ""}
+Source: ${item.source || ""}
+Date: ${item.date || ""}
+Business Domain: ${item.businessDomain || ""}
+Enterprise Type: ${item.enterpriseType || ""}
+Source Type: ${item.sourceType || ""}
+Entities: ${item.entities?.join(", ") || ""}
+Features: ${item.features?.join(", ") || ""}
+URL: ${item.url || ""}`;
+
+    let userPrompt;
+    if (!question) {
+      userPrompt = isZh
+        ? `请解读以下文章，提炼核心观点、战略影响、涉及主体及关键数据：\n\n${articleContext}`
+        : `Please interpret the following article, extracting key points, strategic implications, involved parties, and key data points:\n\n${articleContext}`;
+    } else {
+      const historyText = history.map(h => `Q: ${h.question}\nA: ${h.answer}`).join("\n\n");
+      userPrompt = isZh
+        ? `基于以下文章信息${historyText ? "和此前的问答" : ""}回答问题。\n\n${articleContext}\n\n${historyText ? "此前问答：\n" + historyText + "\n\n" : ""}问题：${question}`
+        : `Based on the article information below${historyText ? " and previous Q&A" : ""}, answer the question.\n\n${articleContext}\n\n${historyText ? "Previous Q&A:\n" + historyText + "\n\n" : ""}Question: ${question}`;
+    }
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ];
+
+    const { url, headers, body } = buildRequest(config, messages, 2000, 0.7);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error?.message || `API_CALL_FAILED (HTTP ${response.status})`);
+      }
+
+      const data = await response.json();
+      return extractContent(data, config);
+    } catch (error) {
+      console.error("Interpret article error:", error);
       throw error;
     }
   },

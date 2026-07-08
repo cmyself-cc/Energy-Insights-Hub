@@ -1,122 +1,42 @@
 import { useState, useCallback, useEffect } from "react";
 import ApiConfig from "./components/ApiConfig";
 import InsightsGenerator from "./components/InsightsGenerator";
+import Header from "./components/Header";
+import Sidebar from "./components/Sidebar";
+import FilterBar from "./components/FilterBar";
+import InsightCard from "./components/InsightCard";
+import AiDrawer from "./components/AiDrawer";
 import { ToastContainer } from "./components/Toast";
 import { storage } from "./utils/storage";
 import { api } from "./utils/api";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "./constants/theme";
-import { i18n, FOCUS_AREAS, REGIONS, TIME_RANGE_KEYS } from "./constants/i18n";
+import { i18n } from "./constants/i18n";
+import { DEFAULT_FILTERS } from "./constants/taxonomy";
 import "./styles/responsive.css";
 
-function Chip({ label, active, onClick }) {
+function SkeletonCard({ darkMode }) {
+  const bg = darkMode ? "#2a2d3a" : "#eee";
   return (
-    <button onClick={onClick} style={{
-      padding: "6px 14px",
-      borderRadius: BORDER_RADIUS.full,
-      border: active ? "none" : "1.5px solid #e0e0e0",
-      background: active ? COLORS.primary : "#fff",
-      color: active ? "#fff" : COLORS.text.secondary,
-      fontSize: FONT_SIZES.md,
-      cursor: "pointer",
-      fontWeight: active ? 600 : 400,
-      transition: `all ${TRANSITIONS.fast}`,
-      whiteSpace: "nowrap"
-    }}>{label}</button>
-  );
-}
-
-function InsightCard({ item, selected, onToggle, darkMode, linkText = "🔗 View original" }) {
-  return (
-    <div onClick={onToggle} style={{
-      background: selected ? COLORS.primaryLight : darkMode ? COLORS.background.cardDark : COLORS.background.card,
+    <div style={{
+      background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
       borderRadius: BORDER_RADIUS.xl,
-      padding: "20px 24px",
-      boxShadow: selected ? "0 0 0 2px #1a6b3c" : "0 1px 4px rgba(0,0,0,0.08)",
-      border: selected ? "2px solid #1a6b3c" : `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-      cursor: "pointer",
-      transition: `all ${TRANSITIONS.fast}`,
-      position: "relative"
+      padding: "18px 20px",
+      border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+      boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+      height: "100%",
+      boxSizing: "border-box"
     }}>
-      {selected && (
-        <div style={{
-          position: "absolute",
-          top: 12,
-          right: 12,
-          background: COLORS.primary,
-          color: "#fff",
-          borderRadius: "50%",
-          width: 22,
-          height: 22,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 13,
-          fontWeight: 700
-        }}>✓</div>
-      )}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-        {item.tags?.map(t => (
-          <span key={t} style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: COLORS.primary,
-            background: COLORS.primaryLight,
-            borderRadius: 6,
-            padding: "2px 8px",
-            textTransform: "uppercase",
-            letterSpacing: 0.5
-          }}>{t}</span>
-        ))}
-      </div>
-      <div style={{
-        fontWeight: 700,
-        fontSize: FONT_SIZES.xl,
-        color: darkMode ? "#e8e8e8" : "#111",
-        lineHeight: 1.4,
-        marginBottom: 8
-      }}>{item.title}</div>
-      <div style={{
-        fontSize: FONT_SIZES.base,
-        color: darkMode ? "#aaa" : COLORS.text.secondary,
-        lineHeight: 1.6,
-        marginBottom: 8
-      }}>{item.summary}</div>
-      <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.light, paddingRight: "44px" }}>
-        {item.source && <span style={{ fontWeight: 500, color: COLORS.text.tertiary }}>{item.source}</span>}
-        {item.source && item.date && <span> · </span>}
-        {item.date && <span>{item.date}</span>}
-        {item.url && (
-          <div style={{ marginTop: 4 }}>
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              style={{
-                color: COLORS.primary,
-                textDecoration: "none",
-                fontSize: FONT_SIZES.sm,
-                fontWeight: 500,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4
-              }}
-            >
-              {linkText}
-            </a>
-          </div>
-        )}
-      </div>
+      <div style={{ background: bg, height: 16, width: "75%", borderRadius: 6, marginBottom: 12 }} />
+      <div style={{ background: bg, height: 12, width: "45%", borderRadius: 6, marginBottom: 20 }} />
+      <div style={{ background: bg, height: 12, width: "95%", borderRadius: 6, marginBottom: 8 }} />
+      <div style={{ background: bg, height: 12, width: "90%", borderRadius: 6, marginBottom: 8 }} />
+      <div style={{ background: bg, height: 12, width: "60%", borderRadius: 6 }} />
     </div>
   );
 }
 
-
-
 export default function App() {
-  const [selectedFocus, setSelectedFocus] = useState([]);
-  const [selectedRegions, setSelectedRegions] = useState([]);
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -126,28 +46,22 @@ export default function App() {
   const [newsletter, setNewsletter] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
   const [bookmarks, setBookmarks] = useState([]);
+  const [hidden, setHidden] = useState([]);
   const [activeTab, setActiveTab] = useState("feed");
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [apiConfig, setApiConfig] = useState(null);
   const [language, setLanguage] = useState("en");
-  const [timeRange, setTimeRange] = useState("noLimit");
   const [toasts, setToasts] = useState([]);
+  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
   const t = i18n[language];
 
   useEffect(() => {
-    const savedDarkMode = storage.getDarkMode();
-    setDarkMode(savedDarkMode);
-
-    const savedBookmarks = storage.getBookmarks();
-    setBookmarks(savedBookmarks);
-
-    const savedCart = storage.getCart();
-    setCart(savedCart);
-
-    const savedApiConfig = storage.getApiConfig();
-    setApiConfig(savedApiConfig);
-
+    setDarkMode(storage.getDarkMode());
+    setBookmarks(storage.getBookmarks());
+    setCart(storage.getCart());
+    setApiConfig(storage.getApiConfig());
     const savedLanguage = storage.getLanguage();
     setLanguage(savedLanguage);
   }, []);
@@ -161,18 +75,28 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  const toggleItem = (list, setList, item) => setList(prev => prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]);
   const toggleCart = (item) => {
-    const newCart = cart.find(c => c.title === item.title) ? cart.filter(c => c.title !== item.title) : [...cart, item];
+    const newCart = cart.find(c => c.title === item.title)
+      ? cart.filter(c => c.title !== item.title)
+      : [...cart, item];
     setCart(newCart);
     storage.saveCart(newCart);
     addToast(newCart.length > cart.length ? t.toasts.addedToCart : t.toasts.removedFromCart, "info");
   };
+
   const toggleBookmark = (item) => {
-    const newBookmarks = bookmarks.find(b => b.title === item.title) ? bookmarks.filter(b => b.title !== item.title) : [...bookmarks, item];
+    const newBookmarks = bookmarks.find(b => b.title === item.title)
+      ? bookmarks.filter(b => b.title !== item.title)
+      : [...bookmarks, item];
     setBookmarks(newBookmarks);
     storage.saveBookmarks(newBookmarks);
     addToast(newBookmarks.length > bookmarks.length ? t.toasts.addedToBookmarks : t.toasts.removedFromBookmarks, "success");
+  };
+
+  const hideItem = (item) => {
+    const newHidden = [...hidden, item.title];
+    setHidden(newHidden);
+    addToast(language === "zh" ? "已隐藏该文章" : "Article hidden", "info");
   };
 
   const handleDarkModeToggle = () => {
@@ -205,14 +129,22 @@ export default function App() {
     setInsights([]);
 
     try {
-      const newItems = await api.fetchInsights({ selectedFocus, selectedRegions, search, timeRange }, language);
-      // Deduplicate: hide insights whose titles already appear in the cart
+      const newItems = await api.fetchInsights({
+        selectedFocus: [],
+        selectedRegions: [],
+        search: filters.query,
+        dateRange: filters.dateRange,
+        businessDomain: filters.businessDomain,
+        enterpriseType: filters.enterpriseType,
+        sourceType: filters.sourceType
+      }, language);
+
       const cartTitles = new Set(cart.map(c => c.title));
       const dedupedItems = newItems.filter(item => !cartTitles.has(item.title));
       setInsights(dedupedItems);
       setFetched(true);
-      const message = typeof t.toasts.insightsFetched === 'function' 
-        ? t.toasts.insightsFetched(newItems.length) 
+      const message = typeof t.toasts.insightsFetched === "function"
+        ? t.toasts.insightsFetched(newItems.length)
         : t.toasts.insightsFetched;
       addToast(message, "success");
     } catch (e) {
@@ -220,11 +152,10 @@ export default function App() {
       addToast(t.toasts.insightsFailed, "error");
     }
     setLoading(false);
-  }, [selectedFocus, selectedRegions, search, apiConfig, language, t]);
+  }, [filters, apiConfig, language, cart, t]);
 
   const generateNewsletter = useCallback(async (overrideLang) => {
     if (!cart.length) return;
-
     if (!apiConfig || !apiConfig.apiKey) {
       setShowApiConfig(true);
       addToast(t.toasts.apiKeyRequired, "error");
@@ -243,335 +174,325 @@ export default function App() {
     setSummarizing(false);
   }, [cart, apiConfig, language, t]);
 
-  const displayItems = activeTab === "bookmarks" ? bookmarks : insights;
+  const openAiDrawer = (item) => {
+    setSelectedArticle(item);
+    setAiDrawerOpen(true);
+  };
 
-  const bg = darkMode ? COLORS.background.dark : COLORS.background.light;
-  const card = darkMode ? COLORS.background.cardDark : COLORS.background.card;
+  const closeAiDrawer = () => {
+    setAiDrawerOpen(false);
+    setSelectedArticle(null);
+  };
+
+  const displayItems = activeTab === "bookmarks" ? bookmarks : insights;
+  const visibleItems = displayItems.filter(item => !hidden.includes(item.title));
+
+  const bg = darkMode ? COLORS.background.dark : "#f8f8fc";
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
   const sub = darkMode ? "#aaa" : COLORS.text.secondary;
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, fontFamily: "'Inter',system-ui,sans-serif", transition: `background ${TRANSITIONS.normal}` }}>
-      <div style={{
-        background: darkMode ? COLORS.background.cardDark : card,
-        borderBottom: `1px solid ${border}`,
-        padding: "16px 32px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        position: "sticky",
-        top: 0,
-        zIndex: 100
-      }}>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: FONT_SIZES["3xl"], color: darkMode ? "#fff" : text, letterSpacing: -0.5 }}>{t.header.title}</div>
-          <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : sub, marginTop: 1 }}>{t.header.subtitle}</div>
-        </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <button
-            onClick={() => setShowApiConfig(true)}
-            style={{
-              padding: "7px 14px",
-              borderRadius: BORDER_RADIUS.md,
-              border: `1.5px solid ${border}`,
-              background: "transparent",
-              color: darkMode ? "#fff" : text,
-              fontSize: FONT_SIZES.md,
-              cursor: "pointer",
-              fontWeight: 500
-            }}
-          >
-            {t.buttons.apiConfig}
-          </button>
-          {cart.length > 0 && (
-            <button onClick={generateNewsletter} disabled={summarizing} style={{
-              padding: "8px 16px",
-              borderRadius: BORDER_RADIUS.md,
-              border: "none",
-              background: summarizing ? "#aaa" : COLORS.primary,
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: FONT_SIZES.md,
-              cursor: summarizing ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6
-            }}>
-              {summarizing ? t.buttons.generating : `${t.buttons.summarize} (${cart.length})`}
-            </button>
-          )}
-          <button onClick={handleDarkModeToggle} style={{
-            padding: "7px 14px",
-            borderRadius: BORDER_RADIUS.md,
-            border: `1.5px solid ${border}`,
-            background: "transparent",
-            color: darkMode ? "#fff" : text,
-            fontSize: FONT_SIZES.md,
-            cursor: "pointer",
-            fontWeight: 500
-          }}>{darkMode ? t.buttons.lightMode : t.buttons.darkMode}</button>
-          <button onClick={handleLanguageToggle} style={{
-            padding: "7px 14px",
-            borderRadius: BORDER_RADIUS.md,
-            border: `1.5px solid ${border}`,
-            background: "transparent",
-            color: darkMode ? "#fff" : text,
-            fontSize: FONT_SIZES.md,
-            cursor: "pointer",
-            fontWeight: 500
-          }}>{language === "en" ? "🇨🇳 中文" : "🇺🇸 English"}</button>
-        </div>
-      </div>
+    <div style={{
+      minHeight: "100vh",
+      background: bg,
+      fontFamily: "'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif",
+      transition: `background ${TRANSITIONS.normal}`,
+      display: "flex",
+      flexDirection: "column"
+    }}>
+      <Header
+        darkMode={darkMode}
+        language={language}
+        onLanguageToggle={handleLanguageToggle}
+        onApiConfig={() => setShowApiConfig(true)}
+      />
 
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px" }}>
-        <div style={{
-          display: "flex",
-          gap: 4,
-          marginBottom: 24,
-          background: darkMode ? COLORS.background.cardDark : card,
-          borderRadius: BORDER_RADIUS.lg,
-          padding: 4,
-          border: `1px solid ${border}`,
-          width: "fit-content"
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        <Sidebar darkMode={darkMode} language={language} />
+
+        <main style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "24px 28px",
+          minWidth: 0
         }}>
-          {["feed", "bookmarks"].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{
-              padding: "7px 18px",
-              borderRadius: 7,
-              border: "none",
-              background: activeTab === tab ? COLORS.primary : "transparent",
-              color: activeTab === tab ? "#fff" : darkMode ? "#aaa" : sub,
-              fontWeight: activeTab === tab ? 700 : 400,
-              fontSize: FONT_SIZES.md,
-              cursor: "pointer",
-              textTransform: "capitalize"
-            }}>
-              {tab === "feed" ? t.tabs.feed : `${t.tabs.bookmarks} (${bookmarks.length})`}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "feed" && <>
-          <input type="text" placeholder={t.search.placeholder}
-            value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === "Enter" && fetchInsights()}
-            style={{
-              width: "100%",
-              padding: "12px 18px",
-              borderRadius: BORDER_RADIUS.lg,
-              border: `1.5px solid ${border}`,
-              fontSize: FONT_SIZES.base,
-              outline: "none",
-              background: darkMode ? COLORS.background.cardDark : card,
-              color: darkMode ? "#e8e8e8" : text,
-              boxSizing: "border-box",
-              marginBottom: 20
-            }} />
-
           <div style={{
-            background: darkMode ? COLORS.background.cardDark : card,
-            borderRadius: BORDER_RADIUS.xl,
-            padding: "20px 24px",
-            border: `1px solid ${border}`,
-            marginBottom: 20
-          }}>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#888",
-                textTransform: "uppercase",
-                letterSpacing: 0.8,
-                marginBottom: 10
-              }}>{t.filters.focusAreas}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {FOCUS_AREAS[language].map(f => <Chip key={f} label={f} active={selectedFocus.includes(f)} onClick={() => toggleItem(selectedFocus, setSelectedFocus, f)} />)}
-              </div>
-            </div>
-            <div>
-              <div style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#888",
-                textTransform: "uppercase",
-                letterSpacing: 0.8,
-                marginBottom: 10
-              }}>{t.filters.regions}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {REGIONS[language].map(r => <Chip key={r} label={r} active={selectedRegions.includes(r)} onClick={() => toggleItem(selectedRegions, setSelectedRegions, r)} />)}
-              </div>
-            </div>
-            <div style={{ marginTop: 14 }}>
-              <div style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#888",
-                textTransform: "uppercase",
-                letterSpacing: 0.8,
-                marginBottom: 10
-              }}>{t.filters.timeRange}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {TIME_RANGE_KEYS.map(key => (
-                  <Chip
-                    key={key}
-                    label={t.timeRanges[key]}
-                    active={timeRange === key}
-                    onClick={() => setTimeRange(key)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <button onClick={fetchInsights} disabled={loading} style={{
-            width: "100%",
-            padding: "13px",
-            borderRadius: BORDER_RADIUS.lg,
-            border: "none",
-            background: loading ? "#aaa" : COLORS.primary,
-            color: "#fff",
-            fontSize: 15,
-            fontWeight: 700,
-            cursor: loading ? "not-allowed" : "pointer",
-            marginBottom: 28
-          }}>{loading ? t.buttons.fetching : fetched ? t.buttons.refreshInsights : t.buttons.getInsights}</button>
-
-          {error && <div style={{
-            background: "#fff0f0",
-            border: "1px solid #fcc",
-            borderRadius: 10,
-            padding: "14px 18px",
-            color: "#c00",
-            fontSize: FONT_SIZES.base,
-            marginBottom: 20
-          }}>{error}</div>}
-        </>}
-
-        {cart.length > 0 && (
-          <div style={{
-            background: COLORS.primaryLight,
-            border: "1.5px solid #1a6b3c",
-            borderRadius: 10,
-            padding: "12px 18px",
-            marginBottom: 20,
             display: "flex",
+            alignItems: "center",
             justifyContent: "space-between",
-            alignItems: "center"
+            marginBottom: 20,
+            flexWrap: "wrap",
+            gap: 12
           }}>
-            <div style={{ fontSize: FONT_SIZES.md, color: COLORS.primary, fontWeight: 600 }}>
-              🛒 {cart.length} insight{cart.length > 1 ? "s" : ""} {t.cart.itemsSelected}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => {
-                setCart([]);
-                storage.saveCart([]);
-                addToast(t.toasts.cartCleared, "info");
-              }} style={{
-                padding: "5px 12px",
-                borderRadius: 6,
-                border: "1px solid #1a6b3c",
-                background: "transparent",
-                color: COLORS.primary,
-                fontSize: FONT_SIZES.sm,
-                cursor: "pointer"
-              }}>{t.buttons.clearCart}</button>
-              <button onClick={generateNewsletter} disabled={summarizing} style={{
-                padding: "5px 14px",
-                borderRadius: 6,
-                border: "none",
-                background: COLORS.primary,
-                color: "#fff",
-                fontSize: FONT_SIZES.sm,
-                fontWeight: 700,
-                cursor: "pointer"
-              }}>
-                {summarizing ? t.buttons.generating : t.buttons.generateNewsletter}
-              </button>
+            <h1 style={{
+              fontSize: FONT_SIZES["3xl"],
+              fontWeight: 700,
+              color: text,
+              margin: 0
+            }}>
+              {t.competitiveIntelligence.pageTitle}
+            </h1>
+
+            <div style={{
+              display: "flex",
+              gap: 4,
+              background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+              borderRadius: BORDER_RADIUS.lg,
+              padding: 4,
+              border: `1px solid ${border}`
+            }}>
+              {["feed", "bookmarks"].map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)} style={{
+                  padding: "6px 14px",
+                  borderRadius: 7,
+                  border: "none",
+                  background: activeTab === tab ? COLORS.primary : "transparent",
+                  color: activeTab === tab ? "#fff" : darkMode ? "#aaa" : sub,
+                  fontWeight: activeTab === tab ? 700 : 400,
+                  fontSize: FONT_SIZES.md,
+                  cursor: "pointer"
+                }}>
+                  {tab === "feed" ? t.tabs.feed : `${t.tabs.bookmarks} (${bookmarks.length})`}
+                </button>
+              ))}
             </div>
           </div>
-        )}
 
-        {loading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-              <div key={i} style={{
-                background: card,
-                borderRadius: BORDER_RADIUS.xl,
-                padding: "20px 24px",
-                border: `1px solid ${border}`,
-                opacity: 0.5
-              }}>
-                <div style={{ background: "#eee", height: 14, width: "30%", borderRadius: 6, marginBottom: 12 }} />
-                <div style={{ background: "#eee", height: 18, width: "80%", borderRadius: 6, marginBottom: 10 }} />
-                <div style={{ background: "#eee", height: 12, width: "95%", borderRadius: 6 }} />
+          {activeTab === "feed" && (
+            <FilterBar
+              darkMode={darkMode}
+              language={language}
+              filters={filters}
+              onChange={setFilters}
+              onSearch={fetchInsights}
+              loading={loading}
+            />
+          )}
+
+          {cart.length > 0 && activeTab === "feed" && (
+            <div style={{
+              background: COLORS.primaryLight,
+              border: `1.5px solid ${COLORS.primary}`,
+              borderRadius: BORDER_RADIUS.lg,
+              padding: "12px 18px",
+              marginBottom: 20,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 10
+            }}>
+              <div style={{ fontSize: FONT_SIZES.md, color: COLORS.primary, fontWeight: 600 }}>
+                🛒 {cart.length} insight{cart.length > 1 ? "s" : ""} {t.cart.itemsSelected}
               </div>
-            ))}
-          </div>
-        )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => {
+                  setCart([]);
+                  storage.saveCart([]);
+                  addToast(t.toasts.cartCleared, "info");
+                }} style={{
+                  padding: "5px 12px",
+                  borderRadius: BORDER_RADIUS.sm,
+                  border: `1px solid ${COLORS.primary}`,
+                  background: "transparent",
+                  color: COLORS.primary,
+                  fontSize: FONT_SIZES.sm,
+                  cursor: "pointer"
+                }}>{t.buttons.clearCart}</button>
+                <button onClick={generateNewsletter} disabled={summarizing} style={{
+                  padding: "5px 14px",
+                  borderRadius: BORDER_RADIUS.sm,
+                  border: "none",
+                  background: COLORS.primary,
+                  color: "#fff",
+                  fontSize: FONT_SIZES.sm,
+                  fontWeight: 700,
+                  cursor: summarizing ? "not-allowed" : "pointer"
+                }}>
+                  {summarizing ? t.buttons.generating : t.buttons.generateNewsletter}
+                </button>
+              </div>
+            </div>
+          )}
 
-        {!loading && displayItems.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {activeTab === "feed" && <div style={{ fontSize: FONT_SIZES.sm, color: sub, marginBottom: 4 }}>💡 Click a card to add it to your newsletter selection</div>}
-            {displayItems.map((item, i) => {
-              const inCart = !!cart.find(c => c.title === item.title);
-              const bookmarked = !!bookmarks.find(b => b.title === item.title);
-              return (
-                <div key={i} style={{ position: "relative" }}>
-                  <InsightCard item={item} selected={inCart} onToggle={() => toggleCart(item)} inCart={inCart} darkMode={darkMode} linkText={t.insightCard.viewOriginal} />
-                  <button onClick={(e) => { e.stopPropagation(); toggleBookmark(item); }} title={bookmarked ? "Remove bookmark" : "Bookmark"} style={{
-                    position: "absolute",
-                    bottom: 14,
-                    right: 14,
-                    background: bookmarked ? "#fff8e1" : (darkMode ? "#2a2d3a" : "#f5f5f5"),
-                    border: bookmarked ? "1px solid #f5c518" : `1px solid ${darkMode ? "#3a3d4a" : "#ddd"}`,
-                    borderRadius: 6,
-                    padding: "3px 8px",
-                    fontSize: FONT_SIZES.sm,
-                    cursor: "pointer",
-                    color: bookmarked ? "#e6a800" : (darkMode ? "#aaa" : "#888"),
-                    fontWeight: 600
-                  }}>{bookmarked ? "🔖" : "☆"}</button>
+          {error && (
+            <div style={{
+              background: "#fff0f0",
+              border: "1px solid #fcc",
+              borderRadius: BORDER_RADIUS.lg,
+              padding: "14px 18px",
+              color: "#c00",
+              fontSize: FONT_SIZES.base,
+              marginBottom: 20
+            }}>
+              {error}
+            </div>
+          )}
+
+          {loading && (
+            <div className="insight-grid" style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              gap: 16
+            }}>
+              {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} darkMode={darkMode} />)}
+            </div>
+          )}
+
+          {!loading && visibleItems.length > 0 && (
+            <>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12
+              }}>
+                <div style={{ fontSize: FONT_SIZES.sm, color: sub }}>
+                  {activeTab === "feed" ? t.hints.clickToAdd : ""}
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div style={{ fontSize: FONT_SIZES.sm, color: sub }}>
+                  {visibleItems.length} {language === "zh" ? "条结果" : "results"}
+                </div>
+              </div>
+              <div className="insight-grid" style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+                gap: 16
+              }}>
+                {visibleItems.map((item, i) => {
+                  const inCart = !!cart.find(c => c.title === item.title);
+                  const bookmarked = !!bookmarks.find(b => b.title === item.title);
+                  return (
+                    <div
+                      key={item.id || i}
+                      onClick={() => toggleCart(item)}
+                      className="insight-card-wrapper"
+                      style={{ cursor: "pointer", position: "relative" }}
+                    >
+                      {inCart && (
+                        <div style={{
+                          position: "absolute",
+                          top: 10,
+                          left: 10,
+                          zIndex: 5,
+                          background: COLORS.primary,
+                          color: "#fff",
+                          borderRadius: "50%",
+                          width: 22,
+                          height: 22,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 13,
+                          fontWeight: 700
+                        }}>✓</div>
+                      )}
+                      <InsightCard
+                        item={item}
+                        darkMode={darkMode}
+                        language={language}
+                        bookmarked={bookmarked}
+                        onBookmark={(e) => { e?.stopPropagation(); toggleBookmark(item); }}
+                        onHide={(e) => { e?.stopPropagation(); hideItem(item); }}
+                        onAiInterpret={(e) => { e?.stopPropagation(); openAiDrawer(item); }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
-        {activeTab === "bookmarks" && bookmarks.length === 0 && (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#aaa" }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🔖</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.placeholders.noBookmarks}</div>
-          </div>
-        )}
+          {!loading && activeTab === "bookmarks" && bookmarks.length === 0 && (
+            <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🔖</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.placeholders.noBookmarks}</div>
+            </div>
+          )}
 
-        {!loading && !fetched && activeTab === "feed" && (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#aaa" }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>⚡</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.placeholders.noInsights}</div>
-          </div>
-        )}
+          {!loading && !fetched && activeTab === "feed" && (
+            <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>⚡</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.placeholders.noInsights}</div>
+            </div>
+          )}
+
+          {!loading && fetched && activeTab === "feed" && visibleItems.length === 0 && (
+            <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.competitiveIntelligence.noResults}</div>
+            </div>
+          )}
+        </main>
       </div>
 
-      {newsletter && <InsightsGenerator 
-        items={cart} 
-        onClose={() => setNewsletter(null)} 
-        darkMode={darkMode} 
-        defaultLanguage={language}
-        t={t}
-        onGenerate={async (newLang) => {
-          try {
-            const txt = await api.generateNewsletter(cart, newLang);
-            setNewsletter(txt);
-            setLanguage(newLang);
-            storage.saveLanguage(newLang);
-            return txt;
-          } catch (e) {
-            addToast(t.toasts.newsletterFailed + e.message, "error");
-            throw e;
-          }
+      {newsletter && (
+        <InsightsGenerator
+          items={cart}
+          onClose={() => setNewsletter(null)}
+          darkMode={darkMode}
+          defaultLanguage={language}
+          t={t}
+          onGenerate={async (newLang) => {
+            try {
+              const txt = await api.generateNewsletter(cart, newLang);
+              setNewsletter(txt);
+              setLanguage(newLang);
+              storage.saveLanguage(newLang);
+              return txt;
+            } catch (e) {
+              addToast(t.toasts.newsletterFailed + e.message, "error");
+              throw e;
+            }
+          }}
+        />
+      )}
+
+      {showApiConfig && (
+        <ApiConfig
+          onClose={() => setShowApiConfig(false)}
+          onSave={handleApiConfigSave}
+          currentConfig={apiConfig}
+          darkMode={darkMode}
+          language={language}
+        />
+      )}
+
+      {aiDrawerOpen && selectedArticle && (
+        <AiDrawer
+          item={selectedArticle}
+          darkMode={darkMode}
+          language={language}
+          onClose={closeAiDrawer}
+        />
+      )}
+
+      <button
+        onClick={handleDarkModeToggle}
+        style={{
+          position: "fixed",
+          bottom: 20,
+          right: 20,
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          border: `1px solid ${border}`,
+          background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+          color: darkMode ? "#fff" : text,
+          fontSize: FONT_SIZES.lg,
+          cursor: "pointer",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 50
         }}
-      />}
-      {showApiConfig && <ApiConfig onClose={() => setShowApiConfig(false)} onSave={handleApiConfigSave} currentConfig={apiConfig} darkMode={darkMode} language={language} />}
+        title={darkMode ? t.buttons.lightMode : t.buttons.darkMode}
+      >
+        {darkMode ? "☀" : "🌙"}
+      </button>
+
       <ToastContainer toasts={toasts} removeToast={removeToast} darkMode={darkMode} />
     </div>
   );
