@@ -34,6 +34,19 @@ describe("extractArticleLinks", () => {
     assert.deepStrictEqual(extractArticleLinks("<html></html>", "https://example.com", 10), []);
     assert.deepStrictEqual(extractArticleLinks("not html", "https://example.com", 10), []);
   });
+
+  it("uses custom list selectors when provided", () => {
+    const links = extractArticleLinks(html, "https://example.com", 10, ["main article h2 a"]);
+    assert.strictEqual(links.length, 2);
+    assert.strictEqual(links[0].url, "https://example.com/article/solar-boom");
+    assert.strictEqual(links[0].title, "Solar Boom Continues");
+  });
+
+  it("falls back to default selectors when custom list selectors produce no results", () => {
+    const links = extractArticleLinks(html, "https://example.com", 10, [".no-match a"]);
+    assert.strictEqual(links.length, 2);
+    assert.strictEqual(links[0].url, "https://example.com/article/solar-boom");
+  });
 });
 
 describe("fetchArticles", { concurrency: false }, () => {

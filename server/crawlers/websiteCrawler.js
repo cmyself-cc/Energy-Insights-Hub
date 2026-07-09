@@ -15,22 +15,29 @@ const DEFAULT_DETAIL_SELECTORS = {
   content: "article, .article, .post-content, .entry-content, main"
 };
 
-export function extractArticleLinks(html, baseUrl, limit = 10) {
+export function extractArticleLinks(html, baseUrl, limit = 10, customListSelectors = null) {
   const $ = cheerio.load(html);
   const seen = new Set();
   const results = [];
 
-  for (const selector of DEFAULT_LIST_SELECTORS) {
-    $(selector).each((_i, el) => {
-      if (results.length >= limit) return false;
-      const $el = $(el);
-      const href = $el.attr("href");
-      const title = $el.text().trim();
-      const url = resolveUrl(baseUrl, href);
-      if (!url || !title || seen.has(url)) return;
-      seen.add(url);
-      results.push({ url, title });
-    });
+  const selectorGroups = customListSelectors?.length
+    ? [customListSelectors, DEFAULT_LIST_SELECTORS]
+    : [DEFAULT_LIST_SELECTORS];
+
+  for (const selectors of selectorGroups) {
+    for (const selector of selectors) {
+      $(selector).each((_i, el) => {
+        if (results.length >= limit) return false;
+        const $el = $(el);
+        const href = $el.attr("href");
+        const title = $el.text().trim();
+        const url = resolveUrl(baseUrl, href);
+        if (!url || !title || seen.has(url)) return;
+        seen.add(url);
+        results.push({ url, title });
+      });
+    }
+    if (results.length > 0) break;
   }
 
   return results;
@@ -71,7 +78,7 @@ export async function fetchArticles(source) {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
-  const links = extractArticleLinks(html, source.url, limit);
+  const links = extractArticleLinks(html, source.url, limit, selectors.list);
 
   const articles = [];
   const failures = [];

@@ -76,7 +76,8 @@ export async function runTracker(runId = null) {
       }
 
       if (newItems.length > 0) {
-        const candidates = applyPreFilter(newItems, settings);
+        const taggedItems = newItems.map(item => ({ ...item, sourceId: source.id }));
+        const candidates = applyPreFilter(taggedItems, settings);
         if (candidates.length > 0) {
           const processed = await processBatch(candidates, LANGUAGE);
           const kept = applyPostFilter(processed, settings);
