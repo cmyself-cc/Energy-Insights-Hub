@@ -64,15 +64,20 @@ router.post("/import-md", (_req, res) => {
     let existed = 0;
     const failed = [];
 
+    const checkExisting = db.prepare("SELECT id FROM sources WHERE name = ? AND url = ?");
     const insert = db.prepare(
-      "INSERT OR IGNORE INTO sources (name, url, type, active, config) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO sources (name, url, type, active, config) VALUES (?, ?, ?, ?, ?)"
     );
 
     for (const draft of drafts) {
       try {
-        const result = insert.run(draft.name, draft.url, draft.type, draft.active, draft.config);
-        if (result.changes > 0) inserted++;
-        else existed++;
+        const existing = checkExisting.get(draft.name, draft.url);
+        if (existing) {
+          existed++;
+          continue;
+        }
+        insert.run(draft.name, draft.url, draft.type, draft.active, draft.config);
+        inserted++;
       } catch (e) {
         failed.push({ name: draft.name, reason: e.message });
       }
