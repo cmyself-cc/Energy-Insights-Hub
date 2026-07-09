@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { parseArticleList } from "./wechatCrawler.js";
+import { parseArticleList, isAntiBotPage } from "./wechatCrawler.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -60,5 +60,25 @@ describe("parseArticleList", () => {
   it("returns an empty array for HTML without matching selectors", () => {
     assert.deepStrictEqual(parseArticleList("<html></html>", "光伏们"), []);
     assert.deepStrictEqual(parseArticleList("not html", "光伏们"), []);
+  });
+
+  it("detects anti-bot/captcha markers", () => {
+    assert.strictEqual(isAntiBotPage("<div>please enter captcha</div>"), true);
+    assert.strictEqual(isAntiBotPage("<div>antirobot check</div>"), true);
+    assert.strictEqual(isAntiBotPage("<div>请输入验证码</div>"), true);
+    assert.strictEqual(isAntiBotPage("<div>您的访问过于频繁</div>"), true);
+  });
+
+  it("detects missing news-list without a no-results indicator", () => {
+    assert.strictEqual(isAntiBotPage("<html><body>unexpected page</body></html>"), true);
+  });
+
+  it("does not flag genuine no-results pages", () => {
+    assert.strictEqual(isAntiBotPage("<div>找不到相关结果</div>"), false);
+    assert.strictEqual(isAntiBotPage("<div>没有相关结果</div>"), false);
+  });
+
+  it("does not flag normal Sogou article list pages", () => {
+    assert.strictEqual(isAntiBotPage(html), false);
   });
 });

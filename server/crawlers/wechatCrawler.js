@@ -29,6 +29,31 @@ function extractTimestamp(sHtml) {
   return new Date(seconds * 1000).toISOString();
 }
 
+export function isAntiBotPage(html) {
+  const lower = html.toLowerCase();
+  const captchaMarkers = [
+    "captcha",
+    "antirobot",
+    "请输入验证码",
+    "验证码",
+    "访问验证",
+    "您的访问过于频繁",
+  ];
+  if (captchaMarkers.some((marker) => lower.includes(marker.toLowerCase()))) {
+    return true;
+  }
+
+  const $ = cheerio.load(html);
+  if ($("ul.news-list").length === 0) {
+    const noResultsMarkers = ["找不到", "没有相关结果"];
+    if (!noResultsMarkers.some((marker) => html.includes(marker))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function parseArticleList(html, accountName = "") {
   const $ = cheerio.load(html);
   const articles = [];
@@ -76,6 +101,10 @@ async function fetchArticles(source) {
   if (!res.ok) throw new Error(`Sogou search failed: HTTP ${res.status}`);
 
   const html = await res.text();
+  if (isAntiBotPage(html)) {
+    throw new Error("Sogou anti-bot/captcha page detected");
+  }
+
   let articles = parseArticleList(html, accountName).slice(0, limit);
 
   const cutoff = Date.now() - lookbackHours * 60 * 60 * 1000;
