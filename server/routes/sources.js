@@ -40,8 +40,11 @@ router.get("/:id", (req, res) => {
 router.post("/", (req, res) => {
   try {
     const { name, url, type = "rss", active = 1, config } = req.body;
-    if (!name || !url) {
-      return res.status(400).json({ error: "name and url are required" });
+    if (!name) {
+      return res.status(400).json({ error: "name is required" });
+    }
+    if (type !== "wechat" && !url) {
+      return res.status(400).json({ error: "url is required for this source type" });
     }
     if (!ALLOWED_TYPES.includes(type)) {
       return res.status(400).json({ error: `type must be one of ${ALLOWED_TYPES.join(", ")}` });
