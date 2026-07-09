@@ -1,23 +1,24 @@
 import db from "../db.js";
-
-const defaultSources = [
-  { name: "Reuters Energy", url: "https://www.reuters.com/business/energy/rss.xml", type: "rss" },
-  { name: "Bloomberg Energy", url: "https://feeds.bloomberg.com/news/energy", type: "rss" },
-  { name: "IEA News", url: "https://www.iea.org/news/rss", type: "rss" },
-  { name: "S&P Global Commodity Insights", url: "https://www.spglobal.com/commodityinsights/rss", type: "rss" },
-  { name: "Energy Central", url: "https://energycentral.com/rss", type: "rss" }
-];
+import { loadSourcesFromMd } from "../lib/sourcesMdLoader.js";
 
 export function seedSources() {
   const existing = db.prepare("SELECT COUNT(*) as count FROM sources").get();
   if (existing.count > 0) return;
 
-  const insert = db.prepare("INSERT INTO sources (name, url, type) VALUES (?, ?, ?)");
+  const drafts = loadSourcesFromMd();
+  if (drafts.length === 0) {
+    console.log("[seed] No sources found in sources.md");
+    return;
+  }
+
+  const insert = db.prepare(
+    "INSERT INTO sources (name, url, type, active, config) VALUES (?, ?, ?, ?, ?)"
+  );
   const insertMany = db.transaction((sources) => {
-    for (const s of sources) insert.run(s.name, s.url, s.type);
+    for (const s of sources) insert.run(s.name, s.url, s.type, s.active, s.config);
   });
-  insertMany(defaultSources);
-  console.log(`[seed] Inserted ${defaultSources.length} default sources.`);
+  insertMany(drafts);
+  console.log(`[seed] Inserted ${drafts.length} sources from sources.md`);
 }
 
 export default seedSources;
