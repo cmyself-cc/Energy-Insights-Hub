@@ -1,5 +1,4 @@
 import Parser from "rss-parser";
-import { registerCrawler } from "./index.js";
 
 const parser = new Parser({
   timeout: 20000,
@@ -28,5 +27,3 @@ export async function fetchArticles(source) {
     })
     .filter(item => item !== null);
 }
-
-registerCrawler("rss", { fetchArticles });

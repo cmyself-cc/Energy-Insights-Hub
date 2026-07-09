@@ -1,7 +1,6 @@
 import cron from "node-cron";
 import db from "../db.js";
-import { fetchRss } from "./rssFetcher.js";
-import { fetchScrape } from "./scraper.js";
+import { fetchArticles } from "../crawlers/index.js";
 import { processInsight } from "./llmProcessor.js";
 import { loadSettings } from "../routes/settings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
@@ -14,17 +13,7 @@ function sleep(ms) {
 }
 
 async function fetchSourceItems(source) {
-  switch (source.type) {
-    case "rss":
-      return fetchRss(source);
-    case "scrape":
-      return fetchScrape(source);
-    case "api":
-      // 预留：API 类型可扩展
-      return [];
-    default:
-      return fetchRss(source);
-  }
+  return fetchArticles(source);
 }
 
 async function processBatch(items, language) {

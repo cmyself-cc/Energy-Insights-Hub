@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { registerCrawler, fetchWithTimeout, resolveUrl, sleep, randomUserAgent } from "./index.js";
+import { fetchWithTimeout, resolveUrl, sleep, randomUserAgent } from "./utils.js";
 
 const BASE_URL = "https://weixin.sogou.com";
 const DEFAULT_ARTICLE_LIMIT = 3;
@@ -88,7 +88,7 @@ export function parseArticleList(html, accountName = "") {
   return articles;
 }
 
-async function fetchArticles(source) {
+export async function fetchArticles(source) {
   const config = parseConfig(source);
   const accountName = config.accountName || source.name || "";
   const limit = config.articleLimit || DEFAULT_ARTICLE_LIMIT;
@@ -113,5 +113,3 @@ async function fetchArticles(source) {
   await sleep(500);
   return articles;
 }
-
-registerCrawler("wechat", { fetchArticles });

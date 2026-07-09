@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { registerCrawler, fetchWithTimeout, resolveUrl, sleep, randomUserAgent } from "./index.js";
+import { fetchWithTimeout, resolveUrl, sleep, randomUserAgent } from "./utils.js";
 
 const DEFAULT_LIST_SELECTORS = [
   "article h2 a",
@@ -93,5 +93,3 @@ export async function fetchArticles(source) {
 
   return articles;
 }
-
-registerCrawler("website", { fetchArticles });
