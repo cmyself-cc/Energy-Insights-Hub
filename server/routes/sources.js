@@ -71,6 +71,10 @@ router.post("/import-md", (_req, res) => {
 
     for (const draft of drafts) {
       try {
+        if (!ALLOWED_TYPES.includes(draft.type)) {
+          failed.push({ name: draft.name, reason: `invalid type: ${draft.type}` });
+          continue;
+        }
         const existing = checkExisting.get(draft.name, draft.url);
         if (existing) {
           existed++;
