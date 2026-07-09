@@ -36,6 +36,7 @@ export const backendApi = {
 
   // Sources
   getSources: () => request("/sources"),
+  importSourcesMd: () => request("/sources/import-md", { method: "POST" }),
   createSource: (source) => request("/sources", { method: "POST", body: JSON.stringify(source) }),
   updateSource: (id, source) => request(`/sources/${id}`, { method: "PUT", body: JSON.stringify(source) }),
   deleteSource: (id) => request(`/sources/${id}`, { method: "DELETE" }),
