@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
+import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 
-export default function SourcesPage({ darkMode, language }) {
+export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: "", url: "", type: "rss", active: true });
   const [bulkJson, setBulkJson] = useState("");
   const [trackerRunning, setTrackerRunning] = useState(false);
   const [message, setMessage] = useState(null);
+  const [activeRun, setActiveRun] = useState(null);
 
   useEffect(() => {
     loadSources();
@@ -71,14 +73,45 @@ export default function SourcesPage({ darkMode, language }) {
 
   const runTracker = async () => {
     setTrackerRunning(true);
+    setActiveRun(null);
     try {
-      await backendApi.runTracker();
-      setMessage({ type: "success", text: language === "zh" ? "跟踪任务已启动，请稍后刷新页面查看结果" : "Tracker started. Refresh the page later to see results." });
+      const res = await backendApi.runTracker();
+      const runId = res.data.runId;
+      setActiveRun({ id: runId, progress: 0, status: "running", message: "" });
     } catch (err) {
       setMessage({ type: "error", text: err.message });
+      setTrackerRunning(false);
     }
-    setTrackerRunning(false);
   };
+
+  useEffect(() => {
+    if (!activeRun || activeRun.status !== "running") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await backendApi.getTrackerRun(activeRun.id);
+        const run = res.data;
+        const total = run.sources_total || 1;
+        const done = (run.sources_success || 0) + (run.sources_failed || 0);
+        const progress = Math.round((done / total) * 100);
+        setActiveRun(prev => ({ ...prev, progress, status: run.status, message: run.message }));
+
+        if (run.status === "completed" || run.status === "completed_with_errors") {
+          clearInterval(interval);
+          setTrackerRunning(false);
+          setMessage({
+            type: run.status === "completed" ? "success" : "warning",
+            text: i18n[language].tracker.finished(run.sources_success || 0, run.sources_failed || 0, run.insights_created || 0)
+          });
+          if (onTrackerComplete) onTrackerComplete();
+        }
+      } catch (e) {
+        console.error("Poll tracker run failed:", e);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [activeRun, language, onTrackerComplete]);
 
   const inputStyle = {
     padding: "8px 12px",
@@ -132,12 +165,35 @@ export default function SourcesPage({ darkMode, language }) {
         <div style={{
           padding: "12px 16px",
           borderRadius: BORDER_RADIUS.md,
-          background: message.type === "success" ? "#e8f5ee" : "#fff0f0",
-          border: `1px solid ${message.type === "success" ? COLORS.primary : "#c00"}`,
-          color: message.type === "success" ? COLORS.primary : "#c00",
+          background: message.type === "success" ? "#e8f5ee" : message.type === "warning" ? "#fff8e6" : "#fff0f0",
+          border: `1px solid ${message.type === "success" ? COLORS.primary : message.type === "warning" ? COLORS.status.warning : "#c00"}`,
+          color: message.type === "success" ? COLORS.primary : message.type === "warning" ? "#b38600" : "#c00",
           marginBottom: 16
         }}>
           {message.text}
+        </div>
+      )}
+
+      {activeRun && activeRun.status === "running" && (
+        <div style={{
+          background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+          border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+          borderRadius: BORDER_RADIUS.lg, padding: "16px 20px", marginBottom: 20
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: FONT_SIZES.sm, color: darkMode ? "#aaa" : COLORS.text.secondary }}>
+            <span>{i18n[language].tracker.inProgress}</span>
+            <span>{activeRun.progress}%</span>
+          </div>
+          <div style={{
+            height: 8, borderRadius: BORDER_RADIUS.sm,
+            background: darkMode ? "#2a2d3a" : "#e0e0e0",
+            overflow: "hidden"
+          }}>
+            <div style={{
+              width: `${activeRun.progress}%`, height: "100%",
+              background: COLORS.primary, transition: "width 0.3s ease"
+            }} />
+          </div>
         </div>
       )}
 

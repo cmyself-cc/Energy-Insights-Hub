@@ -171,6 +171,10 @@ export const i18n = {
       saved: "Settings saved",
       saveFailed: "Save failed",
       loading: "Loading..."
+    },
+    tracker: {
+      inProgress: "Tracking in progress...",
+      finished: (success, failed, created) => `Tracker finished: ${success} success, ${failed} failed, ${created} insights created`
     }
   },
   zh: {
@@ -345,6 +349,10 @@ export const i18n = {
       saved: "设置已保存",
       saveFailed: "保存失败",
       loading: "加载中..."
+    },
+    tracker: {
+      inProgress: "正在跟踪...",
+      finished: (success, failed, created) => `跟踪完成：成功 ${success} 个来源，失败 ${failed} 个，新增 ${created} 条洞察`
     }
   }
 };
