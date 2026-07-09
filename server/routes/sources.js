@@ -1,7 +1,10 @@
 import { Router } from "express";
 import db from "../db.js";
+import { loadSourcesFromMd } from "../lib/sourcesMdLoader.js";
 
 const router = Router();
+
+const ALLOWED_TYPES = ["rss", "website", "wechat", "api"];
 
 function parseConfig(config) {
   if (!config) return null;
@@ -40,12 +43,42 @@ router.post("/", (req, res) => {
     if (!name || !url) {
       return res.status(400).json({ error: "name and url are required" });
     }
+    if (!ALLOWED_TYPES.includes(type)) {
+      return res.status(400).json({ error: `type must be one of ${ALLOWED_TYPES.join(", ")}` });
+    }
     const configStr = config ? JSON.stringify(config) : null;
     const result = db.prepare(
       "INSERT INTO sources (name, url, type, active, config) VALUES (?, ?, ?, ?, ?)"
     ).run(name, url, type, active ? 1 : 0, configStr);
     const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(result.lastInsertRowid);
     res.status(201).json({ data: { ...source, config: parseConfig(source.config) } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/import-md", (_req, res) => {
+  try {
+    const drafts = loadSourcesFromMd();
+    let inserted = 0;
+    let existed = 0;
+    const failed = [];
+
+    const insert = db.prepare(
+      "INSERT OR IGNORE INTO sources (name, url, type, active, config) VALUES (?, ?, ?, ?, ?)"
+    );
+
+    for (const draft of drafts) {
+      try {
+        const result = insert.run(draft.name, draft.url, draft.type, draft.active, draft.config);
+        if (result.changes > 0) inserted++;
+        else existed++;
+      } catch (e) {
+        failed.push({ name: draft.name, reason: e.message });
+      }
+    }
+
+    res.json({ data: { inserted, existed, failed } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
