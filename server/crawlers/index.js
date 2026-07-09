@@ -1,6 +1,7 @@
 import { fetchArticles as rssFetchArticles } from "./rssCrawler.js";
 import { fetchArticles as websiteFetchArticles } from "./websiteCrawler.js";
 import { fetchArticles as wechatFetchArticles } from "./wechatCrawler.js";
+import "./apiCrawler.js";
 
 export { sleep, fetchWithTimeout, resolveUrl, randomUserAgent } from "./utils.js";
 
