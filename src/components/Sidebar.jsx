@@ -3,10 +3,8 @@ import { i18n } from "../constants/i18n";
 
 const MENU_ITEMS = [
   { key: "intelligence", icon: "📊", i18nKey: "sidebarTitle" },
-  { key: "sources", icon: "🌐", i18nKey: "sources" },
   { key: "reports", icon: "📝", i18nKey: "reports" },
-  { key: "bookmarks", icon: "🔖", i18nKey: "bookmarks" },
-  { key: "settings", icon: "⚙️", i18nKey: "settings" }
+  { key: "configuration", icon: "⚙️", i18nKey: "configuration" }
 ];
 
 

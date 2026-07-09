@@ -6,13 +6,12 @@ import Sidebar from "./components/Sidebar";
 import IntelligencePage from "./components/IntelligencePage";
 import AiDrawer from "./components/AiDrawer";
 import ReportsPage from "./components/ReportsPage";
-import SourcesPage from "./components/SourcesPage";
-import TrackerSettingsPage from "./components/TrackerSettingsPage";
+import ConfigurationPage from "./components/ConfigurationPage";
 import { ToastContainer } from "./components/Toast";
 import { storage } from "./utils/storage";
 import { api } from "./utils/api";
 import { backendApi } from "./utils/backendApi";
-import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "./constants/theme";
+import { COLORS, FONT_SIZES, TRANSITIONS } from "./constants/theme";
 import { i18n } from "./constants/i18n";
 import { DEFAULT_FILTERS } from "./constants/taxonomy";
 import "./styles/responsive.css";
@@ -197,12 +196,10 @@ export default function App() {
 
   const showIntelligence = activeTab === "intelligence";
   const showReports = activeTab === "reports";
-  const showSources = activeTab === "sources";
-  const showSettings = activeTab === "settings";
+  const showConfiguration = activeTab === "configuration";
 
   const bg = darkMode ? COLORS.background.dark : "#f8f8fc";
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
-  const sub = darkMode ? "#aaa" : COLORS.text.secondary;
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
 
   return (
@@ -235,63 +232,20 @@ export default function App() {
           padding: "24px 28px",
           minWidth: 0
         }}>
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 20,
-            flexWrap: "wrap",
-            gap: 12
+          <h1 style={{
+            fontSize: FONT_SIZES["3xl"],
+            fontWeight: 700,
+            color: text,
+            margin: "0 0 20px"
           }}>
-            <h1 style={{
-              fontSize: FONT_SIZES["3xl"],
-              fontWeight: 700,
-              color: text,
-              margin: 0
-            }}>
-              {activeTab === "reports"
-                ? (language === "zh" ? "报告" : "Reports")
-                : activeTab === "sources"
-                  ? (language === "zh" ? "数据来源" : "Data Sources")
-                  : activeTab === "bookmarks"
-                    ? t.tabs.bookmarks
-                    : t.competitiveIntelligence.pageTitle}
-            </h1>
+            {activeTab === "reports"
+              ? (language === "zh" ? "报告" : "Reports")
+              : activeTab === "configuration"
+                ? (language === "zh" ? "配置" : "Configuration")
+                : t.competitiveIntelligence.pageTitle}
+          </h1>
 
-            <div style={{
-              display: "flex",
-              gap: 4,
-              background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
-              borderRadius: BORDER_RADIUS.lg,
-              padding: 4,
-              border: `1px solid ${border}`
-            }}>
-              {["intelligence", "sources", "reports", "bookmarks", "settings"].map(tab => (
-                <button key={tab} onClick={() => setActiveTab(tab)} style={{
-                  padding: "6px 14px",
-                  borderRadius: 7,
-                  border: "none",
-                  background: activeTab === tab ? COLORS.primary : "transparent",
-                  color: activeTab === tab ? "#fff" : darkMode ? "#aaa" : sub,
-                  fontWeight: activeTab === tab ? 700 : 400,
-                  fontSize: FONT_SIZES.md,
-                  cursor: "pointer"
-                }}>
-                  {tab === "intelligence"
-                    ? t.tabs.feed
-                    : tab === "sources"
-                      ? (language === "zh" ? "来源" : "Sources")
-                      : tab === "reports"
-                        ? (language === "zh" ? "报告" : "Reports")
-                        : tab === "settings"
-                          ? t.competitiveIntelligence.settings
-                          : `${t.tabs.bookmarks} (${bookmarks.length})`}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {(showIntelligence || activeTab === "bookmarks") && (
+          {showIntelligence && (
             <IntelligencePage
               darkMode={darkMode}
               language={language}
@@ -312,11 +266,10 @@ export default function App() {
               onClearCart={clearCart}
               onGenerateNewsletter={generateNewsletter}
               summarizing={summarizing}
-              defaultSubTab={activeTab === "bookmarks" ? "bookmarks" : "feed"}
             />
           )}
 
-          {!loading && showReports && (
+          {showReports && (
             <ReportsPage
               darkMode={darkMode}
               language={language}
@@ -326,12 +279,14 @@ export default function App() {
             />
           )}
 
-          {!loading && showSources && (
-            <SourcesPage darkMode={darkMode} language={language} />
-          )}
-
-          {!loading && showSettings && (
-            <TrackerSettingsPage darkMode={darkMode} language={language} />
+          {showConfiguration && (
+            <ConfigurationPage
+              darkMode={darkMode}
+              language={language}
+              apiConfig={apiConfig}
+              onApiConfigSave={handleApiConfigSave}
+              onTrackerComplete={loadInsightsFromBackend}
+            />
           )}
         </main>
       </div>
