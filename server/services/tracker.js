@@ -68,6 +68,16 @@ export async function runTracker(runId = null) {
       const items = await fetchSourceItems(source);
       successCount++;
 
+      // 每处理完一个来源就更新一次进度
+      db.prepare(
+        `UPDATE tracker_runs SET
+          sources_success = ?,
+          sources_failed = ?,
+          insights_created = ?,
+          message = ?
+         WHERE id = ?`
+      ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
+
       // 去重：按 url 或 title
       const newItems = [];
       for (const item of items) {
@@ -126,6 +136,16 @@ export async function runTracker(runId = null) {
       failedCount++;
       errors.push(`${source.name}: ${e.message}`);
       console.error(`[tracker] Failed to fetch ${source.name}:`, e.message);
+
+      // 失败的来源也立即更新进度
+      db.prepare(
+        `UPDATE tracker_runs SET
+          sources_success = ?,
+          sources_failed = ?,
+          insights_created = ?,
+          message = ?
+         WHERE id = ?`
+      ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
     }
   }
 

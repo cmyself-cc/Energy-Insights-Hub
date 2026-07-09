@@ -32,4 +32,14 @@ router.get("/runs", (_req, res) => {
   }
 });
 
+router.get("/runs/:id", (req, res) => {
+  try {
+    const row = db.prepare("SELECT * FROM tracker_runs WHERE id = ?").get(req.params.id);
+    if (!row) return res.status(404).json({ error: "Run not found" });
+    res.json({ data: row });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
