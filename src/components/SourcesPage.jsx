@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
-import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 
 export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
@@ -101,7 +100,9 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           setTrackerRunning(false);
           setMessage({
             type: run.status === "completed" ? "success" : "warning",
-            text: i18n[language].tracker.finished(run.sources_success || 0, run.sources_failed || 0, run.insights_created || 0)
+            text: language === "zh"
+              ? `跟踪完成：成功 ${run.sources_success || 0} 个来源，失败 ${run.sources_failed || 0} 个，新增 ${run.insights_created || 0} 条洞察`
+              : `Tracker finished: ${run.sources_success || 0} success, ${run.sources_failed || 0} failed, ${run.insights_created || 0} insights created`
           });
           if (onTrackerComplete) onTrackerComplete();
         }
@@ -181,7 +182,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           borderRadius: BORDER_RADIUS.lg, padding: "16px 20px", marginBottom: 20
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: FONT_SIZES.sm, color: darkMode ? "#aaa" : COLORS.text.secondary }}>
-            <span>{i18n[language].tracker.inProgress}</span>
+            <span>{language === "zh" ? "正在跟踪..." : "Tracking in progress..."}</span>
             <span>{activeRun.progress}%</span>
           </div>
           <div style={{
