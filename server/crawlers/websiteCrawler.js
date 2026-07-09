@@ -54,8 +54,15 @@ async function fetchArticlePage(url, selectors = {}) {
   };
 }
 
-async function fetchArticles(source) {
-  const config = source.config || {};
+export async function fetchArticles(source) {
+  let config = source.config || {};
+  if (typeof config === "string") {
+    try {
+      config = JSON.parse(config);
+    } catch {
+      config = {};
+    }
+  }
   const limit = config.articleLimit || 5;
   const selectors = config.selectors || {};
 
@@ -67,15 +74,21 @@ async function fetchArticles(source) {
   const links = extractArticleLinks(html, source.url, limit);
 
   const articles = [];
+  const failures = [];
   for (const link of links) {
     try {
       const article = await fetchArticlePage(link.url, selectors);
       if (!article.title) article.title = link.title;
       articles.push(article);
-      await sleep(500);
     } catch (e) {
       console.error(`[website] Failed to fetch ${link.url}:`, e.message);
+      failures.push(`${link.url}: ${e.message}`);
     }
+    await sleep(500);
+  }
+
+  if (articles.length === 0 && failures.length > 0) {
+    throw new Error(`Article fetch failures: ${failures.join("; ")}`);
   }
 
   return articles;
