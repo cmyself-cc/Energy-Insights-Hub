@@ -100,12 +100,13 @@ server/
 
 1. 从 `config.accountName` 读取公众号名称。
 2. 构造搜狗搜索 URL：
-   `https://weixin.sogou.com/weixin?type=1&query={accountName}`
-3. 解析搜索结果页，获取公众号主页或最新文章列表链接。
-4. 若进入文章列表页，解析标题、链接、发布时间。
+   `https://weixin.sogou.com/weixin?type=2&query={accountName}`
+   - 最初设计使用 `type=1`（公众号搜索）获取公众号主页后再抓文章列表，但实际测试发现公众号主页不直接暴露文章列表，因此改为 `type=2`（文章搜索）直接搜索该公众号的最新文章。
+3. 解析搜索结果页的文章列表，提取标题、摘要、链接、发布时间和发布者。
+4. 按发布者名称过滤，确保结果主要来自目标公众号。
 5. 过滤 `lookbackHours` 范围外的文章。
 6. 限制数量（默认 3）。
-7. 返回统一 Article 数组（摘要可空，链接指向 `mp.weixin.qq.com`）。
+7. 返回统一 Article 数组（摘要可空，链接为 Sogou 跳转链接，需经 Sogou 重定向后才能到达 `mp.weixin.qq.com`）。
 
 > 反爬处理：随机桌面 User-Agent、请求间隔、失败重试一次。
 

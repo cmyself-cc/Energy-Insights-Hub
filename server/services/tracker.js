@@ -2,7 +2,7 @@ import cron from "node-cron";
 import db from "../db.js";
 import { fetchArticles } from "../crawlers/index.js";
 import { processInsight } from "./llmProcessor.js";
-import { loadSettings } from "../routes/settings.js";
+import { loadSettings } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 
 const BATCH_SIZE = 5; // 并发数，避免触发频率限制
@@ -33,6 +33,15 @@ export async function runTracker(runId = null) {
   const sources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
   if (sources.length === 0) {
     console.log("[tracker] No active sources to track.");
+    if (runId) {
+      db.prepare(
+        `UPDATE tracker_runs SET
+          status = 'completed',
+          finished_at = CURRENT_TIMESTAMP,
+          message = ?
+         WHERE id = ?`
+      ).run("No active sources to track.", runId);
+    }
     return;
   }
 

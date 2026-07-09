@@ -13,6 +13,7 @@ export function registerCrawler(type, crawler) {
 
 registerCrawler("rss", { fetchArticles: rssFetchArticles });
 registerCrawler("website", { fetchArticles: websiteFetchArticles });
+registerCrawler("scrape", { fetchArticles: websiteFetchArticles });
 registerCrawler("wechat", { fetchArticles: wechatFetchArticles });
 registerCrawler("api", { fetchArticles: apiFetchArticles });
 

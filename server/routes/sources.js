@@ -72,23 +72,27 @@ router.post("/import-md", (_req, res) => {
       "INSERT INTO sources (name, url, type, active, config) VALUES (?, ?, ?, ?, ?)"
     );
 
-    for (const draft of drafts) {
-      try {
-        if (!ALLOWED_TYPES.includes(draft.type)) {
-          failed.push({ name: draft.name, reason: `invalid type: ${draft.type}` });
-          continue;
+    const importTx = db.transaction(() => {
+      for (const draft of drafts) {
+        try {
+          if (!ALLOWED_TYPES.includes(draft.type)) {
+            failed.push({ name: draft.name, reason: `invalid type: ${draft.type}` });
+            continue;
+          }
+          const existing = checkExisting.get(draft.name, draft.url);
+          if (existing) {
+            existed++;
+            continue;
+          }
+          insert.run(draft.name, draft.url, draft.type, draft.active, draft.config);
+          inserted++;
+        } catch (e) {
+          failed.push({ name: draft.name, reason: e.message });
         }
-        const existing = checkExisting.get(draft.name, draft.url);
-        if (existing) {
-          existed++;
-          continue;
-        }
-        insert.run(draft.name, draft.url, draft.type, draft.active, draft.config);
-        inserted++;
-      } catch (e) {
-        failed.push({ name: draft.name, reason: e.message });
       }
-    }
+    });
+
+    importTx();
 
     res.json({ data: { inserted, existed, failed } });
   } catch (e) {
@@ -99,6 +103,15 @@ router.post("/import-md", (_req, res) => {
 router.put("/:id", (req, res) => {
   try {
     const { name, url, type, active, config } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: "name is required" });
+    }
+    if (type !== "wechat" && !url) {
+      return res.status(400).json({ error: "url is required for this source type" });
+    }
+    if (!ALLOWED_TYPES.includes(type)) {
+      return res.status(400).json({ error: `type must be one of ${ALLOWED_TYPES.join(", ")}` });
+    }
     const configStr = config ? JSON.stringify(config) : null;
     db.prepare(
       "UPDATE sources SET name = ?, url = ?, type = ?, active = ?, config = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"

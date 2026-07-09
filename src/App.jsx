@@ -38,18 +38,7 @@ export default function App() {
 
   const t = i18n[language];
 
-  useEffect(() => {
-    setDarkMode(storage.getDarkMode());
-    setBookmarks(storage.getBookmarks());
-    setCart(storage.getCart());
-    setApiConfig(storage.getApiConfig());
-    const savedLanguage = storage.getLanguage();
-    setLanguage(savedLanguage);
-    loadInsightsFromBackend();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const loadInsightsFromBackend = async () => {
+  const loadInsightsFromBackend = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -61,7 +50,18 @@ export default function App() {
       console.error("Backend load failed:", e);
     }
     setLoading(false);
-  };
+  }, [language]);
+
+  useEffect(() => {
+    setDarkMode(storage.getDarkMode());
+    setBookmarks(storage.getBookmarks());
+    setCart(storage.getCart());
+    setApiConfig(storage.getApiConfig());
+    const savedLanguage = storage.getLanguage();
+    setLanguage(savedLanguage);
+    loadInsightsFromBackend();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addToast = (message, type = "success") => {
     const id = Date.now();
