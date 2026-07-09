@@ -279,7 +279,6 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
             style={inputStyle}
           >
             <option value="rss">RSS</option>
-            <option value="scrape">Scrape</option>
             <option value="api">API</option>
           </select>
           <button type="submit" style={{
