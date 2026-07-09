@@ -6,7 +6,14 @@ const parser = new Parser({
 });
 
 export async function fetchArticles(source) {
-  const config = source.config || {};
+  let config = source.config || {};
+  if (typeof config === "string") {
+    try {
+      config = JSON.parse(config);
+    } catch {
+      config = {};
+    }
+  }
   const limit = config.articleLimit || 20;
   const feed = await parser.parseURL(source.url);
   return (feed.items || [])

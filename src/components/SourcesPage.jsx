@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { backendApi } from "../utils/backendApi";
 
@@ -10,6 +10,15 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const [trackerRunning, setTrackerRunning] = useState(false);
   const [message, setMessage] = useState(null);
   const [activeRun, setActiveRun] = useState(null);
+  const [runProgress, setRunProgress] = useState(0);
+
+  const languageRef = useRef(language);
+  const onTrackerCompleteRef = useRef(onTrackerComplete);
+  const activeRunRef = useRef(activeRun);
+
+  useEffect(() => { languageRef.current = language; }, [language]);
+  useEffect(() => { onTrackerCompleteRef.current = onTrackerComplete; }, [onTrackerComplete]);
+  useEffect(() => { activeRunRef.current = activeRun; }, [activeRun]);
 
   useEffect(() => {
     loadSources();
@@ -83,10 +92,11 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const runTracker = async () => {
     setTrackerRunning(true);
     setActiveRun(null);
+    setRunProgress(0);
     try {
       const res = await backendApi.runTracker();
       const runId = res.data.runId;
-      setActiveRun({ id: runId, progress: 0, status: "running", message: "" });
+      setActiveRun({ id: runId, status: "running" });
     } catch (err) {
       setMessage({ type: "error", text: err.message });
       setTrackerRunning(false);
@@ -112,29 +122,36 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   };
 
   useEffect(() => {
-    if (!activeRun || activeRun.status !== "running") return;
+    const run = activeRunRef.current;
+    if (!run?.id || run?.status !== "running") return;
 
     let pollFailures = 0;
     const interval = setInterval(async () => {
+      const currentRun = activeRunRef.current;
+      if (!currentRun || currentRun.status !== "running") {
+        clearInterval(interval);
+        return;
+      }
       try {
-        const res = await backendApi.getTrackerRun(activeRun.id);
+        const res = await backendApi.getTrackerRun(currentRun.id);
         pollFailures = 0;
-        const run = res.data;
-        const total = run.sources_total || 1;
-        const done = (run.sources_success || 0) + (run.sources_failed || 0);
+        const data = res.data;
+        const total = data.sources_total || 1;
+        const done = (data.sources_success || 0) + (data.sources_failed || 0);
         const progress = Math.round((done / total) * 100);
-        setActiveRun(prev => ({ ...prev, progress, status: run.status, message: run.message }));
+        setRunProgress(progress);
+        setActiveRun({ ...currentRun, status: data.status });
 
-        if (run.status === "completed" || run.status === "completed_with_errors") {
+        if (data.status === "completed" || data.status === "completed_with_errors") {
           clearInterval(interval);
           setTrackerRunning(false);
           setMessage({
-            type: run.status === "completed" ? "success" : "warning",
-            text: language === "zh"
-              ? `跟踪完成：成功 ${run.sources_success || 0} 个来源，失败 ${run.sources_failed || 0} 个，新增 ${run.insights_created || 0} 条洞察`
-              : `Tracker finished: ${run.sources_success || 0} success, ${run.sources_failed || 0} failed, ${run.insights_created || 0} insights created`
+            type: data.status === "completed" ? "success" : "warning",
+            text: languageRef.current === "zh"
+              ? `跟踪完成：成功 ${data.sources_success || 0} 个来源，失败 ${data.sources_failed || 0} 个，新增 ${data.insights_created || 0} 条洞察`
+              : `Tracker finished: ${data.sources_success || 0} success, ${data.sources_failed || 0} failed, ${data.insights_created || 0} insights created`
           });
-          if (onTrackerComplete) onTrackerComplete();
+          if (onTrackerCompleteRef.current) onTrackerCompleteRef.current();
         }
       } catch (e) {
         pollFailures++;
@@ -142,10 +159,10 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
         if (pollFailures >= 3) {
           clearInterval(interval);
           setTrackerRunning(false);
-          setActiveRun(prev => ({ ...prev, status: "poll_failed" }));
+          setActiveRun({ ...currentRun, status: "poll_failed" });
           setMessage({
             type: "error",
-            text: language === "zh"
+            text: languageRef.current === "zh"
               ? "无法获取跟踪进度，已停止轮询。请刷新页面后重试。"
               : "Unable to retrieve tracker progress. Polling has stopped. Please refresh and try again."
           });
@@ -154,7 +171,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [activeRun, language, onTrackerComplete]);
+  }, [activeRun?.id]);
 
   const inputStyle = {
     padding: "8px 12px",
@@ -241,7 +258,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: FONT_SIZES.sm, color: darkMode ? "#aaa" : COLORS.text.secondary }}>
             <span>{language === "zh" ? "正在跟踪..." : "Tracking in progress..."}</span>
-            <span>{activeRun.progress}%</span>
+            <span>{runProgress}%</span>
           </div>
           <div style={{
             height: 8, borderRadius: BORDER_RADIUS.sm,
@@ -249,7 +266,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
             overflow: "hidden"
           }}>
             <div style={{
-              width: `${activeRun.progress}%`, height: "100%",
+              width: `${runProgress}%`, height: "100%",
               background: COLORS.primary, transition: "width 0.3s ease"
             }} />
           </div>
