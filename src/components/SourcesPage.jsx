@@ -5,7 +5,7 @@ import { backendApi } from "../utils/backendApi";
 export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ name: "", url: "", type: "rss", active: true });
+  const [form, setForm] = useState({ name: "", url: "", type: "rss", active: true, accountName: "" });
   const [bulkJson, setBulkJson] = useState("");
   const [trackerRunning, setTrackerRunning] = useState(false);
   const [message, setMessage] = useState(null);
@@ -28,10 +28,20 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
 
   const saveSource = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.url) return;
+    if (!form.name) return;
+    if (form.type === "website" && !form.url) return;
+
+    const payload = {
+      name: form.name,
+      url: form.type === "wechat" ? "" : form.url,
+      type: form.type,
+      active: form.active,
+      config: form.type === "wechat" ? { accountName: form.accountName || form.name } : {}
+    };
+
     try {
-      await backendApi.createSource(form);
-      setForm({ name: "", url: "", type: "rss", active: true });
+      await backendApi.createSource(payload);
+      setForm({ name: "", url: "", type: "rss", active: true, accountName: "" });
       loadSources();
       setMessage({ type: "success", text: language === "zh" ? "来源已添加" : "Source added" });
     } catch (err) {
@@ -81,6 +91,24 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
       setMessage({ type: "error", text: err.message });
       setTrackerRunning(false);
     }
+  };
+
+  const importFromMd = async () => {
+    setLoading(true);
+    try {
+      const res = await backendApi.importSourcesMd();
+      const { inserted, existed, failed } = res.data;
+      loadSources();
+      setMessage({
+        type: failed.length ? "warning" : "success",
+        text: language === "zh"
+          ? `导入完成：新增 ${inserted} 条，已存在 ${existed} 条，失败 ${failed.length} 条`
+          : `Imported: ${inserted} new, ${existed} existed, ${failed.length} failed`
+      });
+    } catch (err) {
+      setMessage({ type: "error", text: err.message });
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -173,6 +201,22 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           {trackerRunning
             ? (language === "zh" ? "运行中..." : "Running...")
             : (language === "zh" ? "立即运行跟踪" : "Run Tracker Now")}
+        </button>
+        <button
+          onClick={importFromMd}
+          disabled={loading}
+          style={{
+            padding: "8px 16px",
+            borderRadius: BORDER_RADIUS.md,
+            border: `1px solid ${COLORS.primary}`,
+            background: "transparent",
+            color: COLORS.primary,
+            fontSize: FONT_SIZES.md,
+            fontWeight: 600,
+            cursor: loading ? "not-allowed" : "pointer"
+          }}
+        >
+          {language === "zh" ? "从 sources.md 导入" : "Import from sources.md"}
         </button>
       </div>
 
@@ -279,8 +323,18 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
             style={inputStyle}
           >
             <option value="rss">RSS</option>
-            <option value="api">API</option>
+            <option value="website">Website</option>
+            <option value="wechat">WeChat</option>
           </select>
+          {form.type === "wechat" && (
+            <input
+              type="text"
+              value={form.accountName}
+              onChange={(e) => setForm({ ...form, accountName: e.target.value })}
+              placeholder={language === "zh" ? "公众号名称" : "WeChat account name"}
+              style={{ ...inputStyle, minWidth: 180 }}
+            />
+          )}
           <button type="submit" style={{
             padding: "8px 16px",
             borderRadius: BORDER_RADIUS.md,
@@ -326,7 +380,8 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                   </span>
                 </div>
                 <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.light, marginTop: 2 }}>
-                  {source.url} · {source.type}
+                  {source.url ? `${source.url} · ` : ""}{source.type}
+                  {source.config?.accountName ? ` · ${source.config.accountName}` : ""}
                 </div>
               </div>
               <button
