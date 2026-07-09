@@ -49,6 +49,7 @@ export const backendApi = {
   // Tracker
   runTracker: () => request("/tracker/run", { method: "POST" }),
   getTrackerRuns: () => request("/tracker/runs"),
+  getTrackerRun: (id) => request(`/tracker/runs/${id}`),
 
   // Tracker settings
   getTrackerSettings: () => request("/tracker-settings"),
