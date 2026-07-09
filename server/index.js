@@ -11,7 +11,7 @@ import reportsRouter from "./routes/reports.js";
 import trackerRouter from "./routes/tracker.js";
 import settingsRouter from "./routes/settings.js";
 import { startScheduler } from "./services/tracker.js";
-import { seedSources } from "./migrations/002_seed_sources.js";
+import { seedSources } from "./seeds/002_seed_sources.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

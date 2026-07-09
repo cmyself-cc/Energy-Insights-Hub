@@ -4,7 +4,7 @@ import { loadSourcesFromMd } from "../lib/sourcesMdLoader.js";
 
 const router = Router();
 
-const ALLOWED_TYPES = ["rss", "website", "wechat", "api"];
+const ALLOWED_TYPES = ["rss", "website", "wechat", "api", "scrape"];
 
 function parseConfig(config) {
   if (!config) return null;

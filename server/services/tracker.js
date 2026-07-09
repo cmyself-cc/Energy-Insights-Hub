@@ -20,8 +20,18 @@ async function processBatch(items, language) {
   const results = [];
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const batch = items.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.all(batch.map(item => processInsight(item, language)));
-    results.push(...batchResults);
+    const settled = await Promise.allSettled(batch.map(item => processInsight(item, language)));
+    for (let j = 0; j < settled.length; j++) {
+      const result = settled[j];
+      if (result.status === "fulfilled") {
+        results.push(result.value);
+      } else {
+        console.error(`[tracker] processInsight failed for batch item ${i + j}:`, result.reason?.message || result.reason);
+      }
+    }
+    if (results.length === 0 && batch.length > 0) {
+      throw new Error(`All ${batch.length} articles in batch failed LLM processing`);
+    }
     if (i + BATCH_SIZE < items.length) await sleep(1000);
   }
   return results;

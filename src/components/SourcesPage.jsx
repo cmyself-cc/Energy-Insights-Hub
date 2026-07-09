@@ -38,7 +38,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const saveSource = async (e) => {
     e.preventDefault();
     if (!form.name) return;
-    if (form.type === "website" && !form.url) return;
+    if (form.type !== "wechat" && !form.url) return;
 
     const payload = {
       name: form.name,
