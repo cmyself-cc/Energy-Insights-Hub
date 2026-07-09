@@ -66,17 +66,6 @@ export async function runTracker(runId = null) {
     try {
       console.log(`[tracker] Fetching source: ${source.name}`);
       const items = await fetchSourceItems(source);
-      successCount++;
-
-      // 每处理完一个来源就更新一次进度
-      db.prepare(
-        `UPDATE tracker_runs SET
-          sources_success = ?,
-          sources_failed = ?,
-          insights_created = ?,
-          message = ?
-         WHERE id = ?`
-      ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
 
       // 去重：按 url 或 title
       const newItems = [];
@@ -88,50 +77,60 @@ export async function runTracker(runId = null) {
         if (!existing) newItems.push(item);
       }
 
-      if (newItems.length === 0) continue;
+      if (newItems.length > 0) {
+        const candidates = applyPreFilter(newItems, settings);
+        if (candidates.length > 0) {
+          const processed = await processBatch(candidates, LANGUAGE);
+          const kept = applyPostFilter(processed, settings);
+          if (kept.length > 0) {
+            const insert = db.prepare(
+              `INSERT INTO insights (
+                source_id, title, summary, url, publish_date, source_type,
+                business_domain, enterprise_type, entities, features, raw_content
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            );
 
-      const candidates = applyPreFilter(newItems, settings);
-      if (candidates.length === 0) {
-        console.log(`[tracker] Source ${source.name}: no candidates after pre-filter`);
-        continue;
-      }
+            const insertMany = db.transaction((rows) => {
+              for (const row of rows) {
+                if (!row.title) continue;
+                insert.run(
+                  source.id,
+                  row.title,
+                  row.summary,
+                  row.url,
+                  row.publishDate,
+                  row.sourceType,
+                  row.businessDomain,
+                  row.enterpriseType,
+                  JSON.stringify(row.entities),
+                  JSON.stringify(row.features),
+                  row.rawContent || row.summary || ""
+                );
+              }
+            });
 
-      const processed = await processBatch(candidates, LANGUAGE);
-      const kept = applyPostFilter(processed, settings);
-      if (kept.length === 0) {
-        console.log(`[tracker] Source ${source.name}: no insights after post-filter`);
-        continue;
-      }
-
-      const insert = db.prepare(
-        `INSERT INTO insights (
-          source_id, title, summary, url, publish_date, source_type,
-          business_domain, enterprise_type, entities, features, raw_content
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      );
-
-      const insertMany = db.transaction((rows) => {
-        for (const row of rows) {
-          if (!row.title) continue;
-          insert.run(
-            source.id,
-            row.title,
-            row.summary,
-            row.url,
-            row.publishDate,
-            row.sourceType,
-            row.businessDomain,
-            row.enterpriseType,
-            JSON.stringify(row.entities),
-            JSON.stringify(row.features),
-            row.rawContent || row.summary || ""
-          );
+            insertMany(kept);
+            insightsCreated += kept.length;
+            console.log(`[tracker] Source ${source.name}: created ${kept.length} insights`);
+          } else {
+            console.log(`[tracker] Source ${source.name}: no insights after post-filter`);
+          }
+        } else {
+          console.log(`[tracker] Source ${source.name}: no candidates after pre-filter`);
         }
-      });
+      }
 
-      insertMany(kept);
-      insightsCreated += kept.length;
-      console.log(`[tracker] Source ${source.name}: created ${kept.length} insights`);
+      successCount++;
+
+      // 每处理完一个来源就更新一次进度
+      db.prepare(
+        `UPDATE tracker_runs SET
+          sources_success = ?,
+          sources_failed = ?,
+          insights_created = ?,
+          message = ?
+         WHERE id = ?`
+      ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
     } catch (e) {
       failedCount++;
       errors.push(`${source.name}: ${e.message}`);

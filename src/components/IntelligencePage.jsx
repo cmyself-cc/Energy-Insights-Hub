@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import FilterBar from "./FilterBar";
 import InsightCard from "./InsightCard";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
@@ -29,13 +29,9 @@ export default function IntelligencePage(props) {
   const {
     darkMode, language, filters, onFilterChange, onSearch, loading, fetched, error,
     insights, bookmarks, hidden, cart, onToggleCart, onToggleBookmark, onHide, onAiInterpret,
-    onClearCart, onGenerateNewsletter, summarizing, defaultSubTab = "feed"
+    onClearCart, onGenerateNewsletter, summarizing
   } = props;
-  const [subTab, setSubTab] = useState(defaultSubTab);
-
-  useEffect(() => {
-    setSubTab(defaultSubTab);
-  }, [defaultSubTab]);
+  const [subTab, setSubTab] = useState("feed");
 
   const t = i18n[language];
   const sub = darkMode ? "#aaa" : COLORS.text.secondary;

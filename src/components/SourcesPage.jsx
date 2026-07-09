@@ -86,9 +86,11 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   useEffect(() => {
     if (!activeRun || activeRun.status !== "running") return;
 
+    let pollFailures = 0;
     const interval = setInterval(async () => {
       try {
         const res = await backendApi.getTrackerRun(activeRun.id);
+        pollFailures = 0;
         const run = res.data;
         const total = run.sources_total || 1;
         const done = (run.sources_success || 0) + (run.sources_failed || 0);
@@ -107,7 +109,19 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           if (onTrackerComplete) onTrackerComplete();
         }
       } catch (e) {
+        pollFailures++;
         console.error("Poll tracker run failed:", e);
+        if (pollFailures >= 3) {
+          clearInterval(interval);
+          setTrackerRunning(false);
+          setActiveRun(prev => ({ ...prev, status: "poll_failed" }));
+          setMessage({
+            type: "error",
+            text: language === "zh"
+              ? "无法获取跟踪进度，已停止轮询。请刷新页面后重试。"
+              : "Unable to retrieve tracker progress. Polling has stopped. Please refresh and try again."
+          });
+        }
       }
     }, 2000);
 
