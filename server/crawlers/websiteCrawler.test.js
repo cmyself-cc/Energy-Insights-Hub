@@ -75,6 +75,29 @@ describe("fetchArticles", { concurrency: false }, () => {
     }
   ));
 
+  it("normalizes a string selectors.list into an array", withMockFetch(
+    async (url) => {
+      if (url === "https://example.com/news") {
+        return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
+          <div class="headline"><a href="/article/one">Headline One</a></div>
+        </body></html>` };
+      }
+      return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
+        <h1 class="article-title">Headline Article</h1>
+        <div class="post-content">Headline content.</div>
+      </body></html>` };
+    },
+    async () => {
+      const config = JSON.stringify({
+        selectors: { list: ".headline a", title: ".article-title", content: ".post-content" }
+      });
+      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+      assert.strictEqual(articles.length, 1);
+      assert.strictEqual(articles[0].title, "Headline Article");
+      assert.strictEqual(articles[0].summary, "Headline content.");
+    }
+  ));
+
   it("falls back to empty config when config JSON string is invalid", withMockFetch(
     async () => ({ ok: true, status: 200, text: async () => "<html></html>" }),
     async () => {

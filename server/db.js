@@ -22,9 +22,23 @@ export function initDb() {
     .filter(f => f.endsWith(".sql"))
     .sort();
 
+  db.exec(`CREATE TABLE IF NOT EXISTS _migrations (
+    filename TEXT PRIMARY KEY,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );`);
+
+  const isApplied = db.prepare("SELECT 1 FROM _migrations WHERE filename = ?");
+  const record = db.prepare("INSERT INTO _migrations (filename) VALUES (?)");
+
   for (const file of files) {
+    if (isApplied.get(file)) continue;
+
     const sql = fs.readFileSync(path.join(migrationsDir, file), "utf-8");
-    db.exec(sql);
+    const apply = db.transaction(() => {
+      db.exec(sql);
+      record.run(file);
+    });
+    apply();
   }
 }
 

@@ -73,12 +73,17 @@ export async function fetchArticles(source) {
   const limit = config.articleLimit || 5;
   const selectors = config.selectors || {};
 
+  const rawList = selectors.list;
+  const customListSelectors = rawList
+    ? (Array.isArray(rawList) ? rawList : [rawList])
+    : undefined;
+
   const res = await fetchWithTimeout(source.url, {
     headers: { "User-Agent": randomUserAgent() }
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
-  const links = extractArticleLinks(html, source.url, limit, selectors.list);
+  const links = extractArticleLinks(html, source.url, limit, customListSelectors);
 
   const articles = [];
   const failures = [];
