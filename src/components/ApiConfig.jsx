@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { COLORS } from "../constants/theme";
+import { COLORS, BORDER_RADIUS } from "../constants/theme";
 import { storage } from "../utils/storage";
 
 const API_PROVIDERS = [
@@ -49,7 +49,7 @@ const SEARCH_PROVIDERS = [
   }
 ];
 
-export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = false }) {
+export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = false, inline = false }) {
   const [activeTab, setActiveTab] = useState("llm");
 
   // LLM Config State
@@ -206,26 +206,18 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
     setSearchTesting(false);
   };
 
-  return (
+  const content = (
     <div style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.5)",
-      zIndex: 1000,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "20px"
+      background: darkMode ? COLORS.background.cardDark : "#fff",
+      borderRadius: inline ? BORDER_RADIUS.lg : 16,
+      width: "100%",
+      maxWidth: inline ? "100%" : 600,
+      maxHeight: inline ? "none" : "90vh",
+      overflow: inline ? "visible" : "auto",
+      boxShadow: inline ? "none" : "0 20px 60px rgba(0,0,0,0.3)",
+      border: inline ? `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}` : "none"
     }}>
-      <div style={{
-        background: darkMode ? COLORS.background.cardDark : "#fff",
-        borderRadius: 16,
-        width: "100%",
-        maxWidth: 600,
-        maxHeight: "90vh",
-        overflow: "auto",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
-      }}>
+      {!inline && (
         <div style={{
           background: "#1a6b3c",
           borderRadius: "16px 16px 0 0",
@@ -254,380 +246,397 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
             ✕ 关闭
           </button>
         </div>
+      )}
 
-        {/* Tabs */}
-        <div style={{
-          display: "flex",
-          borderBottom: `1px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
-          background: darkMode ? COLORS.background.cardDark : "#f9f9f9"
-        }}>
-          <button
-            onClick={() => setActiveTab("llm")}
-            style={{
-              flex: 1,
-              padding: "14px 20px",
-              border: "none",
-              borderBottom: activeTab === "llm" ? "2px solid #1a6b3c" : "none",
-              background: "transparent",
-              color: activeTab === "llm" ? "#1a6b3c" : (darkMode ? "#888" : "#666"),
-              fontSize: 14,
-              fontWeight: activeTab === "llm" ? 600 : 400,
-              cursor: "pointer"
-            }}
-          >
-            🤖 大模型配置
-          </button>
-          <button
-            onClick={() => setActiveTab("search")}
-            style={{
-              flex: 1,
-              padding: "14px 20px",
-              border: "none",
-              borderBottom: activeTab === "search" ? "2px solid #1a6b3c" : "none",
-              background: "transparent",
-              color: activeTab === "search" ? "#1a6b3c" : (darkMode ? "#888" : "#666"),
-              fontSize: 14,
-              fontWeight: activeTab === "search" ? 600 : 400,
-              cursor: "pointer"
-            }}
-          >
-            🔍 搜索配置
-          </button>
-        </div>
+      {/* Tabs */}
+      <div style={{
+        display: "flex",
+        borderBottom: `1px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
+        background: darkMode ? COLORS.background.cardDark : "#f9f9f9"
+      }}>
+        <button
+          onClick={() => setActiveTab("llm")}
+          style={{
+            flex: 1,
+            padding: "14px 20px",
+            border: "none",
+            borderBottom: activeTab === "llm" ? "2px solid #1a6b3c" : "none",
+            background: "transparent",
+            color: activeTab === "llm" ? "#1a6b3c" : (darkMode ? "#888" : "#666"),
+            fontSize: 14,
+            fontWeight: activeTab === "llm" ? 600 : 400,
+            cursor: "pointer"
+          }}
+        >
+          🤖 大模型配置
+        </button>
+        <button
+          onClick={() => setActiveTab("search")}
+          style={{
+            flex: 1,
+            padding: "14px 20px",
+            border: "none",
+            borderBottom: activeTab === "search" ? "2px solid #1a6b3c" : "none",
+            background: "transparent",
+            color: activeTab === "search" ? "#1a6b3c" : (darkMode ? "#888" : "#666"),
+            fontSize: 14,
+            fontWeight: activeTab === "search" ? 600 : 400,
+            cursor: "pointer"
+          }}
+        >
+          🔍 搜索配置
+        </button>
+      </div>
 
-        <div style={{ padding: "28px" }}>
-          {activeTab === "llm" ? (
-            <>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: darkMode ? "#e8e8e8" : "#333",
-                  marginBottom: 8
-                }}>
-                  API 提供商
-                </label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {API_PROVIDERS.map(provider => (
-                    <button
-                      key={provider.id}
-                      onClick={() => {
-                        setSelectedProvider(provider.id);
-                        setSelectedModel(provider.models[0].id);
-                      }}
-                      style={{
-                        padding: "8px 16px",
-                        borderRadius: 8,
-                        border: selectedProvider === provider.id ? "none" : `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
-                        background: selectedProvider === provider.id ? "#1a6b3c" : (darkMode ? COLORS.background.cardDark : "#fff"),
-                        color: selectedProvider === provider.id ? "#fff" : (darkMode ? "#e8e8e8" : "#555"),
-                        fontSize: 13,
-                        cursor: "pointer",
-                        fontWeight: selectedProvider === provider.id ? 600 : 400,
-                        transition: "all 0.15s"
-                      }}
-                    >
-                      {provider.name}
-                    </button>
-                  ))}
-                </div>
+      <div style={{ padding: "28px" }}>
+        {activeTab === "llm" ? (
+          <>
+            <div style={{ marginBottom: 24 }}>
+              <label style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: darkMode ? "#e8e8e8" : "#333",
+                marginBottom: 8
+              }}>
+                API 提供商
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {API_PROVIDERS.map(provider => (
+                  <button
+                    key={provider.id}
+                    onClick={() => {
+                      setSelectedProvider(provider.id);
+                      setSelectedModel(provider.models[0].id);
+                    }}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      border: selectedProvider === provider.id ? "none" : `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
+                      background: selectedProvider === provider.id ? "#1a6b3c" : (darkMode ? COLORS.background.cardDark : "#fff"),
+                      color: selectedProvider === provider.id ? "#fff" : (darkMode ? "#e8e8e8" : "#555"),
+                      fontSize: 13,
+                      cursor: "pointer",
+                      fontWeight: selectedProvider === provider.id ? 600 : 400,
+                      transition: "all 0.15s"
+                    }}
+                  >
+                    {provider.name}
+                  </button>
+                ))}
               </div>
+            </div>
 
-              <div style={{ marginBottom: 24 }}>
-                <label style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 600,
+            <div style={{ marginBottom: 24 }}>
+              <label style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: darkMode ? "#e8e8e8" : "#333",
+                marginBottom: 8
+              }}>
+                模型选择
+              </label>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: 8,
+                  border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
+                  fontSize: 14,
+                  outline: "none",
+                  background: darkMode ? COLORS.background.cardDark : "#fff",
                   color: darkMode ? "#e8e8e8" : "#333",
-                  marginBottom: 8
-                }}>
-                  模型选择
-                </label>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
+                  cursor: "pointer"
+                }}
+              >
+                {availableModels.map(model => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: darkMode ? "#e8e8e8" : "#333",
+                marginBottom: 8
+              }}>
+                API Key
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type={showApiKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="输入您的API Key"
                   style={{
-                    width: "100%",
+                    flex: 1,
                     padding: "12px 16px",
                     borderRadius: 8,
                     border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
                     fontSize: 14,
                     outline: "none",
                     background: darkMode ? COLORS.background.cardDark : "#fff",
-                    color: darkMode ? "#e8e8e8" : "#333",
-                    cursor: "pointer"
+                    color: darkMode ? "#e8e8e8" : "#333"
                   }}
-                >
-                  {availableModels.map(model => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ marginBottom: 24 }}>
-                <label style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: darkMode ? "#e8e8e8" : "#333",
-                  marginBottom: 8
-                }}>
-                  API Key
-                </label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type={showApiKey ? "text" : "password"}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="输入您的API Key"
-                    style={{
-                      flex: 1,
-                      padding: "12px 16px",
-                      borderRadius: 8,
-                      border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
-                      fontSize: 14,
-                      outline: "none",
-                      background: darkMode ? COLORS.background.cardDark : "#fff",
-                      color: darkMode ? "#e8e8e8" : "#333"
-                    }}
-                  />
-                  <button
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    style={{
-                      padding: "12px 16px",
-                      borderRadius: 8,
-                      border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
-                      background: darkMode ? COLORS.background.cardDark : "#fff",
-                      color: darkMode ? "#e8e8e8" : "#555",
-                      fontSize: 13,
-                      cursor: "pointer",
-                      fontWeight: 500
-                    }}
-                  >
-                    {showApiKey ? "🙈" : "👁️"}
-                  </button>
-                </div>
-                <div style={{ fontSize: 12, color: darkMode ? "#888" : "#999", marginTop: 6 }}>
-                  API Key 将安全保存在您的浏览器本地存储中
-                </div>
-              </div>
-
-              {llmTestResult && (
-                <div style={{
-                  padding: "12px 16px",
-                  borderRadius: 8,
-                  background: llmTestResult.success ? "#e8f5ee" : "#fff0f0",
-                  border: llmTestResult.success ? "1px solid #1a6b3c" : "1px solid #fcc",
-                  color: llmTestResult.success ? "#1a6b3c" : "#c00",
-                  fontSize: 13,
-                  marginBottom: 20
-                }}>
-                  {llmTestResult.success ? "✓" : "✗"} {llmTestResult.message}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 12 }}>
+                />
                 <button
-                  onClick={handleLlmTest}
-                  disabled={llmTesting}
+                  onClick={() => setShowApiKey(!showApiKey)}
                   style={{
-                    flex: 1,
-                    padding: "12px",
+                    padding: "12px 16px",
                     borderRadius: 8,
-                    border: "1.5px solid #1a6b3c",
+                    border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
                     background: darkMode ? COLORS.background.cardDark : "#fff",
-                    color: "#1a6b3c",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: llmTesting ? "not-allowed" : "pointer"
+                    color: darkMode ? "#e8e8e8" : "#555",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontWeight: 500
                   }}
                 >
-                  {llmTesting ? "测试中..." : "🧪 测试连接"}
-                </button>
-                <button
-                  onClick={handleSave}
-                  style={{
-                    flex: 1,
-                    padding: "12px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "#1a6b3c",
-                    color: "#fff",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: "pointer"
-                  }}
-                >
-                  💾 保存配置
+                  {showApiKey ? "🙈" : "👁️"}
                 </button>
               </div>
-            </>
-          ) : (
-            <>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: darkMode ? "#e8e8e8" : "#333",
-                  marginBottom: 8
-                }}>
-                  搜索提供商
-                </label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {SEARCH_PROVIDERS.map(provider => (
-                    <button
-                      key={provider.id}
-                      onClick={() => setSelectedSearchProvider(provider.id)}
-                      style={{
-                        padding: "8px 16px",
-                        borderRadius: 8,
-                        border: selectedSearchProvider === provider.id ? "none" : `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
-                        background: selectedSearchProvider === provider.id ? "#1a6b3c" : (darkMode ? COLORS.background.cardDark : "#fff"),
-                        color: selectedSearchProvider === provider.id ? "#fff" : (darkMode ? "#e8e8e8" : "#555"),
-                        fontSize: 13,
-                        cursor: "pointer",
-                        fontWeight: selectedSearchProvider === provider.id ? 600 : 400,
-                        transition: "all 0.15s"
-                      }}
-                    >
-                      {provider.name}
-                    </button>
-                  ))}
-                </div>
+              <div style={{ fontSize: 12, color: darkMode ? "#888" : "#999", marginTop: 6 }}>
+                API Key 将安全保存在您的浏览器本地存储中
               </div>
+            </div>
 
-              <div style={{ marginBottom: 24 }}>
-                <label style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: darkMode ? "#e8e8e8" : "#333",
-                  marginBottom: 8
-                }}>
-                  搜索 API Key
-                </label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type={showSearchApiKey ? "text" : "password"}
-                    value={searchApiKey}
-                    onChange={(e) => setSearchApiKey(e.target.value)}
-                    placeholder={`输入${currentSearchProvider?.name}的API Key`}
-                    style={{
-                      flex: 1,
-                      padding: "12px 16px",
-                      borderRadius: 8,
-                      border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
-                      fontSize: 14,
-                      outline: "none",
-                      background: darkMode ? COLORS.background.cardDark : "#fff",
-                      color: darkMode ? "#e8e8e8" : "#333"
-                    }}
-                  />
-                  <button
-                    onClick={() => setShowSearchApiKey(!showSearchApiKey)}
-                    style={{
-                      padding: "12px 16px",
-                      borderRadius: 8,
-                      border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
-                      background: darkMode ? COLORS.background.cardDark : "#fff",
-                      color: darkMode ? "#e8e8e8" : "#555",
-                      fontSize: 13,
-                      cursor: "pointer",
-                      fontWeight: 500
-                    }}
-                  >
-                    {showSearchApiKey ? "🙈" : "👁️"}
-                  </button>
-                </div>
-                <div style={{ fontSize: 12, color: darkMode ? "#888" : "#999", marginTop: 6 }}>
-                  搜索API Key 将安全保存在您的浏览器本地存储中
-                </div>
-              </div>
-
-              {searchTestResult && (
-                <div style={{
-                  padding: "12px 16px",
-                  borderRadius: 8,
-                  background: searchTestResult.success ? "#e8f5ee" : "#fff0f0",
-                  border: searchTestResult.success ? "1px solid #1a6b3c" : "1px solid #fcc",
-                  color: searchTestResult.success ? "#1a6b3c" : "#c00",
-                  fontSize: 13,
-                  marginBottom: 20
-                }}>
-                  {searchTestResult.success ? "✓" : "✗"} {searchTestResult.message}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 12 }}>
-                <button
-                  onClick={handleSearchTest}
-                  disabled={searchTesting}
-                  style={{
-                    flex: 1,
-                    padding: "12px",
-                    borderRadius: 8,
-                    border: "1.5px solid #1a6b3c",
-                    background: darkMode ? COLORS.background.cardDark : "#fff",
-                    color: "#1a6b3c",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: searchTesting ? "not-allowed" : "pointer"
-                  }}
-                >
-                  {searchTesting ? "测试中..." : "🧪 测试连接"}
-                </button>
-                <button
-                  onClick={handleSave}
-                  style={{
-                    flex: 1,
-                    padding: "12px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "#1a6b3c",
-                    color: "#fff",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: "pointer"
-                  }}
-                >
-                  💾 保存配置
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* 重置配置按钮 */}
-          <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}` }}>
-            <button
-              onClick={() => {
-                if (confirm("确定要重置所有API配置吗？这将清除大模型和搜索API的配置。")) {
-                  storage.saveApiConfig(null);
-                  storage.saveSearchConfig(null);
-                  onClose();
-                  window.location.reload();
-                }
-              }}
-              style={{
-                width: "100%",
-                padding: "10px",
+            {llmTestResult && (
+              <div style={{
+                padding: "12px 16px",
                 borderRadius: 8,
-                border: `1.5px solid ${darkMode ? "#c00" : "#c00"}`,
-                background: "transparent",
-                color: "#c00",
+                background: llmTestResult.success ? "#e8f5ee" : "#fff0f0",
+                border: llmTestResult.success ? "1px solid #1a6b3c" : "1px solid #fcc",
+                color: llmTestResult.success ? "#1a6b3c" : "#c00",
                 fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer"
-              }}
-            >
-              🗑️ 重置所有配置
-            </button>
-          </div>
+                marginBottom: 20
+              }}>
+                {llmTestResult.success ? "✓" : "✗"} {llmTestResult.message}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <button
+                onClick={handleLlmTest}
+                disabled={llmTesting}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: 8,
+                  border: "1.5px solid #1a6b3c",
+                  background: darkMode ? COLORS.background.cardDark : "#fff",
+                  color: "#1a6b3c",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: llmTesting ? "not-allowed" : "pointer"
+                }}
+              >
+                {llmTesting ? "测试中..." : "🧪 测试连接"}
+              </button>
+              <button
+                onClick={handleSave}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#1a6b3c",
+                  color: "#fff",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                💾 保存配置
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: 24 }}>
+              <label style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: darkMode ? "#e8e8e8" : "#333",
+                marginBottom: 8
+              }}>
+                搜索提供商
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {SEARCH_PROVIDERS.map(provider => (
+                  <button
+                    key={provider.id}
+                    onClick={() => setSelectedSearchProvider(provider.id)}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      border: selectedSearchProvider === provider.id ? "none" : `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
+                      background: selectedSearchProvider === provider.id ? "#1a6b3c" : (darkMode ? COLORS.background.cardDark : "#fff"),
+                      color: selectedSearchProvider === provider.id ? "#fff" : (darkMode ? "#e8e8e8" : "#555"),
+                      fontSize: 13,
+                      cursor: "pointer",
+                      fontWeight: selectedSearchProvider === provider.id ? 600 : 400,
+                      transition: "all 0.15s"
+                    }}
+                  >
+                    {provider.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: darkMode ? "#e8e8e8" : "#333",
+                marginBottom: 8
+              }}>
+                搜索 API Key
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type={showSearchApiKey ? "text" : "password"}
+                  value={searchApiKey}
+                  onChange={(e) => setSearchApiKey(e.target.value)}
+                  placeholder={`输入${currentSearchProvider?.name}的API Key`}
+                  style={{
+                    flex: 1,
+                    padding: "12px 16px",
+                    borderRadius: 8,
+                    border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
+                    fontSize: 14,
+                    outline: "none",
+                    background: darkMode ? COLORS.background.cardDark : "#fff",
+                    color: darkMode ? "#e8e8e8" : "#333"
+                  }}
+                />
+                <button
+                  onClick={() => setShowSearchApiKey(!showSearchApiKey)}
+                  style={{
+                    padding: "12px 16px",
+                    borderRadius: 8,
+                    border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`,
+                    background: darkMode ? COLORS.background.cardDark : "#fff",
+                    color: darkMode ? "#e8e8e8" : "#555",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontWeight: 500
+                  }}
+                >
+                  {showSearchApiKey ? "🙈" : "👁️"}
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: darkMode ? "#888" : "#999", marginTop: 6 }}>
+                搜索API Key 将安全保存在您的浏览器本地存储中
+              </div>
+            </div>
+
+            {searchTestResult && (
+              <div style={{
+                padding: "12px 16px",
+                borderRadius: 8,
+                background: searchTestResult.success ? "#e8f5ee" : "#fff0f0",
+                border: searchTestResult.success ? "1px solid #1a6b3c" : "1px solid #fcc",
+                color: searchTestResult.success ? "#1a6b3c" : "#c00",
+                fontSize: 13,
+                marginBottom: 20
+              }}>
+                {searchTestResult.success ? "✓" : "✗"} {searchTestResult.message}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <button
+                onClick={handleSearchTest}
+                disabled={searchTesting}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: 8,
+                  border: "1.5px solid #1a6b3c",
+                  background: darkMode ? COLORS.background.cardDark : "#fff",
+                  color: "#1a6b3c",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: searchTesting ? "not-allowed" : "pointer"
+                }}
+              >
+                {searchTesting ? "测试中..." : "🧪 测试连接"}
+              </button>
+              <button
+                onClick={handleSave}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#1a6b3c",
+                  color: "#fff",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                💾 保存配置
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* 重置配置按钮 */}
+        <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}` }}>
+          <button
+            onClick={() => {
+              if (confirm("确定要重置所有API配置吗？这将清除大模型和搜索API的配置。")) {
+                storage.saveApiConfig(null);
+                storage.saveSearchConfig(null);
+                onClose();
+                window.location.reload();
+              }
+            }}
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: 8,
+              border: `1.5px solid ${darkMode ? "#c00" : "#c00"}`,
+              background: "transparent",
+              color: "#c00",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer"
+            }}
+          >
+            🗑️ 重置所有配置
+          </button>
         </div>
       </div>
+    </div>
+  );
+
+  if (inline) return content;
+
+  return (
+    <div style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      zIndex: 1000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "20px"
+    }}>
+      {content}
     </div>
   );
 }
