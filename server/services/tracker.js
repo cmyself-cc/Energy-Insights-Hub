@@ -2,7 +2,8 @@ import cron from "node-cron";
 import db from "../db.js";
 import { fetchArticles } from "../crawlers/index.js";
 import { processInsight, loadSemanticConfig } from "./llmProcessor.js";
-import { loadActiveCategories } from "./businessCategories.js";
+import { loadActiveCategories, matchesEnabledCategory } from "./businessCategories.js";
+import { loadFilterRules, applyKeywordFilters } from "./filterRules.js";
 import { loadSettings } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 
@@ -46,6 +47,8 @@ async function processBatch(items, language) {
 
 export async function runTracker(runId = null) {
   const settings = loadSettings();
+  const filterRules = loadFilterRules();
+  const activeCategories = loadActiveCategories();
 
   const sources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
   if (sources.length === 0) {
@@ -93,17 +96,33 @@ export async function runTracker(runId = null) {
       }
 
       if (newItems.length > 0) {
-        const taggedItems = newItems.map(item => ({ ...item, sourceId: source.id }));
+        const keywordFiltered = applyKeywordFilters(newItems, filterRules);
+        if (keywordFiltered.length === 0) {
+          console.log(`[tracker] Source ${source.name}: no items after keyword filters`);
+          successCount++;
+          db.prepare(
+            `UPDATE tracker_runs SET
+              sources_success = ?,
+              sources_failed = ?,
+              insights_created = ?,
+              message = ?
+             WHERE id = ?`
+          ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
+          continue;
+        }
+        const taggedItems = keywordFiltered.map(item => ({ ...item, sourceId: source.id }));
         const candidates = applyPreFilter(taggedItems, settings);
         if (candidates.length > 0) {
           const processed = await processBatch(candidates, LANGUAGE);
-          const kept = applyPostFilter(processed, settings);
+          const kept = applyPostFilter(processed, settings)
+            .filter(insight => insight.title && insight.title.trim() !== "")
+            .filter(insight => matchesEnabledCategory(insight, activeCategories));
           if (kept.length > 0) {
             const insert = db.prepare(
               `INSERT INTO insights (
                 source_id, title, summary, url, publish_date, source_type,
-                business_domain, enterprise_type, entities, features, raw_content
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                business_domain, enterprise_type, entities, features, raw_content, categories
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             );
 
             const insertMany = db.transaction((rows) => {
@@ -120,7 +139,8 @@ export async function runTracker(runId = null) {
                   row.enterpriseType,
                   JSON.stringify(row.entities),
                   JSON.stringify(row.features),
-                  row.rawContent || row.summary || ""
+                  row.rawContent || row.summary || "",
+                  JSON.stringify(row.categories)
                 );
               }
             });
