@@ -140,7 +140,7 @@ export async function runTracker(runId = null) {
                   JSON.stringify(row.entities),
                   JSON.stringify(row.features),
                   row.rawContent || row.summary || "",
-                  JSON.stringify(row.categories)
+                  row.categories ? JSON.stringify(row.categories) : null
                 );
               }
             });
