@@ -1,5 +1,23 @@
 import db from "../db.js";
 
+export const SUPPORTED_IMPORT_TYPES = ["wechat", "website"];
+
+export class ImportValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.statusCode = 400;
+  }
+}
+
+export function normalizeImportType(source) {
+  if (!source || !SUPPORTED_IMPORT_TYPES.includes(source.type)) {
+    throw new ImportValidationError(
+      `Unsupported source type: ${source ? source.type : "undefined"}`
+    );
+  }
+  return source;
+}
+
 function sourceUrl(source) {
   if (source.url) return source.url;
   if (source.type === "wechat" && source.identifier) {

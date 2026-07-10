@@ -88,3 +88,26 @@ All GET endpoints returned expected JSON arrays/objects, both import endpoints r
 - The `source_imports` table has a CHECK constraint allowing only `wechat` and `website`. I added type normalization in both import endpoints to avoid constraint violations. If future source types need to be imported, the schema or normalization logic will need to be updated.
 - The replace-mode flow for `/api/tracker/import-config` deletes all existing filter rules and business categories before inserting parsed ones. This matches the brief but is destructive; callers should be aware that `mode=replace` is all-or-nothing.
 - The seeded business categories were restored after testing by re-running the migration seed INSERTs; the live database was left clean.
+
+## Fix
+
+- **Files modified:**
+  - `server/services/sourceImporter.js`
+    - Added `normalizeImportType(source)` to centralize type validation.
+    - Rejects unsupported source types with a 400-class `ImportValidationError` instead of silently coercing them to `website`.
+    - Only `wechat` and `website` are accepted, matching the `source_imports.type` CHECK constraint.
+  - `server/routes/sources.js`
+    - Removed local `normalizeImportType()` helper.
+    - Imports sources through the centralized `normalizeImportType`, returning `400` for unsupported types.
+  - `server/routes/tracker.js`
+    - Removed local `normalizeImportType()` helper.
+    - Moved the replace-mode `DELETE FROM filter_rules` and `DELETE FROM business_categories` statements inside the same `db.transaction()` that performs rule/category/config inserts, so a failure rolls back the destructive deletes.
+    - Imports sources through the centralized `normalizeImportType`, returning `400` for unsupported types.
+  - `server/services/sourceImporter.test.js`
+    - Added tests covering acceptance of supported types and rejection of unsupported types.
+
+- **Commit:** See final handoff for the exact hash range.
+
+- **Verification:**
+  - `npm run lint` passed (exit code 0, no warnings).
+  - `node --test server/services/sourceImporter.test.js server/lib/configParser.test.js server/services/filterRules.test.js server/services/trackerRules.test.js server/services/businessCategories.test.js` passed: 33 tests, 0 failures.

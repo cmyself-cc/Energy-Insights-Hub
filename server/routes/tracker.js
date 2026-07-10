@@ -2,16 +2,9 @@ import { Router } from "express";
 import db from "../db.js";
 import { runTracker } from "../services/tracker.js";
 import { parseConfigFile } from "../lib/configParser.js";
-import { importSources } from "../services/sourceImporter.js";
+import { importSources, normalizeImportType } from "../services/sourceImporter.js";
 
 const router = Router();
-
-function normalizeImportType(sources) {
-  return sources.map(s => ({
-    ...s,
-    type: s.type === "wechat" ? "wechat" : "website"
-  }));
-}
 
 router.post("/run", async (_req, res) => {
   try {
@@ -59,11 +52,7 @@ router.post("/import-config", (req, res) => {
     const buffer = Buffer.from(req.body.file, "base64");
     const parsed = parseConfigFile(buffer, req.body.filename || "config.json");
     const mode = req.body.mode || "append";
-
-    if (mode === "replace") {
-      db.prepare("DELETE FROM filter_rules").run();
-      db.prepare("DELETE FROM business_categories").run();
-    }
+    const normalizedSources = parsed.sources.map(normalizeImportType);
 
     const insertRule = db.prepare(
       "INSERT INTO filter_rules (type, name, must_include, must_exclude, active, priority) VALUES (?, ?, ?, ?, 1, 0)"
@@ -73,6 +62,11 @@ router.post("/import-config", (req, res) => {
     );
 
     const tx = db.transaction(() => {
+      if (mode === "replace") {
+        db.prepare("DELETE FROM filter_rules").run();
+        db.prepare("DELETE FROM business_categories").run();
+      }
+
       for (const k of parsed.excludeKeywords) {
         insertRule.run("exclude_keyword", k, "[]", JSON.stringify([k]));
       }
@@ -95,7 +89,7 @@ router.post("/import-config", (req, res) => {
     });
     tx();
 
-    const sourceResult = importSources(normalizeImportType(parsed.sources), mode);
+    const sourceResult = importSources(normalizedSources, mode);
 
     res.json({ data: {
       rulesImported: parsed.excludeKeywords.length + parsed.compositeRules.length,
@@ -103,6 +97,9 @@ router.post("/import-config", (req, res) => {
       sourcesImported: sourceResult.imported
     }});
   } catch (e) {
+    if (e.statusCode === 400) {
+      return res.status(400).json({ error: e.message });
+    }
     res.status(500).json({ error: e.message });
   }
 });

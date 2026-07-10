@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert";
 import db, { initDb } from "../db.js";
-import { importSources } from "./sourceImporter.js";
+import { importSources, normalizeImportType, ImportValidationError } from "./sourceImporter.js";
 
 describe("sourceImporter", () => {
   beforeEach(() => {
@@ -43,5 +43,21 @@ describe("sourceImporter", () => {
     assert.strictEqual(db.prepare("SELECT COUNT(*) as c FROM source_imports").get().c, 1);
     const names = db.prepare("SELECT name FROM sources").all().map(r => r.name);
     assert.deepStrictEqual(names, ["New Source"]);
+  });
+
+  it("accepts supported source types", () => {
+    assert.deepStrictEqual(normalizeImportType({ name: "A", type: "wechat" }), { name: "A", type: "wechat" });
+    assert.deepStrictEqual(normalizeImportType({ name: "B", type: "website" }), { name: "B", type: "website" });
+  });
+
+  it("rejects unsupported source types", () => {
+    assert.throws(
+      () => normalizeImportType({ name: "C", type: "rss" }),
+      ImportValidationError
+    );
+    assert.throws(
+      () => normalizeImportType({ name: "D", type: "api" }),
+      /Unsupported source type: api/
+    );
   });
 });
