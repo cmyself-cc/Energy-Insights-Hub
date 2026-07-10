@@ -233,3 +233,63 @@ The transaction now behaves idempotently in append mode while still replacing ev
 - No outstanding regressions remain.
 
 **Commit:** The only production code change is the duplicate-handling fix in `server/routes/tracker.js`.
+
+## 5. Fix
+
+### 5.1 Composite-rule idempotency in append mode
+
+**Fix commit:** `a974dd6`
+
+`server/routes/tracker.js` previously skipped duplicates only for `business_categories` and `exclude_keyword` rules. `compositeRules` were inserted unconditionally, so repeated append-mode uploads duplicated composite rules.
+
+**Change:** Before the import transaction, the append branch now loads active composite rules and builds a deduplication key from their `must_include` + `must_exclude` JSON. During the composite-rule loop, any rule whose key matches an existing active composite rule is skipped.
+
+Files changed:
+- `server/routes/tracker.js`
+- `server/routes/tracker.test.js` (new)
+
+### 5.2 Regression tests
+
+Added `server/routes/tracker.test.js` with three endpoint-level tests that exercise `/api/tracker/import-config` through a live Express app instance:
+
+1. **Append mode skips duplicate categories and rules** — first import inserts an exclude keyword, a composite rule, and a category; a second identical append import reports 0 new rules and 0 new categories, and the database counts remain unchanged.
+2. **Append mode counts reflect actual inserts for partial duplicates** — second import with a mix of duplicates and new items increments counts only for the genuinely new rules and categories.
+3. **Replace mode clears existing rules and categories before inserting** — seeded old rules/categories are removed and replaced with the new config, and response counts match the new data.
+
+### 5.3 Verification
+
+```bash
+npm run lint
+```
+
+Result: **pass** (0 errors, 0 warnings).
+
+```bash
+node --test server/services/filterRules.test.js \
+             server/services/businessCategories.test.js \
+             server/lib/configParser.test.js \
+             server/services/sourceImporter.test.js \
+             server/services/trackerRules.test.js \
+             server/services/llmProcessor.test.js \
+             server/lib/sourcesMdLoader.test.js \
+             server/crawlers/websiteCrawler.test.js \
+             server/crawlers/rssCrawler.test.js \
+             server/crawlers/wechatCrawler.test.js \
+             server/routes/tracker.test.js
+```
+
+Result summary:
+
+```
+# tests 61
+# suites 12
+# pass 61
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+```
+
+Result: **pass**.
+
+**New commit range:** `fb32e8a..a974dd6`.
