@@ -1,8 +1,17 @@
 import { Router } from "express";
 import db from "../db.js";
 import { loadSourcesFromMd } from "../lib/sourcesMdLoader.js";
+import { parseConfigFile } from "../lib/configParser.js";
+import { importSources } from "../services/sourceImporter.js";
 
 const router = Router();
+
+function normalizeImportType(sources) {
+  return sources.map(s => ({
+    ...s,
+    type: s.type === "wechat" ? "wechat" : "website"
+  }));
+}
 
 const ALLOWED_TYPES = ["rss", "website", "wechat", "api", "scrape"];
 
@@ -95,6 +104,20 @@ router.post("/import-md", (_req, res) => {
     importTx();
 
     res.json({ data: { inserted, existed, failed } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/import", (req, res) => {
+  try {
+    if (!req.body || !req.body.file) {
+      return res.status(400).json({ error: "Missing file" });
+    }
+    const buffer = Buffer.from(req.body.file, "base64");
+    const parsed = parseConfigFile(buffer, req.body.filename || "config.json");
+    const result = importSources(normalizeImportType(parsed.sources), req.body.mode || "append");
+    res.json({ data: result });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -10,6 +10,7 @@ import insightsRouter from "./routes/insights.js";
 import reportsRouter from "./routes/reports.js";
 import trackerRouter from "./routes/tracker.js";
 import settingsRouter from "./routes/settings.js";
+import filtersRouter from "./routes/filters.js";
 import { startScheduler } from "./services/tracker.js";
 import { seedSources } from "./seeds/002_seed_sources.js";
 
@@ -30,6 +31,7 @@ app.use("/api/insights", insightsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/tracker", trackerRouter);
 app.use("/api/tracker-settings", settingsRouter);
+app.use("/api/filters", filtersRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
