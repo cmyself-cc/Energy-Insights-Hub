@@ -73,6 +73,14 @@ router.post("/import-config", (req, res) => {
               .map(r => r.must_exclude)
           )
         : new Set();
+    const existingCompositeRules =
+      mode === "append"
+        ? new Set(
+            db.prepare("SELECT must_include, must_exclude FROM filter_rules WHERE type = 'composite' AND active = 1")
+              .all()
+              .map(r => `${r.must_include}||${r.must_exclude}`)
+          )
+        : new Set();
 
     let categoriesImported = 0;
 
@@ -91,6 +99,8 @@ router.post("/import-config", (req, res) => {
         rulesImported++;
       }
       for (const r of parsed.compositeRules) {
+        const compositeKey = `${r.must_include}||${r.must_exclude}`;
+        if (mode === "append" && existingCompositeRules.has(compositeKey)) continue;
         insertRule.run(r.type, r.name, r.must_include, r.must_exclude);
         rulesImported++;
       }
