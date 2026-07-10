@@ -60,6 +60,9 @@ router.post("/import-config", (req, res) => {
     const insertCategory = db.prepare(
       "INSERT INTO business_categories (name, description, inclusion_prompt, active) VALUES (?, ?, ?, 1)"
     );
+    const updateCategory = db.prepare(
+      "UPDATE business_categories SET description = ?, inclusion_prompt = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE name = ?"
+    );
 
     const existingCategoryNames =
       mode === "append"
@@ -105,7 +108,10 @@ router.post("/import-config", (req, res) => {
         rulesImported++;
       }
       for (const c of parsed.categories) {
-        if (mode === "append" && existingCategoryNames.has(c.name)) continue;
+        if (mode === "append" && existingCategoryNames.has(c.name)) {
+          updateCategory.run(c.description, c.inclusion_prompt, c.name);
+          continue;
+        }
         insertCategory.run(c.name, c.description, c.inclusion_prompt);
         categoriesImported++;
       }

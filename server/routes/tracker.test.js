@@ -128,6 +128,28 @@ describe("tracker router /import-config", () => {
     assert.strictEqual(db.prepare("SELECT COUNT(*) AS c FROM business_categories").get().c, 2);
   });
 
+  it("append mode updates existing categories with new description and prompt", async () => {
+    db.prepare(
+      "INSERT INTO business_categories (name, description, inclusion_prompt, active) VALUES (?, ?, ?, 1)"
+    ).run("ExistingCategory", "old description", "old prompt");
+
+    const result = await importConfig(
+      server,
+      {
+        excludeKeywords: [],
+        categories: [{ name: "ExistingCategory", description: "new description", inclusionPrompt: "new prompt" }],
+        sources: []
+      },
+      "append"
+    );
+
+    assert.strictEqual(result.data.categoriesImported, 0);
+
+    const row = db.prepare("SELECT description, inclusion_prompt FROM business_categories WHERE name = ?").get("ExistingCategory");
+    assert.strictEqual(row.description, "new description");
+    assert.strictEqual(row.inclusion_prompt, "new prompt");
+  });
+
   it("replace mode clears existing rules and categories before inserting", async () => {
     await importConfig(
       server,

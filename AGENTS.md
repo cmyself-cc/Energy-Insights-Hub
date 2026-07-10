@@ -139,6 +139,10 @@ Recommended verification steps:
 
 > As of the latest check, `npm run lint` reports one ESLint error (`no-useless-escape` in `src/components/InsightsGenerator.jsx`) and one React Hooks dependency warning (`react-hooks/exhaustive-deps` in `src/App.jsx`). `npm run build` succeeds.
 
+## Backend runtime requirements
+
+The project includes an Express/SQLite backend under `server/`. For Excel configuration uploads (`Key Config.xlsx` via `/api/tracker/import-config` or `/api/sources/import`), `server/lib/configParser.js` shells out to `python3` with the `pandas` package. Ensure both are available in the deployment environment. JSON config uploads do not require Python.
+
 ## Deployment
 
 This is a static SPA.

@@ -27,13 +27,6 @@ function sourceUrl(source) {
 }
 
 export function importSources(sources, mode = "append") {
-  if (mode === "replace") {
-    // Delete previously imported sources by matching name, then clear the import log.
-    db.prepare("DELETE FROM sources WHERE name IN (SELECT name FROM source_imports)").run();
-    db.prepare("DELETE FROM source_imports").run();
-  }
-
-  const existing = new Set(db.prepare("SELECT name FROM sources").all().map(r => r.name));
   const insertSource = db.prepare(
     "INSERT INTO sources (name, url, type, active, config) VALUES (?, ?, ?, 1, ?)"
   );
@@ -45,6 +38,14 @@ export function importSources(sources, mode = "append") {
   let skipped = 0;
 
   const tx = db.transaction((rows) => {
+    if (mode === "replace") {
+      // Delete previously imported sources by matching name, then clear the import log.
+      db.prepare("DELETE FROM sources WHERE name IN (SELECT name FROM source_imports)").run();
+      db.prepare("DELETE FROM source_imports").run();
+    }
+
+    const existing = new Set(db.prepare("SELECT name FROM sources").all().map(r => r.name));
+
     for (const s of rows) {
       if (!s.name || !s.type || existing.has(s.name)) {
         skipped++;

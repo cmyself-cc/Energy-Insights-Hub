@@ -22,7 +22,8 @@ async function processBatch(items, language) {
   const results = [];
   const filterContext = {
     semanticPrompt: loadSemanticConfig(),
-    categories: loadActiveCategories()
+    categories: loadActiveCategories(),
+    classificationEnabled: Boolean(process.env.LLM_API_KEY)
   };
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const batch = items.slice(i, i + BATCH_SIZE);
@@ -75,6 +76,8 @@ export async function runTracker(runId = null) {
     runId = result.lastInsertRowid;
   }
 
+  const classificationEnabled = Boolean(process.env.LLM_API_KEY);
+
   let successCount = 0;
   let failedCount = 0;
   let insightsCreated = 0;
@@ -116,7 +119,7 @@ export async function runTracker(runId = null) {
           const processed = await processBatch(candidates, LANGUAGE);
           const kept = applyPostFilter(processed, settings)
             .filter(insight => insight.title && insight.title.trim() !== "")
-            .filter(insight => matchesEnabledCategory(insight, activeCategories));
+            .filter(insight => classificationEnabled ? matchesEnabledCategory(insight, activeCategories) : true);
           if (kept.length > 0) {
             const insert = db.prepare(
               `INSERT INTO insights (
