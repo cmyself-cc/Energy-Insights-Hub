@@ -61,6 +61,23 @@ router.post("/import-config", (req, res) => {
       "INSERT INTO business_categories (name, description, inclusion_prompt, active) VALUES (?, ?, ?, 1)"
     );
 
+    const existingCategoryNames =
+      mode === "append"
+        ? new Set(db.prepare("SELECT name FROM business_categories").all().map(r => r.name))
+        : new Set();
+    const existingExcludeRules =
+      mode === "append"
+        ? new Set(
+            db.prepare("SELECT must_exclude FROM filter_rules WHERE type = 'exclude_keyword'")
+              .all()
+              .map(r => r.must_exclude)
+          )
+        : new Set();
+
+    let categoriesImported = 0;
+
+    let rulesImported = 0;
+
     const tx = db.transaction(() => {
       if (mode === "replace") {
         db.prepare("DELETE FROM filter_rules").run();
@@ -68,13 +85,19 @@ router.post("/import-config", (req, res) => {
       }
 
       for (const k of parsed.excludeKeywords) {
-        insertRule.run("exclude_keyword", k, "[]", JSON.stringify([k]));
+        const mustExclude = JSON.stringify([k]);
+        if (mode === "append" && existingExcludeRules.has(mustExclude)) continue;
+        insertRule.run("exclude_keyword", k, "[]", mustExclude);
+        rulesImported++;
       }
       for (const r of parsed.compositeRules) {
         insertRule.run(r.type, r.name, r.must_include, r.must_exclude);
+        rulesImported++;
       }
       for (const c of parsed.categories) {
+        if (mode === "append" && existingCategoryNames.has(c.name)) continue;
         insertCategory.run(c.name, c.description, c.inclusion_prompt);
+        categoriesImported++;
       }
       if (parsed.semanticPrompt) {
         const existing = db.prepare("SELECT id FROM filter_config WHERE type = 'semantic' LIMIT 1").get();
@@ -92,8 +115,8 @@ router.post("/import-config", (req, res) => {
     const sourceResult = importSources(normalizedSources, mode);
 
     res.json({ data: {
-      rulesImported: parsed.excludeKeywords.length + parsed.compositeRules.length,
-      categoriesImported: parsed.categories.length,
+      rulesImported,
+      categoriesImported,
       sourcesImported: sourceResult.imported
     }});
   } catch (e) {
