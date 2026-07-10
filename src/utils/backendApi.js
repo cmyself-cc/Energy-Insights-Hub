@@ -57,5 +57,19 @@ export const backendApi = {
   updateTrackerSettings: (settings) => request("/tracker-settings", {
     method: "PUT",
     body: JSON.stringify(settings)
+  }),
+
+  // Filters
+  getFilterRules: () => request("/filters/rules"),
+  createFilterRule: (rule) => request("/filters/rules", { method: "POST", body: JSON.stringify(rule) }),
+  updateFilterRule: (id, rule) => request(`/filters/rules/${id}`, { method: "PUT", body: JSON.stringify(rule) }),
+  deleteFilterRule: (id) => request(`/filters/rules/${id}`, { method: "DELETE" }),
+  getBusinessCategories: () => request("/filters/categories"),
+  updateBusinessCategory: (id, category) => request(`/filters/categories/${id}`, { method: "PUT", body: JSON.stringify(category) }),
+  getSemanticConfig: () => request("/filters/config"),
+  updateSemanticConfig: (config) => request("/filters/config", { method: "PUT", body: JSON.stringify(config) }),
+  importConfig: (base64File, filename, mode = "append") => request("/tracker/import-config", {
+    method: "POST",
+    body: JSON.stringify({ file: base64File, filename, mode })
   })
 };

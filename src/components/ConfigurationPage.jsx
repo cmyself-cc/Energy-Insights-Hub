@@ -1,5 +1,6 @@
 import { useState } from "react";
 import SourcesPage from "./SourcesPage";
+import ContentFiltersPage from "./ContentFiltersPage";
 import TrackerSettingsPage from "./TrackerSettingsPage";
 import ApiConfig from "./ApiConfig";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
@@ -7,6 +8,7 @@ import { i18n } from "../constants/i18n";
 
 const TABS = [
   { key: "sources", icon: "🌐", labelKey: "sources" },
+  { key: "filters", icon: "🛡️", labelKey: "contentFiltersTab" },
   { key: "tracker", icon: "⚙️", labelKey: "trackerSettingsTab" },
   { key: "api", icon: "🔑", labelKey: "apiConfigTab" }
 ];
@@ -39,6 +41,7 @@ export default function ConfigurationPage({ darkMode, language, apiConfig, onApi
       </div>
 
       {tab === "sources" && <SourcesPage darkMode={darkMode} language={language} onTrackerComplete={onTrackerComplete} />}
+      {tab === "filters" && <ContentFiltersPage darkMode={darkMode} language={language} />}
       {tab === "tracker" && <TrackerSettingsPage darkMode={darkMode} language={language} />}
       {tab === "api" && (
         <ApiConfig
