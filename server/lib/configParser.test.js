@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import { parseJsonConfig, parseConfigFile } from "./configParser.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const keyConfigPath = path.resolve(__dirname, "../../../../Key Config.xlsx");
+const fixturePath = path.resolve(__dirname, "fixtures/test-config.xlsx");
 
 describe("configParser", () => {
   it("parses JSON config", () => {
@@ -38,9 +38,9 @@ describe("configParser", () => {
     assert.strictEqual(result.compositeRules[0].must_include, JSON.stringify(["中石化"]));
   });
 
-  it("parses the reference Excel file", () => {
-    const buffer = fs.readFileSync(keyConfigPath);
-    const result = parseConfigFile(buffer, "Key Config.xlsx");
+  it("parses the fixture Excel file", () => {
+    const buffer = fs.readFileSync(fixturePath);
+    const result = parseConfigFile(buffer, "test-config.xlsx");
 
     assert.ok(result.excludeKeywords.includes("培训班"));
     assert.ok(!result.excludeKeywords.includes("不包含"));
