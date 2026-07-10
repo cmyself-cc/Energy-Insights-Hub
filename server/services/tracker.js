@@ -1,7 +1,8 @@
 import cron from "node-cron";
 import db from "../db.js";
 import { fetchArticles } from "../crawlers/index.js";
-import { processInsight } from "./llmProcessor.js";
+import { processInsight, loadSemanticConfig } from "./llmProcessor.js";
+import { loadActiveCategories } from "./businessCategories.js";
 import { loadSettings } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 
@@ -18,9 +19,15 @@ async function fetchSourceItems(source) {
 
 async function processBatch(items, language) {
   const results = [];
+  const filterContext = {
+    semanticPrompt: loadSemanticConfig(),
+    categories: loadActiveCategories()
+  };
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const batch = items.slice(i, i + BATCH_SIZE);
-    const settled = await Promise.allSettled(batch.map(item => processInsight(item, language)));
+    const settled = await Promise.allSettled(
+      batch.map(item => processInsight(item, language, filterContext))
+    );
     for (let j = 0; j < settled.length; j++) {
       const result = settled[j];
       if (result.status === "fulfilled") {

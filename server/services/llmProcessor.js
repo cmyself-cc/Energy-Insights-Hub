@@ -1,3 +1,13 @@
+import { buildCategoryPrompt } from "./businessCategories.js";
+import db from "../db.js";
+
+export function loadSemanticConfig() {
+  const row = db
+    .prepare("SELECT content FROM filter_config WHERE type = 'semantic' AND active = 1 LIMIT 1")
+    .get();
+  return row ? row.content : "";
+}
+
 function buildRequest(config, messages, maxTokens = 2000, temperature = 0.7) {
   const isAnthropic = config.providerId === "anthropic";
   const url = isAnthropic ? `${config.baseUrl}/messages` : `${config.baseUrl}/chat/completions`;
@@ -27,7 +37,7 @@ function extractContent(data, config) {
   return data.choices?.[0]?.message?.content || "";
 }
 
-export async function processInsight(item, language = "en") {
+export async function processInsight(item, language = "en", filterContext = null) {
   const config = {
     providerId: process.env.LLM_PROVIDER || "openai",
     baseUrl: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
@@ -45,16 +55,35 @@ export async function processInsight(item, language = "en") {
       businessDomain: "",
       enterpriseType: "",
       entities: [],
-      features: []
+      features: [],
+      categories: []
     };
   }
 
   const isZh = language === "zh";
+
+  const semanticPrompt = filterContext?.semanticPrompt || "";
+  const categories = Array.isArray(filterContext?.categories) ? filterContext.categories : [];
+  const categoryPrompt = buildCategoryPrompt(categories);
+
+  const filteringInstructions =
+    semanticPrompt || categoryPrompt
+      ? `--- Filtering instructions ---
+${semanticPrompt ? `\nSemantic exclusions (drop the article if any apply):\n${semanticPrompt}\n` : ""}
+${categoryPrompt ? `\nBusiness categories (return a "categories" array with names that match):\n${categoryPrompt}\n` : ""}
+Return ONLY a valid JSON object with these additional fields:
+- categories: array of strings, names from the business category list above. Empty if none apply.
+
+If the article matches a semantic exclusion or belongs to no business category, set title and summary to empty strings.`
+      : "";
+
   const prompt = `You are an energy industry analyst. Read the following article and extract a structured insight.
 
 Title: ${item.title}
 Content: ${item.summary || item.rawContent || ""}
 URL: ${item.url}
+
+${filteringInstructions}
 
 Return ONLY a valid JSON object (no markdown, no explanation) with these fields:
 - title: string (in ${isZh ? "Chinese" : "English"}, keep it concise)
@@ -64,9 +93,10 @@ Return ONLY a valid JSON object (no markdown, no explanation) with these fields:
 - enterpriseType: string (in ${isZh ? "Chinese" : "English"}, e.g. 国有企业 / SOE, 民营企业 / Private)
 - entities: array of 2-5 strings (key companies/technologies, in ${isZh ? "Chinese" : "English"})
 - features: array of 1-3 strings (category tags, in ${isZh ? "Chinese" : "English"})
+- categories: array of strings (business category names from the list above)
 - publishDate: string (ISO 8601 date, e.g. 2026-07-08)
 
-If the content is not related to energy, set title and summary to empty strings.`;
+If the content is not related to energy or matches the semantic exclusions, set title and summary to empty strings.`;
 
   const messages = [{ role: "user", content: prompt }];
   const { url, headers, body } = buildRequest(config, messages, 1500, 0.5);
@@ -96,7 +126,8 @@ If the content is not related to energy, set title and summary to empty strings.
       businessDomain: parsed.businessDomain || "",
       enterpriseType: parsed.enterpriseType || "",
       entities: Array.isArray(parsed.entities) ? parsed.entities : [],
-      features: Array.isArray(parsed.features) ? parsed.features : []
+      features: Array.isArray(parsed.features) ? parsed.features : [],
+      categories: Array.isArray(parsed.categories) ? parsed.categories : []
     };
   } catch (e) {
     console.error("LLM process failed:", e.message);
@@ -109,7 +140,8 @@ If the content is not related to energy, set title and summary to empty strings.
       businessDomain: "",
       enterpriseType: "",
       entities: [],
-      features: []
+      features: [],
+      categories: []
     };
   }
 }
