@@ -150,6 +150,29 @@ describe("tracker router /import-config", () => {
     assert.strictEqual(row.inclusion_prompt, "new prompt");
   });
 
+  it("append mode preserves the active flag of an existing disabled category", async () => {
+    db.prepare(
+      "INSERT INTO business_categories (name, description, inclusion_prompt, active) VALUES (?, ?, ?, 0)"
+    ).run("DisabledCategory", "old description", "old prompt");
+
+    const result = await importConfig(
+      server,
+      {
+        excludeKeywords: [],
+        categories: [{ name: "DisabledCategory", description: "new description", inclusionPrompt: "new prompt" }],
+        sources: []
+      },
+      "append"
+    );
+
+    assert.strictEqual(result.data.categoriesImported, 0);
+
+    const row = db.prepare("SELECT description, inclusion_prompt, active FROM business_categories WHERE name = ?").get("DisabledCategory");
+    assert.strictEqual(row.description, "new description");
+    assert.strictEqual(row.inclusion_prompt, "new prompt");
+    assert.strictEqual(row.active, 0);
+  });
+
   it("replace mode clears existing rules and categories before inserting", async () => {
     await importConfig(
       server,

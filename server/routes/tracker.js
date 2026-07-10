@@ -61,7 +61,7 @@ router.post("/import-config", (req, res) => {
       "INSERT INTO business_categories (name, description, inclusion_prompt, active) VALUES (?, ?, ?, 1)"
     );
     const updateCategory = db.prepare(
-      "UPDATE business_categories SET description = ?, inclusion_prompt = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE name = ?"
+      "UPDATE business_categories SET description = ?, inclusion_prompt = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?"
     );
 
     const existingCategoryNames =
