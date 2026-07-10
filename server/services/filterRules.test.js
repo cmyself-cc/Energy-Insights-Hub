@@ -62,4 +62,32 @@ describe("filterRules", () => {
     assert.strictEqual(result.length, 1);
     assert.strictEqual(result[0].title, "中石油开业");
   });
+
+  it("does not throw on malformed JSON keyword lists", () => {
+    const item = { title: "中石油开业", summary: "" };
+    assert.doesNotThrow(() => {
+      matchesExclusion(item, { must_exclude: "not valid json" });
+      matchesComposite(item, { must_include: "{bad json", must_exclude: "[}" });
+      applyKeywordFilters([item], [
+        { type: "exclude_keyword", must_exclude: "{broken" },
+        { type: "composite", must_include: "[unclosed", must_exclude: null }
+      ]);
+    });
+  });
+
+  it("does not throw on non-string keywords", () => {
+    const item = { title: "中石油开业", summary: "" };
+    assert.doesNotThrow(() => {
+      matchesExclusion(item, { must_exclude: [123, null, "中石油"] });
+      matchesComposite(item, { must_include: ["中石油", true], must_exclude: ["指数", 456] });
+      applyKeywordFilters([item], [
+        { type: "exclude_keyword", must_exclude: [null, undefined, {}] },
+        { type: "composite", must_include: ["中石油", 789], must_exclude: [] }
+      ]);
+    });
+    assert.strictEqual(
+      matchesComposite(item, { must_include: ["中石油"], must_exclude: ["指数", 456] }),
+      true
+    );
+  });
 });

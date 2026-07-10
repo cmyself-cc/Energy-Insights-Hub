@@ -12,22 +12,33 @@ function getSearchText(item) {
 
 function parseKeywordList(value) {
   if (Array.isArray(value)) return value;
-  if (typeof value === "string" && value.trim()) return JSON.parse(value);
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // malformed JSON: fall through to empty list
+    }
+  }
   return [];
+}
+
+function normalizeKeyword(keyword) {
+  return typeof keyword === "string" ? keyword.toLowerCase() : String(keyword).toLowerCase();
 }
 
 export function matchesExclusion(item, rule) {
   const text = getSearchText(item);
   const keywords = parseKeywordList(rule.must_exclude);
-  return keywords.some(k => text.includes(k.toLowerCase()));
+  return keywords.some(k => text.includes(normalizeKeyword(k)));
 }
 
 export function matchesComposite(item, rule) {
   const text = getSearchText(item);
   const include = parseKeywordList(rule.must_include);
   const exclude = parseKeywordList(rule.must_exclude);
-  const includesMatch = include.every(k => text.includes(k.toLowerCase()));
-  const excludesMatch = exclude.some(k => text.includes(k.toLowerCase()));
+  const includesMatch = include.every(k => text.includes(normalizeKeyword(k)));
+  const excludesMatch = exclude.some(k => text.includes(normalizeKeyword(k)));
   return includesMatch && !excludesMatch;
 }
 
