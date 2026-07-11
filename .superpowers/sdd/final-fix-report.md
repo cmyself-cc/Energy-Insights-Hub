@@ -85,3 +85,56 @@ Result: **pass**.
 ## Commit
 
 Fixes committed on branch `feat/tracker-rules`.
+
+
+---
+
+## Final Fix — Preserve `active` flag during append-mode category upsert
+
+**Date:** 2026-07-10
+
+**Review finding:** In `server/routes/tracker.js`, append-mode category upsert unconditionally set `active = 1`, re-enabling categories that a user had previously disabled in the UI.
+
+### Fix
+
+Removed `active = 1` from the append-mode `UPDATE business_categories` statement so the existing `active` value is preserved. New categories are still inserted with `active = 1`. Replace-mode behavior is unchanged.
+
+**Files changed:**
+- `server/routes/tracker.js`
+- `server/routes/tracker.test.js` (added regression test)
+
+### Verification
+
+#### Lint
+
+```bash
+npm run lint
+```
+
+Result: **pass** (0 errors, 0 warnings).
+
+#### Tracker route tests
+
+```bash
+node --test server/routes/tracker.test.js
+```
+
+Result:
+
+```
+# tests 5
+# suites 1
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+```
+
+Result: **pass**.
+
+### Commit
+
+- Branch: `feat/tracker-rules`
+- Commit hash: `27387a0`
+- Commit message: `fix(tracker): preserve active flag during append-mode category upsert`

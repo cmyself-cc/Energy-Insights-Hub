@@ -2,6 +2,7 @@ import { useState } from "react";
 import { COLORS, BORDER_RADIUS } from "../constants/theme";
 import { storage } from "../utils/storage";
 
+
 const API_PROVIDERS = [
   {
     id: "siliconflow",
@@ -67,6 +68,8 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
   const [showSearchApiKey, setShowSearchApiKey] = useState(false);
   const [searchTestResult, setSearchTestResult] = useState(null);
   const [searchTesting, setSearchTesting] = useState(false);
+
+
 
   const currentProvider = API_PROVIDERS.find(p => p.id === selectedProvider);
   const availableModels = currentProvider?.models || [];
@@ -205,6 +208,8 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
     }
     setSearchTesting(false);
   };
+
+
 
   const content = (
     <div style={{

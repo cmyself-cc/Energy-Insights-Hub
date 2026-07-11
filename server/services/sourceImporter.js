@@ -1,6 +1,6 @@
 import db from "../db.js";
 
-export const SUPPORTED_IMPORT_TYPES = ["wechat", "website"];
+export const SUPPORTED_IMPORT_TYPES = ["wechat_mcp", "website"];
 
 export class ImportValidationError extends Error {
   constructor(message) {
@@ -19,11 +19,7 @@ export function normalizeImportType(source) {
 }
 
 function sourceUrl(source) {
-  if (source.url) return source.url;
-  if (source.type === "wechat" && source.identifier) {
-    return `https://mp.weixin.qq.com/s/${source.identifier}`;
-  }
-  return "";
+  return source.url || "";
 }
 
 export function importSources(sources, mode = "append") {

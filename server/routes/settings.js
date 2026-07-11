@@ -20,7 +20,10 @@ router.put("/", (req, res) => {
       includeBusinessDomains,
       includeEnterpriseTypes,
       includeCategories,
-      excludeKeywords
+      excludeKeywords,
+      requiredIndustryKeywords,
+      requiredCompanyKeywords,
+      fuzzyDeduplicationThreshold
     } = req.body;
 
     if (typeof lookbackHours !== "number" || lookbackHours < 1 || lookbackHours > 168) {
@@ -29,6 +32,10 @@ router.put("/", (req, res) => {
     if (typeof maxPerSource !== "number" || maxPerSource < 1 || maxPerSource > 50) {
       return res.status(400).json({ error: "maxPerSource must be between 1 and 50" });
     }
+    const threshold = Number(fuzzyDeduplicationThreshold);
+    if (Number.isNaN(threshold) || threshold < 0 || threshold > 1) {
+      return res.status(400).json({ error: "fuzzyDeduplicationThreshold must be between 0 and 1" });
+    }
 
     const values = {
       lookback_hours: String(lookbackHours),
@@ -36,7 +43,10 @@ router.put("/", (req, res) => {
       include_business_domains: toArray(includeBusinessDomains).join(","),
       include_enterprise_types: toArray(includeEnterpriseTypes).join(","),
       include_categories: toArray(includeCategories).join(","),
-      exclude_keywords: toArray(excludeKeywords).join(",")
+      exclude_keywords: toArray(excludeKeywords).join(","),
+      required_industry_keywords: toArray(requiredIndustryKeywords).join(","),
+      required_company_keywords: toArray(requiredCompanyKeywords).join(","),
+      fuzzy_deduplication_threshold: String(threshold)
     };
 
     const update = db.prepare(

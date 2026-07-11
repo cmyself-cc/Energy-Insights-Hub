@@ -1,0 +1,4 @@
+type,name,url,mcpUrl,feedId,active
+rss,Example RSS Feed,https://example.com/feed,,,1
+website,Example Website,https://example.com,,,1
+wechat_mcp,Example WeChat MCP,,http://192.168.5.134:4001/sse,MP_WXS_1234567890,1

@@ -3,9 +3,11 @@ import db from "../db.js";
 import { fetchArticles } from "../crawlers/index.js";
 import { processInsight, loadSemanticConfig } from "./llmProcessor.js";
 import { loadActiveCategories, matchesEnabledCategory } from "./businessCategories.js";
-import { loadFilterRules, applyKeywordFilters } from "./filterRules.js";
+import { loadFilterRules } from "./filterRules.js";
 import { loadSettings } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
+import { applyKeywordGate } from "./keywordGate.js";
+import { deduplicateItems } from "./dedup.js";
 
 const BATCH_SIZE = 5; // 并发数，避免触发频率限制
 const LANGUAGE = process.env.DEFAULT_LANGUAGE || "zh";
@@ -98,10 +100,17 @@ export async function runTracker(runId = null) {
         if (!existing) newItems.push(item);
       }
 
+      console.log(`[tracker] Source ${source.name}: fetched ${items.length}, new ${newItems.length}`);
+
       if (newItems.length > 0) {
-        const keywordFiltered = applyKeywordFilters(newItems, filterRules);
-        if (keywordFiltered.length === 0) {
-          console.log(`[tracker] Source ${source.name}: no items after keyword filters`);
+        const gate = applyKeywordGate(newItems, {
+          excludeKeywords: settings.excludeKeywords,
+          requiredIndustryKeywords: settings.requiredIndustryKeywords,
+          requiredCompanyKeywords: settings.requiredCompanyKeywords,
+          compositeRules: filterRules.filter(r => r.type === "composite")
+        });
+        console.log(`[tracker] Source ${source.name}: ${gate.kept.length} items after keyword gate (${gate.excluded} excluded)`);
+        if (gate.kept.length === 0) {
           successCount++;
           db.prepare(
             `UPDATE tracker_runs SET
@@ -113,13 +122,22 @@ export async function runTracker(runId = null) {
           ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
           continue;
         }
-        const taggedItems = keywordFiltered.map(item => ({ ...item, sourceId: source.id }));
+
+        const deduped = deduplicateItems(gate.kept, {
+          threshold: settings.fuzzyDeduplicationThreshold,
+          lookbackDays: Math.max(1, Math.ceil(settings.lookbackHours / 24) + 1)
+        });
+        console.log(`[tracker] Source ${source.name}: ${deduped.length} items after dedup`);
+
+        const taggedItems = deduped.map(item => ({ ...item, sourceId: source.id }));
         const candidates = applyPreFilter(taggedItems, settings);
+        console.log(`[tracker] Source ${source.name}: ${candidates.length} candidates after pre-filter`);
         if (candidates.length > 0) {
           const processed = await processBatch(candidates, LANGUAGE);
           const kept = applyPostFilter(processed, settings)
             .filter(insight => insight.title && insight.title.trim() !== "")
             .filter(insight => classificationEnabled ? matchesEnabledCategory(insight, activeCategories) : true);
+          console.log(`[tracker] Source ${source.name}: ${kept.length} insights after post-filter`);
           if (kept.length > 0) {
             const insert = db.prepare(
               `INSERT INTO insights (
@@ -151,11 +169,7 @@ export async function runTracker(runId = null) {
             insertMany(kept);
             insightsCreated += kept.length;
             console.log(`[tracker] Source ${source.name}: created ${kept.length} insights`);
-          } else {
-            console.log(`[tracker] Source ${source.name}: no insights after post-filter`);
           }
-        } else {
-          console.log(`[tracker] Source ${source.name}: no candidates after pre-filter`);
         }
       }
 

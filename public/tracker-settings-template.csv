@@ -1,0 +1,10 @@
+key,value
+lookbackHours,24
+maxPerSource,3
+includeBusinessDomains,
+includeEnterpriseTypes,
+includeCategories,
+excludeKeywords,"股票,证券,股市,行情,广告,推广,赞助"
+requiredIndustryKeywords,
+requiredCompanyKeywords,
+fuzzyDeduplicationThreshold,0.85

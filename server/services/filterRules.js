@@ -7,7 +7,7 @@ export function loadFilterRules() {
 }
 
 function getSearchText(item) {
-  return `${item.title || ""} ${item.summary || ""} ${item.rawContent || ""}`.toLowerCase();
+  return `${item.title || ""} ${item.summary || ""}`.toLowerCase();
 }
 
 function parseKeywordList(value) {

@@ -13,6 +13,7 @@ export function buildCategoryPrompt(categories) {
 }
 
 export function matchesEnabledCategory(insight, enabledCategories) {
+  if (!enabledCategories || enabledCategories.length === 0) return true;
   const names = new Set(enabledCategories.map(c => c.name));
   const insightCategories = insight.categories || [];
   return insightCategories.some(name => names.has(name));

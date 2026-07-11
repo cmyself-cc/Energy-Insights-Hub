@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
+import { parseContentFiltersCsv, buildContentFiltersCsv, downloadCsv } from "../utils/csvConfig";
 
 function parseJsonArray(value) {
   if (Array.isArray(value)) return value;
@@ -14,15 +15,6 @@ function parseJsonArray(value) {
     }
   }
   return [];
-}
-
-function toCsv(arr) {
-  if (!Array.isArray(arr)) return "";
-  return arr.join(", ");
-}
-
-function fromCsv(str) {
-  return str.split(",").map(s => s.trim()).filter(Boolean);
 }
 
 export default function ContentFiltersPage({ darkMode, language }) {
@@ -38,12 +30,20 @@ export default function ContentFiltersPage({ darkMode, language }) {
   const fileInputRef = useRef(null);
 
   const [newKeyword, setNewKeyword] = useState("");
+  const [editingKeyword, setEditingKeyword] = useState(null);
+  const [editKeywordValue, setEditKeywordValue] = useState("");
+
   const [ruleForm, setRuleForm] = useState({
     name: "",
     mustInclude: "",
     mustExclude: "",
     priority: "0"
   });
+  const [editingRule, setEditingRule] = useState(null);
+  const [editRuleForm, setEditRuleForm] = useState({ name: "", mustInclude: "", mustExclude: "", priority: "0" });
+
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editCategoryForm, setEditCategoryForm] = useState({ description: "", prompt: "" });
 
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
   const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
@@ -99,30 +99,52 @@ export default function ContentFiltersPage({ darkMode, language }) {
     if (!file) return;
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = String(event.target?.result || "");
-        const base64Payload = base64.includes(",") ? base64.split(",")[1] : base64;
-        try {
-          const res = await backendApi.importConfig(base64Payload, file.name, uploadMode);
-          showMessage("success", `${t.importSuccess}: ${res.data.rulesImported} ${t.rules}, ${res.data.categoriesImported} ${t.categories}, ${res.data.sourcesImported} ${t.sources}`);
-          loadAll();
-        } catch (err) {
-          showMessage("error", `${t.importFailed}: ${err.message}`);
-        } finally {
-          setUploading(false);
-          if (fileInputRef.current) fileInputRef.current.value = "";
-        }
+      const text = await file.text();
+      const parsed = parseContentFiltersCsv(text);
+
+      const payload = {
+        excludeKeywords: parsed.excludeKeywords,
+        compositeRules: parsed.compositeRules,
+        semanticPrompt: parsed.semanticPrompt,
+        categories: parsed.categories,
+        sources: []
       };
-      reader.onerror = () => {
-        showMessage("error", t.readFileFailed);
-        setUploading(false);
-      };
-      reader.readAsDataURL(file);
+
+      const jsonStr = JSON.stringify(payload);
+      const base64Payload = btoa(unescape(encodeURIComponent(jsonStr)));
+
+      const res = await backendApi.importConfig(base64Payload, "filters.csv", uploadMode);
+      showMessage("success", `${t.importSuccess}: ${res.data.rulesImported} ${t.rules}, ${res.data.categoriesImported} ${t.categories}`);
+      loadAll();
     } catch (err) {
-      showMessage("error", err.message);
+      showMessage("error", `${t.importFailed}: ${err.message}`);
+    } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const exportCsv = async () => {
+    try {
+      const [rulesRes, categoriesRes, configRes] = await Promise.all([
+        backendApi.getFilterRules(),
+        backendApi.getBusinessCategories(),
+        backendApi.getSemanticConfig()
+      ]);
+      const csv = buildContentFiltersCsv(rulesRes.data || [], categoriesRes.data || [], configRes.data || { content: "" });
+      downloadCsv(`content-filters-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    } catch (err) {
+      showMessage("error", `${t.exportFailed}: ${err.message}`);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const a = document.createElement("a");
+    a.href = "/content-filters-template.csv";
+    a.download = "content-filters-template.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const addKeyword = async (e) => {
@@ -155,16 +177,28 @@ export default function ContentFiltersPage({ darkMode, language }) {
     }
   };
 
-  const toggleRuleActive = async (rule) => {
+  const startEditKeyword = (rule) => {
+    const keyword = parseJsonArray(rule.must_exclude)[0] || rule.name;
+    setEditingKeyword(rule.id);
+    setEditKeywordValue(keyword);
+  };
+
+  const saveKeyword = async (id) => {
+    const rule = rules.find(r => r.id === id);
+    if (!rule) return;
+    const value = editKeywordValue.trim();
+    if (!value) return;
     try {
-      await backendApi.updateFilterRule(rule.id, {
-        name: rule.name,
-        mustInclude: parseJsonArray(rule.must_include),
-        mustExclude: parseJsonArray(rule.must_exclude),
-        active: !rule.active,
+      await backendApi.updateFilterRule(id, {
+        name: value,
+        mustInclude: [],
+        mustExclude: [value],
+        active: true,
         priority: rule.priority || 0
       });
+      setEditingKeyword(null);
       loadAll();
+      showMessage("success", t.keywordUpdated);
     } catch (err) {
       showMessage("error", err.message);
     }
@@ -177,8 +211,8 @@ export default function ContentFiltersPage({ darkMode, language }) {
       await backendApi.createFilterRule({
         type: "composite",
         name: ruleForm.name.trim() || null,
-        mustInclude: fromCsv(ruleForm.mustInclude),
-        mustExclude: fromCsv(ruleForm.mustExclude),
+        mustInclude: ruleForm.mustInclude.split(";").map(s => s.trim()).filter(Boolean),
+        mustExclude: ruleForm.mustExclude.split(";").map(s => s.trim()).filter(Boolean),
         active: true,
         priority: Number(ruleForm.priority) || 0
       });
@@ -195,6 +229,33 @@ export default function ContentFiltersPage({ darkMode, language }) {
     try {
       await backendApi.deleteFilterRule(id);
       loadAll();
+    } catch (err) {
+      showMessage("error", err.message);
+    }
+  };
+
+  const startEditRule = (rule) => {
+    setEditingRule(rule.id);
+    setEditRuleForm({
+      name: rule.name || "",
+      mustInclude: parseJsonArray(rule.must_include).join(";"),
+      mustExclude: parseJsonArray(rule.must_exclude).join(";"),
+      priority: String(rule.priority || 0)
+    });
+  };
+
+  const saveRule = async (id) => {
+    try {
+      await backendApi.updateFilterRule(id, {
+        name: editRuleForm.name.trim() || null,
+        mustInclude: editRuleForm.mustInclude.split(";").map(s => s.trim()).filter(Boolean),
+        mustExclude: editRuleForm.mustExclude.split(";").map(s => s.trim()).filter(Boolean),
+        active: true,
+        priority: Number(editRuleForm.priority) || 0
+      });
+      setEditingRule(null);
+      loadAll();
+      showMessage("success", t.ruleUpdated);
     } catch (err) {
       showMessage("error", err.message);
     }
@@ -221,6 +282,29 @@ export default function ContentFiltersPage({ darkMode, language }) {
         active: category.active ? 0 : 1
       });
       loadAll();
+    } catch (err) {
+      showMessage("error", err.message);
+    }
+  };
+
+  const startEditCategory = (category) => {
+    setEditingCategory(category.id);
+    setEditCategoryForm({
+      description: category.description || "",
+      prompt: category.inclusion_prompt || ""
+    });
+  };
+
+  const saveCategory = async (category) => {
+    try {
+      await backendApi.updateBusinessCategory(category.id, {
+        description: editCategoryForm.description,
+        inclusion_prompt: editCategoryForm.prompt,
+        active: category.active ? 1 : 0
+      });
+      setEditingCategory(null);
+      loadAll();
+      showMessage("success", t.categoryUpdated);
     } catch (err) {
       showMessage("error", err.message);
     }
@@ -262,7 +346,7 @@ export default function ContentFiltersPage({ darkMode, language }) {
         padding: "16px 20px",
         marginBottom: 20
       }}>
-        <h3 style={{ margin: "0 0 12px", color: darkMode ? "#fff" : COLORS.text.primary }}>{t.importConfig}</h3>
+        <h3 style={{ margin: "0 0 12px", color: darkMode ? "#fff" : COLORS.text.primary }}>{t.importCsv}</h3>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
             <input
@@ -286,12 +370,42 @@ export default function ContentFiltersPage({ darkMode, language }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json,.xlsx"
+          accept=".csv"
           onChange={handleFileChange}
           disabled={uploading}
-          style={{ color: text }}
+          style={{ color: text, marginBottom: 12 }}
         />
         {uploading && <div style={{ marginTop: 8, color: secondaryText, fontSize: FONT_SIZES.sm }}>{t.uploading}</div>}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={exportCsv}
+            style={{
+              padding: "8px 16px",
+              borderRadius: BORDER_RADIUS.md,
+              border: `1px solid ${COLORS.primary}`,
+              background: "transparent",
+              color: COLORS.primary,
+              fontSize: FONT_SIZES.sm,
+              fontWeight: 600,
+              cursor: "pointer"
+            }}
+          >{t.exportCsv}</button>
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            style={{
+              padding: "8px 16px",
+              borderRadius: BORDER_RADIUS.md,
+              border: `1px solid ${border}`,
+              background: darkMode ? "#1c1f2b" : "#fff",
+              color: text,
+              fontSize: FONT_SIZES.sm,
+              fontWeight: 600,
+              cursor: "pointer"
+            }}
+          >{t.downloadTemplate}</button>
+        </div>
       </div>
 
       <div style={{
@@ -324,6 +438,7 @@ export default function ContentFiltersPage({ darkMode, language }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {excludeKeywords.map(rule => {
             const keyword = parseJsonArray(rule.must_exclude)[0] || rule.name;
+            const isEditing = editingKeyword === rule.id;
             return (
               <div key={rule.id} style={{
                 display: "flex",
@@ -331,17 +446,28 @@ export default function ContentFiltersPage({ darkMode, language }) {
                 gap: 8,
                 padding: "6px 10px",
                 borderRadius: BORDER_RADIUS.md,
-                background: rule.active ? COLORS.primaryLight : darkMode ? "#2a2d3a" : "#f0f0f0",
-                border: `1px solid ${rule.active ? COLORS.primary : border}`,
-                opacity: rule.active ? 1 : 0.6,
+                background: COLORS.primaryLight,
+                border: `1px solid ${COLORS.primary}`,
                 transition: `all ${TRANSITIONS.fast}`
               }}>
-                <span style={{
-                  color: rule.active ? COLORS.primary : secondaryText,
-                  fontSize: FONT_SIZES.sm,
-                  fontWeight: 500,
-                  cursor: "pointer"
-                }} onClick={() => toggleRuleActive(rule)}>{keyword}</span>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editKeywordValue}
+                    onChange={(e) => setEditKeywordValue(e.target.value)}
+                    onBlur={() => saveKeyword(rule.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveKeyword(rule.id); if (e.key === "Escape") setEditingKeyword(null); }}
+                    autoFocus
+                    style={{ ...inputStyle, width: 120, padding: "4px 8px", fontSize: FONT_SIZES.sm }}
+                  />
+                ) : (
+                  <span style={{
+                    color: COLORS.primary,
+                    fontSize: FONT_SIZES.sm,
+                    fontWeight: 500,
+                    cursor: "pointer"
+                  }} onClick={() => startEditKeyword(rule)}>{keyword}</span>
+                )}
                 <button
                   onClick={() => deleteKeyword(rule.id)}
                   style={{
@@ -425,59 +551,124 @@ export default function ContentFiltersPage({ darkMode, language }) {
         </form>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {compositeRules.map(rule => (
-            <div key={rule.id} style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              padding: "12px 16px",
-              borderRadius: BORDER_RADIUS.md,
-              background: darkMode ? "#1c1f2b" : "#f9f9f9",
-              border: `1px solid ${border}`,
-              opacity: rule.active ? 1 : 0.5
-            }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 16, flex: 1, alignItems: "center" }}>
-                <div style={{ minWidth: 120, fontWeight: 600, color: rule.active ? text : secondaryText }}>
-                  {rule.name || t.unnamedRule}
-                </div>
-                <div style={{ fontSize: FONT_SIZES.sm, color: secondaryText, minWidth: 160, flex: 1 }}>
-                  <span style={{ color: COLORS.status.success, fontWeight: 500 }}>{t.include}: </span>
-                  {toCsv(parseJsonArray(rule.must_include)) || "-"}
-                </div>
-                <div style={{ fontSize: FONT_SIZES.sm, color: secondaryText, minWidth: 160, flex: 1 }}>
-                  <span style={{ color: COLORS.status.error, fontWeight: 500 }}>{t.exclude}: </span>
-                  {toCsv(parseJsonArray(rule.must_exclude)) || "-"}
-                </div>
+          {compositeRules.map(rule => {
+            const isEditing = editingRule === rule.id;
+            return (
+              <div key={rule.id} style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                padding: "12px 16px",
+                borderRadius: BORDER_RADIUS.md,
+                background: darkMode ? "#1c1f2b" : "#f9f9f9",
+                border: `1px solid ${border}`
+              }}>
+                {isEditing ? (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <div style={{ flex: "1 1 160px", minWidth: 160 }}>
+                      <label style={labelStyle}>{t.ruleName}</label>
+                      <input
+                        type="text"
+                        value={editRuleForm.name}
+                        onChange={(e) => setEditRuleForm({ ...editRuleForm, name: e.target.value })}
+                        style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    <div style={{ flex: "2 1 200px", minWidth: 200 }}>
+                      <label style={labelStyle}>{t.mustInclude}</label>
+                      <input
+                        type="text"
+                        value={editRuleForm.mustInclude}
+                        onChange={(e) => setEditRuleForm({ ...editRuleForm, mustInclude: e.target.value })}
+                        style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    <div style={{ flex: "2 1 200px", minWidth: 200 }}>
+                      <label style={labelStyle}>{t.mustExclude}</label>
+                      <input
+                        type="text"
+                        value={editRuleForm.mustExclude}
+                        onChange={(e) => setEditRuleForm({ ...editRuleForm, mustExclude: e.target.value })}
+                        style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    <div style={{ flex: "0 0 100px" }}>
+                      <label style={labelStyle}>{t.priority}</label>
+                      <input
+                        type="number"
+                        value={editRuleForm.priority}
+                        onChange={(e) => setEditRuleForm({ ...editRuleForm, priority: e.target.value })}
+                        style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => saveRule(rule.id)} style={{
+                        padding: "8px 16px",
+                        borderRadius: BORDER_RADIUS.md,
+                        border: "none",
+                        background: COLORS.primary,
+                        color: "#fff",
+                        fontSize: FONT_SIZES.sm,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}>{t.save}</button>
+                      <button onClick={() => setEditingRule(null)} style={{
+                        padding: "8px 16px",
+                        borderRadius: BORDER_RADIUS.md,
+                        border: `1px solid ${border}`,
+                        background: "transparent",
+                        color: text,
+                        fontSize: FONT_SIZES.sm,
+                        cursor: "pointer"
+                      }}>{t.cancel}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, flex: 1, alignItems: "center" }}>
+                      <div style={{ minWidth: 120, fontWeight: 600, color: text }}>
+                        {rule.name || t.unnamedRule}
+                      </div>
+                      <div style={{ fontSize: FONT_SIZES.sm, color: secondaryText, minWidth: 160, flex: 1 }}>
+                        <span style={{ color: COLORS.status.success, fontWeight: 500 }}>{t.include}: </span>
+                        {parseJsonArray(rule.must_include).join("; ") || "-"}
+                      </div>
+                      <div style={{ fontSize: FONT_SIZES.sm, color: secondaryText, minWidth: 160, flex: 1 }}>
+                        <span style={{ color: COLORS.status.error, fontWeight: 500 }}>{t.exclude}: </span>
+                        {parseJsonArray(rule.must_exclude).join("; ") || "-"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        onClick={() => startEditRule(rule)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: BORDER_RADIUS.md,
+                          border: `1px solid ${border}`,
+                          background: "transparent",
+                          color: text,
+                          fontSize: FONT_SIZES.sm,
+                          cursor: "pointer"
+                        }}
+                      >{t.edit}</button>
+                      <button
+                        onClick={() => deleteCompositeRule(rule.id)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: BORDER_RADIUS.md,
+                          border: `1px solid #c00`,
+                          background: "transparent",
+                          color: "#c00",
+                          fontSize: FONT_SIZES.sm,
+                          cursor: "pointer"
+                        }}
+                      >{t.delete}</button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button
-                  onClick={() => toggleRuleActive(rule)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: BORDER_RADIUS.md,
-                    border: `1px solid ${rule.active ? COLORS.primary : border}`,
-                    background: rule.active ? COLORS.primary : "transparent",
-                    color: rule.active ? "#fff" : text,
-                    fontSize: FONT_SIZES.sm,
-                    cursor: "pointer"
-                  }}
-                >{rule.active ? t.active : t.inactive}</button>
-                <button
-                  onClick={() => deleteCompositeRule(rule.id)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: BORDER_RADIUS.md,
-                    border: `1px solid #c00`,
-                    background: "transparent",
-                    color: "#c00",
-                    fontSize: FONT_SIZES.sm,
-                    cursor: "pointer"
-                  }}
-                >{t.delete}</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {compositeRules.length === 0 && (
             <div style={{ textAlign: "center", padding: "24px", color: secondaryText, fontSize: FONT_SIZES.sm }}>
               {t.noRules}
@@ -533,38 +724,85 @@ export default function ContentFiltersPage({ darkMode, language }) {
         padding: "16px 20px"
       }}>
         <h3 style={{ margin: "0 0 12px", color: darkMode ? "#fff" : COLORS.text.primary }}>{t.businessCategories}</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-          {categories.map(category => (
-            <div key={category.id} style={{
-              padding: "14px 16px",
-              borderRadius: BORDER_RADIUS.md,
-              background: category.active ? (darkMode ? "#1c2b22" : "#f6fdf8") : darkMode ? "#1c1f2b" : "#f9f9f9",
-              border: `1px solid ${category.active ? COLORS.primary : border}`,
-              opacity: category.active ? 1 : 0.6,
-              transition: `all ${TRANSITIONS.fast}`
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                <div style={{ fontWeight: 700, color: darkMode ? "#fff" : COLORS.text.primary, fontSize: FONT_SIZES.lg }}>
-                  {category.name}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+          {categories.map(category => {
+            const isEditing = editingCategory === category.id;
+            return (
+              <div key={category.id} style={{
+                padding: "14px 16px",
+                borderRadius: BORDER_RADIUS.md,
+                background: category.active ? (darkMode ? "#1c2b22" : "#f6fdf8") : darkMode ? "#1c1f2b" : "#f9f9f9",
+                border: `1px solid ${category.active ? COLORS.primary : border}`,
+                opacity: category.active ? 1 : 0.6,
+                transition: `all ${TRANSITIONS.fast}`
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                  <div style={{ fontWeight: 700, color: darkMode ? "#fff" : COLORS.text.primary, fontSize: FONT_SIZES.lg }}>
+                    {category.name}
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={() => isEditing ? setEditingCategory(null) : startEditCategory(category)}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: BORDER_RADIUS.md,
+                        border: `1px solid ${border}`,
+                        background: "transparent",
+                        color: text,
+                        fontSize: FONT_SIZES.xs,
+                        cursor: "pointer"
+                      }}
+                    >{isEditing ? t.cancel : t.edit}</button>
+                    <button
+                      onClick={() => toggleCategory(category)}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: BORDER_RADIUS.md,
+                        border: `1px solid ${category.active ? COLORS.primary : border}`,
+                        background: category.active ? COLORS.primary : "transparent",
+                        color: category.active ? "#fff" : text,
+                        fontSize: FONT_SIZES.xs,
+                        cursor: "pointer"
+                      }}
+                    >{category.active ? t.active : t.inactive}</button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => toggleCategory(category)}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: BORDER_RADIUS.md,
-                    border: `1px solid ${category.active ? COLORS.primary : border}`,
-                    background: category.active ? COLORS.primary : "transparent",
-                    color: category.active ? "#fff" : text,
-                    fontSize: FONT_SIZES.xs,
-                    cursor: "pointer"
-                  }}
-                >{category.active ? t.active : t.inactive}</button>
+                {isEditing ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <textarea
+                      value={editCategoryForm.description}
+                      onChange={(e) => setEditCategoryForm({ ...editCategoryForm, description: e.target.value })}
+                      rows={2}
+                      placeholder="Description"
+                      style={{ ...inputStyle, width: "100%", boxSizing: "border-box", fontFamily: "inherit" }}
+                    />
+                    <textarea
+                      value={editCategoryForm.prompt}
+                      onChange={(e) => setEditCategoryForm({ ...editCategoryForm, prompt: e.target.value })}
+                      rows={4}
+                      placeholder="Inclusion prompt"
+                      style={{ ...inputStyle, width: "100%", boxSizing: "border-box", fontFamily: "inherit" }}
+                    />
+                    <button onClick={() => saveCategory(category)} style={{
+                      padding: "6px 12px",
+                      borderRadius: BORDER_RADIUS.md,
+                      border: "none",
+                      background: COLORS.primary,
+                      color: "#fff",
+                      fontSize: FONT_SIZES.sm,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      alignSelf: "flex-start"
+                    }}>{t.save}</button>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: FONT_SIZES.sm, color: secondaryText, lineHeight: 1.4 }}>
+                    {category.description}
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize: FONT_SIZES.sm, color: secondaryText, lineHeight: 1.4 }}>
-                {category.description}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

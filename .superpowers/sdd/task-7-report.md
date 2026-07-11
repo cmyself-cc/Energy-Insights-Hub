@@ -61,3 +61,16 @@ Result: the tracker run completed (`status: completed` / `completed_with_errors`
 - The smoke test used the existing seeded source (`New Source`, a WeChat URL). It returned 0 insights because the live crawler hit a Sogou anti-bot/captcha page. This is an environmental/network issue, not a regression in the integration code.
 - No dedicated unit test exists for `runTracker` itself; the smoke test and the passing dependency tests (`filterRules`, `businessCategories`, `trackerRules`) cover the new logic.
 - The migration is additive and safe for existing data; existing rows will simply have `NULL` in `categories`.
+
+
+## Fix
+
+- **File modified:** `server/services/tracker.js`
+  - Changed the `categories` parameter in the `insights` INSERT from `JSON.stringify(row.categories)` to `row.categories ? JSON.stringify(row.categories) : null` so missing categories are persisted as SQL `NULL` instead of the literal string `"undefined"`.
+  - The INSERT parameter list still matches the 12-column columns list.
+
+- **Commit:** `38f12fbe966356c4f23ef1b79a4db3cceb32ccb7..4741e8e3c31baedf7add45966b71a4693172c4aa`
+
+- **Verification:**
+  - `npm run lint` passed (exit code 0).
+  - `node --test server/services/filterRules.test.js server/services/businessCategories.test.js server/services/trackerRules.test.js` passed: 23 tests, 0 failures.

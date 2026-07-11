@@ -6,7 +6,7 @@ import { importSources, normalizeImportType } from "../services/sourceImporter.j
 
 const router = Router();
 
-const ALLOWED_TYPES = ["rss", "website", "wechat", "api", "scrape"];
+const ALLOWED_TYPES = ["rss", "website", "wechat_mcp", "api", "scrape"];
 
 function parseConfig(config) {
   if (!config) return null;
@@ -45,8 +45,8 @@ router.post("/", (req, res) => {
     if (!name) {
       return res.status(400).json({ error: "name is required" });
     }
-    if (type !== "wechat" && !url) {
-      return res.status(400).json({ error: "url is required for this source type" });
+    if (!url) {
+      return res.status(400).json({ error: "url is required" });
     }
     if (!ALLOWED_TYPES.includes(type)) {
       return res.status(400).json({ error: `type must be one of ${ALLOWED_TYPES.join(", ")}` });
@@ -126,8 +126,8 @@ router.put("/:id", (req, res) => {
     if (!name) {
       return res.status(400).json({ error: "name is required" });
     }
-    if (type !== "wechat" && !url) {
-      return res.status(400).json({ error: "url is required for this source type" });
+    if (!url) {
+      return res.status(400).json({ error: "url is required" });
     }
     if (!ALLOWED_TYPES.includes(type)) {
       return res.status(400).json({ error: `type must be one of ${ALLOWED_TYPES.join(", ")}` });

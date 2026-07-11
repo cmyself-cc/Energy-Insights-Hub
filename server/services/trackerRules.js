@@ -6,12 +6,6 @@ export function isWithinLookback(item, hours) {
   return new Date(date).getTime() >= cutoff;
 }
 
-export function matchesExclusions(item, excludeKeywords) {
-  if (!excludeKeywords || excludeKeywords.length === 0) return false;
-  const text = `${item.title || ""} ${item.summary || ""} ${item.rawContent || ""}`.toLowerCase();
-  return excludeKeywords.some(k => text.includes(k.toLowerCase()));
-}
-
 export function limitPerSource(items, max) {
   if (!max || max <= 0) return items;
 
@@ -66,23 +60,6 @@ export function matchesInclusions(insight, settings) {
 
 export function applyPreFilter(items, settings) {
   let candidates = items.filter(item => isWithinLookback(item, settings.lookbackHours));
-  candidates = candidates.filter(item => !matchesExclusions(item, settings.excludeKeywords));
-
-  const seen = new Set();
-  candidates = candidates.filter(item => {
-    const keys = [];
-    if (item.url) keys.push(`url:${item.url}`);
-
-    const normalizedTitle = typeof item.title === "string" ? item.title.trim().toLowerCase() : "";
-    if (normalizedTitle) keys.push(`title:${normalizedTitle}`);
-
-    if (keys.length === 0) return true;
-    if (keys.some(k => seen.has(k))) return false;
-
-    for (const key of keys) seen.add(key);
-    return true;
-  });
-
   candidates = limitPerSource(candidates, settings.maxPerSource);
   return candidates;
 }
@@ -90,6 +67,5 @@ export function applyPreFilter(items, settings) {
 export function applyPostFilter(insights, settings) {
   return insights
     .filter(insight => matchesInclusions(insight, settings))
-    .filter(insight => !matchesExclusions(insight, settings.excludeKeywords))
     .filter(insight => insight.title && insight.title.trim() !== "");
 }

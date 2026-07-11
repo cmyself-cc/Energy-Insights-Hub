@@ -1,0 +1,2034 @@
+{
+  "_description": "Energy Insights Hub 内容过滤配置模板",
+  "_usage": "通过 Configuration -> Content Filters -> 导入配置 上传此 JSON 文件，或在 /api/tracker/import-config 接口提交",
+  "excludeKeywords": [
+    "培训班",
+    "总裁班",
+    "开班",
+    "上任",
+    "任命",
+    "调任",
+    "胜任",
+    "升任",
+    "卸任",
+    "落马",
+    "逮捕",
+    "诉讼",
+    "销量榜",
+    "新车",
+    "报名",
+    "学费",
+    "投标",
+    "特朗普",
+    "习近平",
+    "论坛",
+    "骚乱",
+    "预警",
+    "赛事",
+    "省油",
+    "教育",
+    "债市",
+    "游戏",
+    "竞赛",
+    "决赛",
+    "赛事",
+    "枪杀",
+    "竞拍",
+    "A股",
+    "理财",
+    "范式",
+    "条例",
+    "演讲",
+    "茶话会",
+    "排查",
+    "调查",
+    "证监会",
+    "壁纸",
+    "祝福",
+    "贺词",
+    "沙龙",
+    "纪念",
+    "传说",
+    "故事",
+    "意见",
+    "违规",
+    "吃喝",
+    "车型亮点",
+    "理论学习",
+    "研讨会议",
+    "大众点评",
+    "必玩榜",
+    "APP",
+    "评级",
+    "薪酬",
+    "新年贺词",
+    "新年祝福",
+    "新年致辞",
+    "党建",
+    "党员队伍",
+    "党的纪律",
+    "纪委",
+    "权益",
+    "楷模",
+    "劳模",
+    "劳动模范",
+    "券商",
+    "证券",
+    "白皮书",
+    "慰问",
+    "领导调研",
+    "博主",
+    "微博",
+    "邮票",
+    "坚守岗位",
+    "中国智库",
+    "新车型",
+    "留言板",
+    "投诉",
+    "限量款",
+    "开板",
+    "家族",
+    "坠毁",
+    "遇难",
+    "督查",
+    "稽查",
+    "茶话会",
+    "壁纸",
+    "跨年",
+    "电脑故障",
+    "应急预案",
+    "座谈",
+    "拜会",
+    "新年致辞",
+    "新股",
+    "小商品城",
+    "嘉宾",
+    "科技进步奖",
+    "锦旗",
+    "事业有成",
+    "内部信",
+    "晚会",
+    "收官",
+    "核电",
+    "保暖季",
+    "和解",
+    "裁员",
+    "公司季报",
+    "公司年报",
+    "地热",
+    "工业固废",
+    "绩效评价",
+    "企业标准",
+    "创业板上市",
+    "补助公示",
+    "火电",
+    "部署会议",
+    "拜访",
+    "参观指导",
+    "煤炭供应",
+    "煤炭产量",
+    "煤矿",
+    "评审会",
+    "述职",
+    "OTA监测月报",
+    "GDP",
+    "国民生产总市值",
+    "热电改造",
+    "己内酰胺",
+    "HDPE",
+    "甲苯",
+    "污水",
+    "污水处理厂",
+    "合作伙伴大会",
+    "销量榜",
+    "销量冠军",
+    "销量总冠军",
+    "伙伴大会",
+    "废止",
+    "召回",
+    "煤运",
+    "假冒",
+    "报案",
+    "违法犯罪",
+    "到访",
+    "会见",
+    "春种",
+    "春耕",
+    "尾气处理",
+    "回应",
+    "供水",
+    "热电工程",
+    "检修",
+    "海缆",
+    "特高压",
+    "输电工程",
+    "饮用水",
+    "会谈",
+    "供电局",
+    "警告",
+    "会晤",
+    "辟谣",
+    "侵权",
+    "胜诉",
+    "起诉",
+    "热力",
+    "供热",
+    "维生素",
+    "配电网",
+    "水电",
+    "案件"
+  ],
+  "compositeRules": [
+    {
+      "name": "中石油",
+      "mustInclude": [
+        "中石油",
+        "开业"
+      ],
+      "mustNotInclude": [
+        "指数"
+      ]
+    },
+    {
+      "name": "中石化",
+      "mustInclude": [
+        "中石化",
+        "合作"
+      ],
+      "mustNotInclude": [
+        "售楼"
+      ]
+    },
+    {
+      "name": "中海油",
+      "mustInclude": [
+        "中海油",
+        "拓展"
+      ],
+      "mustNotInclude": [
+        "大盘"
+      ]
+    },
+    {
+      "name": "中石化资本",
+      "mustInclude": [
+        "中石化资本",
+        "投资"
+      ],
+      "mustNotInclude": [
+        "股价"
+      ]
+    },
+    {
+      "name": "南方电网",
+      "mustInclude": [
+        "南方电网",
+        "收购"
+      ],
+      "mustNotInclude": [
+        "ETF"
+      ]
+    },
+    {
+      "name": "国家能源集团",
+      "mustInclude": [
+        "国家能源集团",
+        "并购"
+      ],
+      "mustNotInclude": [
+        "住宅"
+      ]
+    },
+    {
+      "name": "中国船燃",
+      "mustInclude": [
+        "中国船燃",
+        "收并购"
+      ],
+      "mustNotInclude": [
+        "跌停"
+      ]
+    },
+    {
+      "name": "中国能建",
+      "mustInclude": [
+        "中国能建",
+        "重组"
+      ],
+      "mustNotInclude": [
+        "涨停"
+      ]
+    },
+    {
+      "name": "中航油",
+      "mustInclude": [
+        "中航油",
+        "上市"
+      ],
+      "mustNotInclude": [
+        "个股"
+      ]
+    },
+    {
+      "name": "镇海炼化",
+      "mustInclude": [
+        "镇海炼化",
+        "转型"
+      ],
+      "mustNotInclude": [
+        "基金"
+      ]
+    },
+    {
+      "name": "嘉实多",
+      "mustInclude": [
+        "嘉实多",
+        "合资"
+      ],
+      "mustNotInclude": [
+        "股市"
+      ]
+    },
+    {
+      "name": "道达尔",
+      "mustInclude": [
+        "道达尔",
+        "联盟"
+      ],
+      "mustNotInclude": [
+        "市盈率"
+      ]
+    },
+    {
+      "name": "驾捷乐",
+      "mustInclude": [
+        "驾捷乐",
+        "扩张"
+      ],
+      "mustNotInclude": [
+        "开盘"
+      ]
+    },
+    {
+      "name": "巴斯夫",
+      "mustInclude": [
+        "巴斯夫",
+        "重塑"
+      ],
+      "mustNotInclude": [
+        "代购"
+      ]
+    },
+    {
+      "name": "bp",
+      "mustInclude": [
+        "bp",
+        "再造"
+      ],
+      "mustNotInclude": [
+        "走链接"
+      ]
+    },
+    {
+      "name": "碧辟",
+      "mustInclude": [
+        "碧辟",
+        "剥离"
+      ],
+      "mustNotInclude": [
+        "总代"
+      ]
+    },
+    {
+      "name": "远景能源",
+      "mustInclude": [
+        "远景能源",
+        "新开"
+      ],
+      "mustNotInclude": [
+        "自营"
+      ]
+    },
+    {
+      "name": "埃克森美孚",
+      "mustInclude": [
+        "埃克森美孚",
+        "创新"
+      ],
+      "mustNotInclude": [
+        "自动好评"
+      ]
+    },
+    {
+      "name": "沙特阿美",
+      "mustInclude": [
+        "沙特阿美",
+        "首家"
+      ],
+      "mustNotInclude": [
+        "转置"
+      ]
+    },
+    {
+      "name": "阿美",
+      "mustInclude": [
+        "阿美"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "途虎养车",
+      "mustInclude": [
+        "途虎养车",
+        "新增"
+      ],
+      "mustNotInclude": [
+        "转账"
+      ]
+    },
+    {
+      "name": "天猫养车",
+      "mustInclude": [
+        "天猫养车",
+        "发布"
+      ],
+      "mustNotInclude": [
+        "转运"
+      ]
+    },
+    {
+      "name": "京东汽车",
+      "mustInclude": [
+        "京东汽车",
+        "签署"
+      ],
+      "mustNotInclude": [
+        "转需"
+      ]
+    },
+    {
+      "name": "京东养车",
+      "mustInclude": [
+        "京东养车",
+        "启动"
+      ],
+      "mustNotInclude": [
+        "转售"
+      ]
+    },
+    {
+      "name": "宁德时代",
+      "mustInclude": [
+        "宁德时代",
+        "投资建设"
+      ],
+      "mustNotInclude": [
+        "转手"
+      ]
+    },
+    {
+      "name": "北汽",
+      "mustInclude": [
+        "北汽",
+        "举行"
+      ],
+      "mustNotInclude": [
+        "转让"
+      ]
+    },
+    {
+      "name": "小米汽车",
+      "mustInclude": [
+        "小米汽车",
+        "开工"
+      ],
+      "mustNotInclude": [
+        "转卖"
+      ]
+    },
+    {
+      "name": "京能",
+      "mustInclude": [
+        "京能",
+        "推出"
+      ],
+      "mustNotInclude": [
+        "转发送"
+      ]
+    },
+    {
+      "name": "蔚来",
+      "mustInclude": [
+        "蔚来",
+        "运营"
+      ],
+      "mustNotInclude": [
+        "转出"
+      ]
+    },
+    {
+      "name": "隆基绿能",
+      "mustInclude": [
+        "隆基绿能",
+        "建立"
+      ],
+      "mustNotInclude": [
+        "專櫃"
+      ]
+    },
+    {
+      "name": "星星充电",
+      "mustInclude": [
+        "星星充电",
+        "举办"
+      ],
+      "mustNotInclude": [
+        "专营"
+      ]
+    },
+    {
+      "name": "万邦数字能源",
+      "mustInclude": [
+        "万邦数字能源",
+        "成立"
+      ],
+      "mustNotInclude": [
+        "助v"
+      ]
+    },
+    {
+      "name": "比亚迪",
+      "mustInclude": [
+        "比亚迪",
+        "合资成立"
+      ],
+      "mustNotInclude": [
+        "主营"
+      ]
+    },
+    {
+      "name": "TCL中环",
+      "mustInclude": [
+        "TCL中环",
+        "完成"
+      ],
+      "mustNotInclude": [
+        "主v"
+      ]
+    },
+    {
+      "name": "三一集团",
+      "mustInclude": [
+        "三一集团",
+        "深化合作"
+      ],
+      "mustNotInclude": [
+        "中奖"
+      ]
+    },
+    {
+      "name": "裕龙石化",
+      "mustInclude": [
+        "裕龙石化",
+        "发布"
+      ],
+      "mustNotInclude": [
+        "直郵"
+      ]
+    },
+    {
+      "name": "易高",
+      "mustInclude": [
+        "易高",
+        "联合发布"
+      ],
+      "mustNotInclude": [
+        "直邮"
+      ]
+    },
+    {
+      "name": "首钢朗泽",
+      "mustInclude": [
+        "首钢朗泽",
+        "入驻"
+      ],
+      "mustNotInclude": [
+        "直营"
+      ]
+    },
+    {
+      "name": "海新能科",
+      "mustInclude": [
+        "海新能科",
+        "升级"
+      ],
+      "mustNotInclude": [
+        "直销"
+      ]
+    },
+    {
+      "name": "卓越新能",
+      "mustInclude": [
+        "卓越新能",
+        "开启"
+      ],
+      "mustNotInclude": [
+        "直送"
+      ]
+    },
+    {
+      "name": "嘉澳环保",
+      "mustInclude": [
+        "嘉澳环保",
+        "签约"
+      ],
+      "mustNotInclude": [
+        "直发"
+      ]
+    },
+    {
+      "name": "东华能源",
+      "mustInclude": [
+        "东华能源",
+        "增资"
+      ],
+      "mustNotInclude": [
+        "直采"
+      ]
+    },
+    {
+      "name": "怡斯莱",
+      "mustInclude": [
+        "怡斯莱",
+        "完成"
+      ],
+      "mustNotInclude": [
+        "正品"
+      ]
+    },
+    {
+      "name": "Ecoceres",
+      "mustInclude": [
+        "Ecoceres",
+        "开展"
+      ],
+      "mustNotInclude": [
+        "折上折"
+      ]
+    },
+    {
+      "name": "特来电",
+      "mustInclude": [
+        "特来电",
+        "收购"
+      ],
+      "mustNotInclude": [
+        "折扣"
+      ]
+    },
+    {
+      "name": "云快充",
+      "mustInclude": [
+        "云快充",
+        "获得"
+      ],
+      "mustNotInclude": [
+        "折后"
+      ]
+    },
+    {
+      "name": "国家电网",
+      "mustInclude": [
+        "国家电网",
+        "宣布"
+      ],
+      "mustNotInclude": [
+        "招聘"
+      ]
+    },
+    {
+      "name": "小桔充电",
+      "mustInclude": [
+        "小桔充电",
+        "投运"
+      ],
+      "mustNotInclude": [
+        "招募"
+      ]
+    },
+    {
+      "name": "蔚景云",
+      "mustInclude": [
+        "蔚景云",
+        "落地"
+      ],
+      "mustNotInclude": [
+        "赠一"
+      ]
+    },
+    {
+      "name": "深圳车电网",
+      "mustInclude": [
+        "深圳车电网",
+        "批复"
+      ],
+      "mustNotInclude": [
+        "赠1"
+      ]
+    },
+    {
+      "name": "汇充电",
+      "mustInclude": [
+        "汇充电",
+        "审批"
+      ],
+      "mustNotInclude": [
+        "在团"
+      ]
+    },
+    {
+      "name": "依威能源",
+      "mustInclude": [
+        "依威能源",
+        "同意"
+      ],
+      "mustNotInclude": [
+        "砸单"
+      ]
+    },
+    {
+      "name": "ChargePoint",
+      "mustInclude": [
+        "ChargePoint",
+        "进入"
+      ],
+      "mustNotInclude": [
+        "运费"
+      ]
+    },
+    {
+      "name": "特福莱",
+      "mustInclude": [
+        "特福莱",
+        "登录"
+      ],
+      "mustNotInclude": [
+        "原装"
+      ]
+    },
+    {
+      "name": "理想汽车",
+      "mustInclude": [
+        "理想汽车",
+        "开发"
+      ],
+      "mustNotInclude": [
+        "原单"
+      ]
+    },
+    {
+      "name": "零跑汽车",
+      "mustInclude": [
+        "零跑汽车",
+        "启动"
+      ],
+      "mustNotInclude": [
+        "元起"
+      ]
+    },
+    {
+      "name": "赛力斯",
+      "mustInclude": [
+        "赛力斯",
+        "开业"
+      ],
+      "mustNotInclude": [
+        "预售"
+      ]
+    },
+    {
+      "name": "智己汽车",
+      "mustInclude": [
+        "智己汽车",
+        "首座"
+      ],
+      "mustNotInclude": [
+        "有喜"
+      ]
+    },
+    {
+      "name": "小鹏汽车",
+      "mustInclude": [
+        "小鹏汽车",
+        "首个"
+      ],
+      "mustNotInclude": [
+        "有买有送"
+      ]
+    },
+    {
+      "name": "Deepway 深向",
+      "mustInclude": [
+        "Deepway 深向",
+        "首台"
+      ],
+      "mustNotInclude": [
+        "有礼"
+      ]
+    },
+    {
+      "name": "阿维塔",
+      "mustInclude": [
+        "阿维塔",
+        "有奖"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "徐工汽车",
+      "mustInclude": [
+        "徐工汽车",
+        "有货"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "解放汽车",
+      "mustInclude": [
+        "解放汽车",
+        "邮费"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国重汽",
+      "mustInclude": [
+        "中国重汽",
+        "重汽"
+      ],
+      "mustNotInclude": [
+        "优惠"
+      ]
+    },
+    {
+      "name": "陕汽重卡",
+      "mustInclude": [
+        "陕汽重卡",
+        "陕汽"
+      ],
+      "mustNotInclude": [
+        "用户没有填写评论"
+      ]
+    },
+    {
+      "name": "宇通集团",
+      "mustInclude": [
+        "宇通集团",
+        "赢大奖"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "东风汽车",
+      "mustInclude": [
+        "东风汽车",
+        "英代"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "福田汽车",
+      "mustInclude": [
+        "福田汽车",
+        "易喵团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "大众",
+      "mustInclude": [
+        "大众",
+        "大众汽车"
+      ],
+      "mustNotInclude": [
+        "一汽大众"
+      ]
+    },
+    {
+      "name": "一汽集团",
+      "mustInclude": [
+        "一汽集团",
+        "一周预告"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "上汽集团",
+      "mustInclude": [
+        "上汽集团",
+        "一周链接戳"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "吉利汽车",
+      "mustInclude": [
+        "吉利汽车",
+        "一折"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "长城汽车",
+      "mustInclude": [
+        "长城汽车",
+        "一厘米活虫"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "奇瑞汽车",
+      "mustInclude": [
+        "奇瑞汽车",
+        "一口价"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "广汽集团",
+      "mustInclude": [
+        "广汽集团",
+        "一号仓"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "长安汽车",
+      "mustInclude": [
+        "长安汽车",
+        "野来团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "江淮汽车",
+      "mustInclude": [
+        "江淮汽车",
+        "要的来"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "华晨汽车",
+      "mustInclude": [
+        "华晨汽车",
+        "邀请您关注"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国国际航空",
+      "mustInclude": [
+        "中国国际航空",
+        "验货"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国东方航空",
+      "mustInclude": [
+        "中国东方航空",
+        "眼镜团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国南方航空",
+      "mustInclude": [
+        "中国南方航空",
+        "亚马逊"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "海南航空",
+      "mustInclude": [
+        "海南航空",
+        "询团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国石油",
+      "mustInclude": [
+        "中国石油",
+        "询价"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "顺丰航空",
+      "mustInclude": [
+        "顺丰航空",
+        "学员分享"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "顺丰",
+      "mustInclude": [
+        "顺丰"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国货运航空",
+      "mustInclude": [
+        "中国货运航空",
+        "续团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国国际货运航空",
+      "mustInclude": [
+        "中国国际货运航空",
+        "需要联系"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "长城",
+      "mustInclude": [
+        "长城",
+        "长城汽车"
+      ],
+      "mustNotInclude": [
+        "长城润滑油"
+      ]
+    },
+    {
+      "name": "昆仑",
+      "mustInclude": [
+        "昆仑",
+        "昆仑润滑油"
+      ],
+      "mustNotInclude": [
+        "昆仑能源"
+      ]
+    },
+    {
+      "name": "统一",
+      "mustInclude": [
+        "统一",
+        "统一润滑油"
+      ],
+      "mustNotInclude": [
+        "新品上架"
+      ]
+    },
+    {
+      "name": "龙蟠",
+      "mustInclude": [
+        "龙蟠",
+        "新品到货"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "康普顿",
+      "mustInclude": [
+        "康普顿",
+        "新到货"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "海疆润滑油",
+      "mustInclude": [
+        "海疆润滑油"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中能高科",
+      "mustInclude": [
+        "中能高科",
+        "小铺"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "美孚",
+      "mustInclude": [
+        "美孚",
+        "小店"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "孚创",
+      "mustInclude": [
+        "孚创"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "胜牌",
+      "mustInclude": [
+        "胜牌"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "壳牌",
+      "mustInclude": [
+        "壳牌",
+        "現貨"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "福斯",
+      "mustInclude": [
+        "福斯",
+        "限时特价"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中化",
+      "mustInclude": [
+        "中化",
+        "限时抢购"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "康菲石油",
+      "mustInclude": [
+        "康菲石油",
+        "限购"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "雪佛龙",
+      "mustInclude": [
+        "雪佛龙",
+        "现金红包"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "Devon",
+      "mustInclude": [
+        "Devon",
+        "现货团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "赫斯基能源",
+      "mustInclude": [
+        "赫斯基能源",
+        "现场小视频"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国石油",
+      "mustInclude": [
+        "中国石油",
+        "现场视频"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国石化",
+      "mustInclude": [
+        "中国石化",
+        "现场活动"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "Shell 壳牌",
+      "mustInclude": [
+        "Shell 壳牌",
+        "现场购买"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "TotalEnergies 道达尔",
+      "mustInclude": [
+        "TotalEnergies 道达尔",
+        "咸鱼"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "延长石油",
+      "mustInclude": [
+        "延长石油",
+        "闲鱼"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "开市客",
+      "mustInclude": [
+        "开市客",
+        "吓单"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "易捷速购",
+      "mustInclude": [
+        "易捷速购",
+        "下单就送"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "大唐集团",
+      "mustInclude": [
+        "大唐集团",
+        "五折"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国广核",
+      "mustInclude": [
+        "中国广核",
+        "我v"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国核电",
+      "mustInclude": [
+        "中国核电",
+        "薇信"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "龙源电力",
+      "mustInclude": [
+        "龙源电力",
+        "溦_信"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "新天绿能",
+      "mustInclude": [
+        "新天绿能",
+        "微营销"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "林洋能源",
+      "mustInclude": [
+        "林洋能源",
+        "微信联系"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "三峡",
+      "mustInclude": [
+        "三峡",
+        "三峡能源"
+      ],
+      "mustNotInclude": [
+        "三峡新能源"
+      ]
+    },
+    {
+      "name": "中核汇能有限公司",
+      "mustInclude": [
+        "中核汇能有限公司"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "华能集团",
+      "mustInclude": [
+        "华能集团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "华电集团",
+      "mustInclude": [
+        "华电集团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "国电集团",
+      "mustInclude": [
+        "国电集团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "国家电投",
+      "mustInclude": [
+        "国家电投"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国广核集团",
+      "mustInclude": [
+        "中国广核集团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国核工业集团",
+      "mustInclude": [
+        "中国核工业集团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国能源建设集团",
+      "mustInclude": [
+        "中国能源建设集团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "恒力石化",
+      "mustInclude": [
+        "恒力石化"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "浙江石油化工",
+      "mustInclude": [
+        "浙江石油化工",
+        "增加：浙石化"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "宁波大榭石化",
+      "mustInclude": [
+        "宁波大榭石化"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "盛虹炼化",
+      "mustInclude": [
+        "盛虹炼化"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中海油能源发展",
+      "mustInclude": [
+        "中海油能源发展"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国石油资本",
+      "mustInclude": [
+        "中国石油资本"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "海油工程",
+      "mustInclude": [
+        "海油工程"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "陶氏化学",
+      "mustInclude": [
+        "陶氏化学"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "荣盛石化",
+      "mustInclude": [
+        "荣盛石化"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "万华化学",
+      "mustInclude": [
+        "万华化学"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "东方盛虹",
+      "mustInclude": [
+        "东方盛虹"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "法液空",
+      "mustInclude": [
+        "法液空"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "沙特基础工业",
+      "mustInclude": [
+        "沙特基础工业"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国外运",
+      "mustInclude": [
+        "中国外运"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中远海运",
+      "mustInclude": [
+        "中远海运"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中铁快运",
+      "mustInclude": [
+        "中铁快运",
+        "去掉"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中邮物流",
+      "mustInclude": [
+        "中邮物流"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国储运",
+      "mustInclude": [
+        "中国储运"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "远成物流",
+      "mustInclude": [
+        "远成物流"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "海丰",
+      "mustInclude": [
+        "海丰"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "德邦",
+      "mustInclude": [
+        "德邦"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "招商物流",
+      "mustInclude": [
+        "招商物流"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "顺丰",
+      "mustInclude": [
+        "顺丰"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中通",
+      "mustInclude": [
+        "中通"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中国邮政",
+      "mustInclude": [
+        "中国邮政"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "韵达",
+      "mustInclude": [
+        "韵达"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "圆通",
+      "mustInclude": [
+        "圆通"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "申通",
+      "mustInclude": [
+        "申通"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "京东物流",
+      "mustInclude": [
+        "京东物流"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "京东",
+      "mustInclude": [
+        "京东",
+        "京东养车"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "懂车帝养车",
+      "mustInclude": [
+        "懂车帝养车"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "天猫养车",
+      "mustInclude": [
+        "天猫养车"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "百世",
+      "mustInclude": [
+        "百世"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "联邦",
+      "mustInclude": [
+        "联邦",
+        "去掉"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "天天快递",
+      "mustInclude": [
+        "天天快递"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "路博润",
+      "mustInclude": [
+        "路博润"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "润英联",
+      "mustInclude": [
+        "润英联"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "雪佛龙奥伦耐",
+      "mustInclude": [
+        "雪佛龙奥伦耐"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "雅富盾",
+      "mustInclude": [
+        "雅富盾"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "君恒生物",
+      "mustInclude": [
+        "君恒生物"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "金尚",
+      "mustInclude": [
+        "金尚"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "尊创新能源",
+      "mustInclude": [
+        "尊创新能源"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "泰利集团",
+      "mustInclude": [
+        "泰利集团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "鹏鹞环保",
+      "mustInclude": [
+        "鹏鹞环保"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "龙岩卓越新能源",
+      "mustInclude": [
+        "龙岩卓越新能源"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "钦州天恒石化",
+      "mustInclude": [
+        "钦州天恒石化"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "龙翔生物科技",
+      "mustInclude": [
+        "龙翔生物科技"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "古杉生物柴油",
+      "mustInclude": [
+        "古杉生物柴油"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "中能能源环保",
+      "mustInclude": [
+        "中能能源环保"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "山东三聚生物",
+      "mustInclude": [
+        "山东三聚生物"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "君恒实业",
+      "mustInclude": [
+        "君恒实业"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "Darling Ingredients",
+      "mustInclude": [
+        "Darling Ingredients"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "Quatra",
+      "mustInclude": [
+        "Quatra"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "山高环能集团",
+      "mustInclude": [
+        "山高环能集团"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "四川金尚环保有限公司",
+      "mustInclude": [
+        "四川金尚环保有限公司"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "ASB 生物柴油",
+      "mustInclude": [
+        "ASB 生物柴油"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "Olleco",
+      "mustInclude": [
+        "Olleco"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "Mahoney Environmental",
+      "mustInclude": [
+        "Mahoney Environmental"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "承德油脂",
+      "mustInclude": [
+        "承德油脂"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "Baker Commodities",
+      "mustInclude": [
+        "Baker Commodities"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "Qingdao Sincere Chemical Co.,Ltd.",
+      "mustInclude": [
+        "Qingdao Sincere Chemical Co.,Ltd."
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "远程商用车",
+      "mustInclude": [
+        "远程商用车"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "蔚来",
+      "mustInclude": [
+        "蔚来"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "小米",
+      "mustInclude": [
+        "小米",
+        "小米汽车"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "本田",
+      "mustInclude": [
+        "本田"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "丰田",
+      "mustInclude": [
+        "丰田"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "比亚迪",
+      "mustInclude": [
+        "比亚迪"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "极氪",
+      "mustInclude": [
+        "极氪"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "吉利银河",
+      "mustInclude": [
+        "吉利银河"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "吉利领克",
+      "mustInclude": [
+        "吉利领克"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "吉利汽车",
+      "mustInclude": [
+        "吉利汽车"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "小松",
+      "mustInclude": [
+        "小松"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "重汽",
+      "mustInclude": [
+        "重汽"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "陕汽",
+      "mustInclude": [
+        "陕汽"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "潍柴",
+      "mustInclude": [
+        "潍柴"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "跨越速运",
+      "mustInclude": [
+        "跨越速运"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "极兔速递",
+      "mustInclude": [
+        "极兔速递"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "菜鸟",
+      "mustInclude": [
+        "菜鸟"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "海得氢能",
+      "mustInclude": [
+        "海得氢能"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "隆基绿能",
+      "mustInclude": [
+        "隆基绿能"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "宝钢",
+      "mustInclude": [
+        "宝钢"
+      ],
+      "mustNotInclude": []
+    },
+    {
+      "name": "阳光电源",
+      "mustInclude": [
+        "阳光电源"
+      ],
+      "mustNotInclude": []
+    }
+  ],
+  "semanticPrompt": "1、通篇主要/核心资讯要点不包含油田进行勘探、开发相关的资讯信息，例如：固井、勘探，完井，钻井等，但保留利用二氧化碳驱油提高油田采收率，碳捕集碳捕获用于油田生产提高效率的资讯。\n2、通篇主要/核心资讯要点不包含入围奖项名单，获奖、得奖相关的资讯信息，例如：项目获得科技进步奖、项目获得某地方奖项信息\n3、通篇主要/核心资讯要点不包含工作会、评审会、座谈会、茶话会等跟会议相关的资讯信息\n4、通篇主要/核心资讯要点不包含获得软件著作权、申请或获取专利相关的资讯信息\n5、通篇主要/核心资讯要点不包含人事变动相关资讯，例如：转岗、上任、调任、退休、卸任等内容信息\n6、通篇主要/核心资讯要点不包含外国企业在中国之外的国家业务投资合作的资讯动态，可以包含中国企业在国外的业务、投资、合作等资讯\n7、通篇主要/核心资讯要点不包含企业领导之间单纯针对某些话题进行交流和探讨而没有实质性合作进展或者业务推进的信息\n8、通篇主要/核心资讯要点不包含项目竞配或者竞标结果的信息\n9、通篇主要/核心资讯要点不包含公司企业业绩营收等信息\n10、通篇主要/核心资讯要点不包含新能源项目或光伏电站，风力发电站等并网信息\n11、通篇主要/核心资讯要点不包含新能源车企新车发布会、上新车型或软件更新的信息\n12、通篇主要/核心资讯要点不包含电网建设等电力基础设施的相关资讯\n13、通篇主要/核心资讯要点不包含在行业大会或峰会、论坛等领导或者专家主旨演讲讲话等资讯\n14、通篇主要/核心资讯要点不包含公司领导会面、到访、调研、会见、出席大会等资讯\n14、通篇主要/核心资讯要点不包含企业更名等信息\n15、通篇主要/核心资讯要点不包含产业现状和未来发展趋势的资讯，例如电池产业、储能产业、氢能产业等\n15、通篇主要/核心资讯要点不包含车企车辆销售情况及销量变动方面的资讯",
+  "categories": [
+    {
+      "name": "移动出行",
+      "description": "1、加油站相关便利店业务，包括零售便利店、例如易捷、易捷速购、中油好客、中油好客e站、昆仑好客、昆仑好客优选+\n2、充电相关业务，包括充电桩、充电网络、充电站、快充、超充\n3、综合能源站业务，包括：加氢站、充电站、咖啡、快餐（例如麦当劳、肯德基、必胜客）、司机之家",
+      "inclusionPrompt": "资讯需满足以下至少一个条件，方可归类为“移动出行”：\n1. 能源补给设施：涉及加能站，加油站、综合能源站、加氢站、新能源汽车充电站的建设、运营、技术或市场动态。例如：充电桩、充电网络、充电站、快充、超充\n2. 便利服务：涉及加油站便利店或加油站内的其他便利业务（如食品、药店、汽车服务等）的经营、创新或新业务拓展，市场分析。例如：易捷、易捷速购、中油好客、中油好客e站、昆仑好客、昆仑好客优选+\n3. 新能源汽车：涉及电动汽车，混动车和增程车的技术、市场、政策或应用。\n4. 商用汽车与出行服务：涉及商用汽车（传统燃油车或新能源车） 的出行补能等服务。\n5. 移动出行生态：涉及与移动出行相关的技术（如自动驾驶、车联网，V2G）、基础设施（如智慧交通,补能）或政策（充电补贴，消费补贴等）\n6、动力电池相关，例如锂电池，磷酸铁锂电池，三元锂电池等\n7、物流、快递、货运，冷链物流等相关：例如冷链，冷链运输，货运等\n以下内容不归类为移动出行：\n1. 非移动出行的能源设施：如火力发电厂、光伏电站（除非明确涉及移动出行能源补给）。\n2. 与加油站，充电站和综合能源站无关的零售业务：如商场、超市、药店（除非明确位于加油站或与移动出行相关）。"
+    },
+    {
+      "name": "润滑油",
+      "description": "1、汽车后市场服务：比如洗车美容、车膜车衣、汽车维修保养、汽车服务\n2、车用润滑油：基础油、添加剂、润滑、磨损、机械部件、矿物油、合成油、黏度等级、润滑油新品、重卡润滑油、变速箱油、冷却液、制动液\n3、工业润滑油：齿轮油、浸没式冷却液、车用润滑油、工业润滑油、浸没式液冷、汽车、工业设备、船舶、航空航天、工程机械、风力发电、矿山机械、农业机械、金属加工、食品机械、基础油炼制、添加剂调配",
+      "inclusionPrompt": "资讯需满足以下至少一个条件，方可归类为“润滑油”\n1. 产品相关性：涉及润滑油（如车用润滑油、工业润滑油、特种润滑油）的生产、研发、性能或市场动态。\n2. 涉及润滑油在汽车、工业设备、机械设备或浸没式液冷系统中的应用。包含 基础油、添加剂、润滑、磨损、机械部件、矿物油、合成油、黏度等级、润滑油新品、重卡润滑油、变速箱油、冷却液、制动液，齿轮油、浸没式冷却液、车用润滑油、工业润滑油、浸没式液冷、工业设备、船舶、航空航天、工程机械、风力发电、矿山机械、农业机械、金属加工、食品机械、基础油炼制、添加剂调配\n3. 技术与配方：涉及润滑油的技术（如添加剂技术、合成油技术、润滑性能优化等）的研究、开发或应用。\n4. 市场与供应链：涉及润滑油的市场需求、价格波动、供应链管理或行业趋势。\n5. 汽车后市场服务：涉及洗车美容、车膜车衣、汽车维修保养、汽车服务; 快修快保，简修快保，综合维修，换机油，换轮胎，一站式等服务中的应用或市场分析。\n6. 浸没式液冷：涉及浸没式冷却液在数据中心浸没式液冷系统中的使用、性能或新品，技术进展。"
+    },
+    {
+      "name": "化工",
+      "description": "主要关注石油化工业务：包含乙烷裂解、石脑油、节能减碳、电气化、聚碳酸酯、聚乙烯、聚丙烯、化学合成、聚合物、减碳、乙烷裂解",
+      "inclusionPrompt": "资讯需满足以下至少一个条件，方可归类为“化工”：\n1. 行业相关性：涉及化工行业的生产、研发、市场或政策动态。\n2. 技术相关性：涉及化工技术和化工行业节能减碳以及电气化等（如化学反应、分离技术、催化技术等）的研究、开发或应用。\n3. 产品相关性：涉及化工产品（如化学品、材料、中间体等包含石脑油、聚碳酸酯、聚乙烯、聚丙烯，乙烷裂解）的生产、应用或市场资讯。"
+    },
+    {
+      "name": "生物燃料",
+      "description": "包含可再生柴油、可持续航空燃油（SAF）、绿色甲醇、生物柴油、绿色航油、绿氨、植物油脂、农林废弃物、藻类、微生物、玉米、生物炼制、生物柴油、生物乙醇、生物汽油、生物航空煤油、生物甲醇、生物丁醇、第二代生物燃料、第三代生物燃料、纤维素乙醇、藻类生物燃料、可再生性、可回收废弃油脂、生物天然气",
+      "inclusionPrompt": "资讯需满足以下至少一个条件，方可归类为“生物燃料”：\n1. 原料相关性：涉及生物燃料的原料（如粮食作物（玉米，秸秆，甘蔗）、非粮纤维素、藻类、UCO, 工业级混合油，地沟油）的生产、供应或研究。\n2. 技术相关性：涉及生物燃料的生产、转化或提纯技术（如发酵、酯化、热解、气化等）。\n3. 应用相关性：涉及生物燃料在交通、航空、工业或能源领域的应用。\n4. 政策与市场相关性：涉及生物燃料相关的政策、法规、市场动态或投资趋势。\n5.产品相关性：生物乙醇（E10、E85）、生物柴油（B20），生物航煤（SAF），生物甲醇、生物液化天然气（Bio-LNG），生物质颗粒、生物原油。生物甲烷、生物合成气。\n以下内容不归类为化工：1. 非化工行业的能源资讯：如太阳能、风能、核能（除非涉及化工材料或技术）。非化工行业的材料资讯：如金属材料、建筑材料（除非涉及化工加工或改性）"
+    },
+    {
+      "name": "电力&氢能",
+      "description": "电力业务含发电（火电、水电、风电、光电等）、输电、变电、配电、售电，保障电力供应稳定；氢能聚焦制氢（水电解等）、储氢、加氢及氢能应用开发，包含：天然气发电、风力发电、太阳能发电、光伏、分布式光伏、储能、电池、锂离子电池、独立储能、水电解制氢、化石能源制氢、生物质制氢、光解水制氢、热化学制氢、制氢设备、制氢成本、制氢效率、氢气纯度、绿色制氢、燃料电池汽车、氢燃料电池、加氢站、氢能发电、氢能储能、工业用氢、民用氢、航空航天用氢、船舶用氢、氢内燃机、能源转型、可再生能源、清洁能源、能源互联网、智能电网、虚拟电厂",
+      "inclusionPrompt": "资讯需满足以下至少一个条件，方可归类为“电力”或“氢能”：\n1. 电力相关：\n  新能源发电：涉及风能、太阳能、光伏、等可再生能源发电的技术、项目、政策或市场动态。\n  储能：涉及电池储能、抽水蓄能、压缩空气储能等技术的研发、应用或市场分析。\n 储能电池： 锂电池，磷酸铁锂电池和三元锂电池\n锂电相关：例如锂电产业，磷酸铁锂、磷酸锰铁锂、固态电池、钠离子电池\n电池企业相关资讯：例如宁德时代、阳光电源、亿纬锂能、远景动力、瑞浦兰钧等\n  电力市场交易：涉及电力现货市场、绿电交易、虚拟电厂。碳市场等交易机制或价格波动。\n新能源项目： 包含新能源发电，风力发电，太阳能发电，光伏发电，项目等\n2. 氢能相关：\n  绿氢：涉及通过可再生能源电解水制氢的技术、项目、政策或市场动态。\n储氢相关产品、研究或进展\n  绿氨/绿醇：涉及以绿氢为原料生产的绿氨、绿醇在工业或交通领域的应用。\n  氢能应用：涉及氢能在交通（如氢燃料电池汽车）、工业（如炼钢、化工）例如：加氢站、氢能发电、氢能储能、工业用氢、民用氢、航空航天用氢、船舶用氢、氢内燃机，等领域的技术、项目或市场分析。"
+    },
+    {
+      "name": "LNG/天然气",
+      "description": "主要关注LNG（液化天然气）相关的贸易、基础设施，例如：LNG接收站、LNG贸易合约、LNG长协、HoA（head of agreement）、SPA（sale and purchase agreement）、LNG购销协议、煤改气、接收站、槽批",
+      "inclusionPrompt": "资讯需满足以下至少一个条件，方可归类为“液化天然气（LNG）/天然气”：\n1. 行业相关性：涉及LNG或天然气行业的生产、运输、储存、销售或政策动态。\n2. 技术相关性：涉及LNG或天然气的技术（如液化技术、气化技术、储运技术等）的研究、开发或应用。\n3. 市场与贸易：涉及LNG或天然气的市场价格、供需关系、贸易动态或投资趋势。例如： LNG贸易合约、LNG长协、HoA（head of agreement）、SPA（sale and purchase agreement）、LNG购销协议、煤改气、接收站、槽批\n4. 基础设施：涉及LNG或天然气的基础设施（如液化厂、接收站、管道、储罐等）的建设、运营或维护。\n5. 应用场景：涉及LNG或天然气在能源、工业、交通等领域的应用。"
+    },
+    {
+      "name": "CCS",
+      "description": "CCS碳捕获与封存技术，包含化学链燃烧、生物质能碳捕捉、直接空气捕捉、革新性碳捕捉材料、碳纳米管捕捉、金属有机骨架捕捉、碳捕捉、二氧化碳、封存、地质构造、碳排放、CCS项目、碳捕捉、碳采集、碳封存、碳信用、地质封存、海洋封存、矿物封存、枯竭油气田封存、咸水层封存、玄武岩层封存、二氧化碳注入",
+      "inclusionPrompt": "资讯需满足以下至少一个条件，方可归类为“CCS”或“CCUS”：\n1. 技术相关性：涉及碳捕捉、碳运输、碳封存或碳利用技术的研发、应用或突破。\n2. 项目与实施：涉及CCS/CCUS项目的建设、运营、进展或成果。\n3. 政策与市场：涉及CCS/CCUS相关的政策、法规、市场动态或投资趋势。\n4. 环境影响与经济性：涉及CCS/CCUS技术的环境影响评估（如减排效果）或经济性分析（如成本降低路径）。\n5. 行业应用：涉及CCS/CCUS在能源、工业、交通等领域的应用案例或潜力分析。"
+    },
+    {
+      "name": "收并购",
+      "description": "1、业务描述：企业通过购买股权、资产等方式取得目标企业控制权或整合资源，实现业务拓展、优势互补、市场份额扩大，包含尽职调查、估值谈判、交易结构设计、整合规划等流程。\n2、包含：收并购、股权收购、资产收购、尽职调查、估值、整合规划、投资、合资、股权收购、收购方、被收购方、战略投资者、财务投资者",
+      "inclusionPrompt": "资讯内容需满足以下至少一项条件，方可归类为收并购相关资讯：\n1. 交易主体明确：\n资讯中明确提及至少两家公司或实体，其中一方为收购方，另一方为被收购方。\n收购方可以是公司、私募股权基金、个人投资者等。\n被收购方可以是公司、子公司、业务部门、资产等。\n2. 交易行为明确：\n资讯中明确提及以下交易行为之一：例如收购, 并购,合并 ,股权收购, 资产收购, 要约收购, 私有化,反向收购, 杠杆收购, 管理层收购，合资，以及 其他明确表示控制权转移的交易行为。\n3. 交易进展明确：\n 资讯中明确提及以下交易进展之一：交易意向， 交易谈判，交易达成协议， 交易完成， 交易失败， 交易终止，交易监管审批\n交易反垄断审查以及其他与交易进展相关的信息。"
+    },
+    {
+      "name": "战略合作",
+      "description": "1、业务描述：企业与合作伙伴基于共同目标，在技术、市场、产品等领域深度协作，共享资源、共担风险、互利共赢，形式有技术研发合作、联合营销、产业链协同等。\n2、包含：联合研发、技术授权、共建实验室、资源共享、战略联盟、合作协议、交叉持股、项目合作、协同创新、产业协同、市场拓展、供应链整合、品牌联名、数据共享、委托加工、产能合作",
+      "inclusionPrompt": "资讯内容需满足以下至少一项条件，方可归类为战略合作相关资讯：\n1. 合作主体明确：\n资讯中明确提及至少两家公司或实体，双方或多方达成合作关系。\n合作方可以是公司、政府机构、非营利组织、学术机构等。\n2. 合作性质明确：\n资讯中明确提及以下合作性质之一：战略合作， 战略联盟， 合作协议， 联合研发， 联合营销， 联合生产， 联合投资 等其他明确表示长期、深度合作的合作关系。\n3. 合作领域明确：\n资讯中明确提及以下合作领域之一：技术合作， 产品合作，市场合作，渠道合作，供应链合作，   研发合作，资本合作以及 其他明确表示合作的具体领域。\n4. 合作目标或影响：资讯中分析或提及合作的目标、目的、影响等，例如：   * 提升技术水平，拓展市场份额，降低运营成本，增强竞争力， 实现资源共享，推动行业发展\n例外情况： 资讯内容仅提及公司名称，但未提及任何合作行为或目标，则不归类为战略合作相关资讯。资讯内容仅提及行业发展趋势，但未提及具体公司或合作，则不归类为战略合作相关资讯。"
+    }
+  ],
+  "sources": [
+    {
+      "name": "嘉实多",
+      "type": "wechat",
+      "identifier": "castrolchina"
+    },
+    {
+      "name": "AC汽车",
+      "type": "wechat",
+      "identifier": "acqiche"
+    },
+    {
+      "name": "润滑油聚焦",
+      "type": "wechat",
+      "identifier": "RUNHUAYOUJUJIAO"
+    },
+    {
+      "name": "CCUS和BDO",
+      "type": "wechat",
+      "identifier": "CCUSBDO"
+    },
+    {
+      "name": "铂道",
+      "type": "wechat",
+      "identifier": "PGMsTAO"
+    },
+    {
+      "name": "北极星储能网",
+      "type": "wechat",
+      "identifier": "bjx-chuneng"
+    },
+    {
+      "name": "奥动新能源",
+      "type": "wechat",
+      "identifier": "Aulton0726"
+    },
+    {
+      "name": "储能与电力市场",
+      "type": "wechat",
+      "identifier": "EnergyStorageMarket"
+    },
+    {
+      "name": "CATL宁德时代",
+      "type": "wechat",
+      "identifier": "CATLMarketing"
+    },
+    {
+      "name": "电动知家",
+      "type": "wechat",
+      "identifier": "ev_home"
+    },
+    {
+      "name": "电动汽车百人会",
+      "type": "wechat",
+      "identifier": "ChinaEV100"
+    },
+    {
+      "name": "SABIC沙特基础工业公司",
+      "type": "wechat",
+      "identifier": "SABIC-GC"
+    },
+    {
+      "name": "宁家服务",
+      "type": "wechat",
+      "identifier": "CATL-AMD2"
+    },
+    {
+      "name": "中国化工报",
+      "type": "wechat",
+      "identifier": "wxccin"
+    },
+    {
+      "name": "中国汽车报",
+      "type": "wechat",
+      "identifier": "zhongguoqichebao"
+    },
+    {
+      "name": "统一润滑油订阅号",
+      "type": "wechat",
+      "identifier": "gh_ac92625d43a9"
+    },
+    {
+      "name": "福斯润滑油",
+      "type": "wechat",
+      "identifier": "gh_f389cd0b2325"
+    },
+    {
+      "name": "福斯车福天下",
+      "type": "wechat",
+      "identifier": "fschefutianxia"
+    },
+    {
+      "name": "道达尔润滑油",
+      "type": "wechat",
+      "identifier": "TOTALLUBRICANTS"
+    }
+  ]
+}

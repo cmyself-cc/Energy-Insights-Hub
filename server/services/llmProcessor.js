@@ -1,4 +1,5 @@
 import { buildCategoryPrompt } from "./businessCategories.js";
+import { fetchWithTimeout } from "../crawlers/utils.js";
 import db from "../db.js";
 
 export function loadSemanticConfig() {
@@ -102,11 +103,11 @@ If the content is not related to energy or matches the semantic exclusions, set 
   const { url, headers, body } = buildRequest(config, messages, 1500, 0.5);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body)
-    });
+    }, 30000);
 
     if (!response.ok) {
       throw new Error(`LLM API failed: ${response.status}`);
