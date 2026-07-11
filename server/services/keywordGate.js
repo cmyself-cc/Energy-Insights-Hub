@@ -22,6 +22,9 @@ export function applyKeywordGate(items, context) {
   const requiredCompanyKeywords = parseList(context.requiredCompanyKeywords);
   const compositeRules = context.compositeRules || [];
 
+  const hasIndustryGate = requiredIndustryKeywords.length > 0;
+  const hasCompanyGate = requiredCompanyKeywords.length > 0 || compositeRules.length > 0;
+
   const kept = [];
   let excluded = 0;
 
@@ -43,19 +46,16 @@ export function applyKeywordGate(items, context) {
       continue;
     }
 
-    if (requiredIndustryKeywords.length && !containsAny(text, requiredIndustryKeywords)) {
-      excluded++;
-      continue;
-    }
+    if (hasIndustryGate || hasCompanyGate) {
+      const industryMatch = hasIndustryGate && containsAny(text, requiredIndustryKeywords);
+      const companyMatch =
+        (requiredCompanyKeywords.length && containsAny(text, requiredCompanyKeywords)) ||
+        (compositeRules.length && compositeRules.some(rule => matchesComposite(item, rule)));
 
-    if (requiredCompanyKeywords.length && !containsAny(text, requiredCompanyKeywords)) {
-      excluded++;
-      continue;
-    }
-
-    if (compositeRules.length && !compositeRules.some(rule => matchesComposite(item, rule))) {
-      excluded++;
-      continue;
+      if (!industryMatch && !companyMatch) {
+        excluded++;
+        continue;
+      }
     }
 
     kept.push(item);

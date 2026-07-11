@@ -33,9 +33,9 @@ export function parseJsonConfig(payload) {
     sources: (payload.sources || []).map(s => ({
       name: s.name,
       identifier: s.identifier || null,
-      type: s.type,
-      url: s.url || "",
-      config: s.config ? JSON.stringify(s.config) : null
+      type: s.type === "wechat" ? "wechat_mcp" : s.type,
+      url: s.type === "wechat" ? (process.env.WECHAT_MCP_URL || "http://192.168.5.134:4001/sse") : (s.url || ""),
+      config: s.config ? JSON.stringify(s.config) : (s.type === "wechat" ? JSON.stringify({ articleLimit: 20 }) : null)
     })).filter(s => s.name && s.type)
   };
 }
@@ -45,6 +45,7 @@ function buildPythonScript() {
     "import pandas as pd",
     "import json",
     "import sys",
+    "import os",
     "",
     "input_path = sys.argv[1]",
     "output_path = sys.argv[2]",
@@ -124,20 +125,15 @@ function buildPythonScript() {
     "        if media == '微信公众号':",
     "            sources.append({",
     "                'name': name,",
-    "                'type': 'wechat',",
-    "                'identifier': identifier",
+    "                'type': 'wechat_mcp',",
+    "                'url': os.environ.get('WECHAT_MCP_URL', 'http://192.168.5.134:4001/sse'),",
+    "                'config': {'articleLimit': 20}",
     "            })",
-    "        elif website:",
+    "        elif website and (website.startswith('http://') or website.startswith('https://')):",
     "            sources.append({",
     "                'name': website,",
     "                'type': 'website',",
     "                'url': website",
-    "            })",
-    "        elif identifier:",
-    "            sources.append({",
-    "                'name': name,",
-    "                'type': 'website',",
-    "                'url': identifier",
     "            })",
     "    result['sources'] = sources",
     "",

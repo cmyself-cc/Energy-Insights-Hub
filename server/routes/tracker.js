@@ -52,7 +52,27 @@ router.post("/import-config", (req, res) => {
     const buffer = Buffer.from(req.body.file, "base64");
     const parsed = parseConfigFile(buffer, req.body.filename || "config.json");
     const mode = req.body.mode || "append";
-    const normalizedSources = parsed.sources.map(normalizeImportType);
+
+    // Aggregate multiple WeChat MCP accounts into a single MCP source to avoid duplication.
+    const mcpUrlNames = new Map();
+    const nonMcpSources = [];
+    for (const s of parsed.sources) {
+      if (s.type === "wechat_mcp") {
+        if (!mcpUrlNames.has(s.url)) {
+          mcpUrlNames.set(s.url, []);
+        }
+        mcpUrlNames.get(s.url).push(s.name);
+      } else {
+        nonMcpSources.push(s);
+      }
+    }
+    const aggregatedMcpSources = Array.from(mcpUrlNames.entries()).map(([url, names]) => ({
+      name: `微信公众号聚合 (${names.length}个账号)`,
+      type: "wechat_mcp",
+      url,
+      config: JSON.stringify({ articleLimit: 20 })
+    }));
+    const normalizedSources = [...nonMcpSources, ...aggregatedMcpSources].map(normalizeImportType);
 
     const insertRule = db.prepare(
       "INSERT INTO filter_rules (type, name, must_include, must_exclude, active, priority) VALUES (?, ?, ?, ?, 1, 0)"
