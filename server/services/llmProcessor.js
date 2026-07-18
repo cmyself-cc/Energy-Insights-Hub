@@ -142,7 +142,8 @@ If the content is not related to energy or matches the semantic exclusions, set 
       enterpriseType: "",
       entities: [],
       features: [],
-      categories: []
+      categories: [],
+      llmFailed: true
     };
   }
 }

@@ -141,7 +141,11 @@ export async function runTracker(runId = null) {
           const processed = await processBatch(candidates, LANGUAGE);
           const kept = applyPostFilter(processed, settings)
             .filter(insight => insight.title && insight.title.trim() !== "")
-            .filter(insight => classificationEnabled ? matchesEnabledCategory(insight, activeCategories) : true);
+            .filter(insight => {
+              if (!classificationEnabled) return true;
+              if (insight.llmFailed) return true;
+              return matchesEnabledCategory(insight, activeCategories);
+            });
           console.log(`[tracker] Source ${source.name}: ${kept.length} insights after post-filter`);
           if (kept.length > 0) {
             const insert = db.prepare(
