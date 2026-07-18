@@ -4,6 +4,7 @@ import { execFileSync } from "child_process";
 import path from "path";
 import os from "os";
 import fs from "fs";
+import { seedPurposePrompts } from "./seedPurposePrompts.js";
 
 function runPython(script) {
   const tmpDir = os.tmpdir();
@@ -76,3 +77,6 @@ tx();
 
 const counts = db.prepare("SELECT purpose, type, COUNT(*) as cnt FROM filter_rules GROUP BY purpose, type").all();
 console.log(JSON.stringify(counts, null, 2));
+
+seedPurposePrompts();
+console.log(JSON.stringify(db.prepare("SELECT id, purpose, active FROM filter_config WHERE type = 'semantic'").all(), null, 2));

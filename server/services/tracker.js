@@ -106,10 +106,23 @@ export async function runTracker(runId = null) {
       if (newItems.length === 0) { successCount++; continue; }
 
       // Get purposes for this source
-      const sourcePurposes = (source.purpose || "competitor").split(",").map(s => s.trim()).filter(Boolean);
-      const sourceRules = {};
-      for (const p of sourcePurposes) {
-        if (groupedRules[p]) sourceRules[p] = groupedRules[p];
+      const sourcePurposes = (source.purpose || "").split(",").map(s => s.trim()).filter(Boolean);
+      let sourceRules;
+      if (sourcePurposes.length === 0) {
+        // Untagged source: gate with ALL rules (backward compatible)
+        sourceRules = groupedRules;
+      } else {
+        sourceRules = {};
+        for (const p of sourcePurposes) {
+          if (groupedRules[p]) sourceRules[p] = groupedRules[p];
+        }
+        if (Object.keys(sourceRules).length === 0) {
+          // The source's purpose(s) have no active rules (e.g. purpose disabled in
+          // Tracker Settings): skip the source instead of letting everything through.
+          console.log(`[tracker] Source ${source.name}: skipped, no active rules for purpose(s) ${sourcePurposes.join(", ")}`);
+          successCount++;
+          continue;
+        }
       }
 
       // Keyword gate with purpose-specific rules

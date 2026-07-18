@@ -11,14 +11,41 @@ export function loadFilterRules(purpose = null) {
     .all();
 }
 
+export const PURPOSES = ["competitor", "policy", "tech"];
+
+function emptyBucket() {
+  return { enterprise: [], include_keyword: [], exclude_keyword: [] };
+}
+
+function addRule(bucket, rule) {
+  if (rule.type === "enterprise") bucket.enterprise.push(rule.name);
+  else if (rule.type === "include_keyword") bucket.include_keyword.push(rule.name);
+  else if (rule.type === "exclude_keyword") bucket.exclude_keyword.push(rule.name);
+}
+
 export function groupRulesByPurpose(rules) {
   const grouped = {};
+  const global = emptyBucket(); // rules with purpose = '' apply to every purpose
   for (const rule of rules) {
-    const p = rule.purpose || "competitor";
-    if (!grouped[p]) grouped[p] = { enterprise: [], include_keyword: [], exclude_keyword: [] };
-    if (rule.type === "enterprise") grouped[p].enterprise.push(rule.name);
-    else if (rule.type === "include_keyword") grouped[p].include_keyword.push(rule.name);
-    else if (rule.type === "exclude_keyword") grouped[p].exclude_keyword.push(rule.name);
+    if (rule.purpose) {
+      if (!grouped[rule.purpose]) grouped[rule.purpose] = emptyBucket();
+      addRule(grouped[rule.purpose], rule);
+    } else {
+      addRule(global, rule);
+    }
+  }
+  const hasGlobal = global.enterprise.length || global.include_keyword.length || global.exclude_keyword.length;
+  if (hasGlobal) {
+    // Global rules merge into every existing purpose bucket; if no purpose-specific
+    // rules exist at all, they stand alone under each known purpose.
+    if (Object.keys(grouped).length === 0) {
+      for (const p of PURPOSES) grouped[p] = emptyBucket();
+    }
+    for (const bucket of Object.values(grouped)) {
+      bucket.enterprise.push(...global.enterprise);
+      bucket.include_keyword.push(...global.include_keyword);
+      bucket.exclude_keyword.push(...global.exclude_keyword);
+    }
   }
   return grouped;
 }
