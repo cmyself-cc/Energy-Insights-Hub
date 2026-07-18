@@ -3,12 +3,35 @@ import db from "../db.js";
 
 const router = Router();
 
+function safeJson(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function parseRow(row) {
   if (!row) return row;
   return {
-    ...row,
-    entities: row.entities ? JSON.parse(row.entities) : [],
-    features: row.features ? JSON.parse(row.features) : []
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    url: row.url,
+    date: row.publish_date,
+    publishDate: row.publish_date,
+    sourceId: row.source_id,
+    source: row.source_name || row.source_id,
+    sourceType: row.source_type,
+    businessDomain: row.business_domain,
+    enterpriseType: row.enterprise_type,
+    entities: safeJson(row.entities),
+    features: safeJson(row.features),
+    categories: safeJson(row.categories),
+    rawContent: row.raw_content,
+    hidden: row.hidden
   };
 }
 
@@ -65,9 +88,9 @@ router.get("/", (req, res) => {
     const limit = parseInt(pageSize, 10);
     const offset = (parseInt(page, 10) - 1) * limit;
 
-    const countRow = db.prepare(`SELECT COUNT(*) as total FROM insights WHERE ${where}`).get(...params);
+    const countRow = db.prepare(`SELECT COUNT(*) as total FROM insights i WHERE ${where}`).get(...params);
     const rows = db.prepare(
-      `SELECT * FROM insights WHERE ${where} ORDER BY publish_date DESC, id DESC LIMIT ? OFFSET ?`
+      `SELECT i.*, s.name as source_name FROM insights i LEFT JOIN sources s ON i.source_id = s.id WHERE ${where} ORDER BY i.publish_date DESC, i.id DESC LIMIT ? OFFSET ?`
     ).all(...params, limit, offset);
 
     res.json({

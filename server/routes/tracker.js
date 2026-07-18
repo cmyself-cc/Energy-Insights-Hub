@@ -96,17 +96,16 @@ router.post("/import-config", (req, res) => {
               .map(r => r.must_exclude)
           )
         : new Set();
-    const existingCompositeRules =
+    const existingEnterpriseRules =
       mode === "append"
-        ? new Set(
-            db.prepare("SELECT must_include, must_exclude FROM filter_rules WHERE type = 'composite' AND active = 1")
-              .all()
-              .map(r => `${r.must_include}||${r.must_exclude}`)
-          )
+        ? new Set(db.prepare("SELECT name FROM filter_rules WHERE type = 'enterprise'").all().map(r => r.name))
+        : new Set();
+    const existingIncludeRules =
+      mode === "append"
+        ? new Set(db.prepare("SELECT name FROM filter_rules WHERE type = 'include_keyword'").all().map(r => r.name))
         : new Set();
 
     let categoriesImported = 0;
-
     let rulesImported = 0;
 
     const tx = db.transaction(() => {
@@ -121,10 +120,14 @@ router.post("/import-config", (req, res) => {
         insertRule.run("exclude_keyword", k, "[]", mustExclude);
         rulesImported++;
       }
-      for (const r of parsed.compositeRules) {
-        const compositeKey = `${r.must_include}||${r.must_exclude}`;
-        if (mode === "append" && existingCompositeRules.has(compositeKey)) continue;
-        insertRule.run(r.type, r.name, r.must_include, r.must_exclude);
+      for (const k of parsed.enterpriseKeywords || []) {
+        if (mode === "append" && existingEnterpriseRules.has(k)) continue;
+        insertRule.run("enterprise", k, "[]", "[]");
+        rulesImported++;
+      }
+      for (const k of parsed.includeKeywords || []) {
+        if (mode === "append" && existingIncludeRules.has(k)) continue;
+        insertRule.run("include_keyword", k, "[]", "[]");
         rulesImported++;
       }
       for (const c of parsed.categories) {

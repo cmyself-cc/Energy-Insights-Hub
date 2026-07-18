@@ -58,7 +58,8 @@ export function parseContentFiltersCsv(text) {
   const rows = parseCsv(text);
   const result = {
     excludeKeywords: [],
-    compositeRules: [],
+    enterpriseKeywords: [],
+    includeKeywords: [],
     semanticPrompt: "",
     categories: []
   };
@@ -70,16 +71,12 @@ export function parseContentFiltersCsv(text) {
     } else if (type === "keyword" || type === "exclude_keyword") {
       const name = (row.name || "").trim();
       if (name) result.excludeKeywords.push(name);
-    } else if (type === "composite") {
-      const include = (row.include || "").split(";").map(s => s.trim()).filter(Boolean);
-      const exclude = (row.exclude || "").split(";").map(s => s.trim()).filter(Boolean);
-      if (include.length > 0) {
-        result.compositeRules.push({
-          name: (row.name || "").trim() || null,
-          mustInclude: include,
-          mustNotInclude: exclude
-        });
-      }
+    } else if (type === "enterprise") {
+      const name = (row.name || "").trim();
+      if (name) result.enterpriseKeywords.push(name);
+    } else if (type === "include_keyword") {
+      const name = (row.name || "").trim();
+      if (name) result.includeKeywords.push(name);
     } else if (type === "category") {
       const name = (row.name || "").trim();
       if (name) {
@@ -110,13 +107,10 @@ export function buildContentFiltersCsv(rules, categories, semanticConfig) {
     active: ""
   });
 
-  (rules || []).filter(r => r.type === "exclude_keyword").forEach(r => {
-    const keyword = Array.isArray(r.must_exclude)
-      ? r.must_exclude[0]
-      : (r.name || "");
+  (rules || []).filter(r => r.type === "enterprise").forEach(r => {
     rows.push({
-      type: "keyword",
-      name: keyword,
+      type: "enterprise",
+      name: r.name || "",
       include: "",
       exclude: "",
       description: "",
@@ -125,14 +119,27 @@ export function buildContentFiltersCsv(rules, categories, semanticConfig) {
     });
   });
 
-  (rules || []).filter(r => r.type === "composite").forEach(r => {
-    const include = Array.isArray(r.must_include) ? r.must_include.join(";") : r.must_include;
-    const exclude = Array.isArray(r.must_exclude) ? r.must_exclude.join(";") : r.must_exclude;
+  (rules || []).filter(r => r.type === "include_keyword").forEach(r => {
     rows.push({
-      type: "composite",
+      type: "include_keyword",
       name: r.name || "",
-      include,
-      exclude,
+      include: "",
+      exclude: "",
+      description: "",
+      prompt: "",
+      active: ""
+    });
+  });
+
+  (rules || []).filter(r => r.type === "exclude_keyword").forEach(r => {
+    const keyword = Array.isArray(r.must_exclude) && r.must_exclude.length > 0
+      ? r.must_exclude[0]
+      : (r.name || "");
+    rows.push({
+      type: "keyword",
+      name: keyword,
+      include: "",
+      exclude: "",
       description: "",
       prompt: "",
       active: ""

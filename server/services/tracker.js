@@ -103,11 +103,16 @@ export async function runTracker(runId = null) {
       console.log(`[tracker] Source ${source.name}: fetched ${items.length}, new ${newItems.length}`);
 
       if (newItems.length > 0) {
+        const enterpriseKeywords = filterRules.filter(r => r.type === "enterprise").map(r => r.name);
+        const includeKeywords = filterRules.filter(r => r.type === "include_keyword").map(r => r.name);
+        const excludeRuleKeywords = filterRules.filter(r => r.type === "exclude_keyword").map(r => r.name);
         const gate = applyKeywordGate(newItems, {
           excludeKeywords: settings.excludeKeywords,
           requiredIndustryKeywords: settings.requiredIndustryKeywords,
           requiredCompanyKeywords: settings.requiredCompanyKeywords,
-          compositeRules: filterRules.filter(r => r.type === "composite")
+          enterpriseKeywords,
+          includeKeywords,
+          excludeRuleKeywords
         });
         console.log(`[tracker] Source ${source.name}: ${gate.kept.length} items after keyword gate (${gate.excluded} excluded)`);
         if (gate.kept.length === 0) {

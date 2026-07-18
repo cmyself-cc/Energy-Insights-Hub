@@ -1,8 +1,4 @@
-import { matchesExclusion, matchesComposite } from "./filterRules.js";
-
-function getSearchText(item) {
-  return `${item.title || ""} ${item.summary || ""}`.toLowerCase();
-}
+import { matchesAnyKeyword } from "./filterRules.js";
 
 function parseList(value) {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -12,18 +8,19 @@ function parseList(value) {
   return [];
 }
 
-function containsAny(text, keywords) {
-  return parseList(keywords).some(k => text.includes(k.toLowerCase()));
-}
-
 export function applyKeywordGate(items, context) {
   const excludeKeywords = parseList(context.excludeKeywords);
   const requiredIndustryKeywords = parseList(context.requiredIndustryKeywords);
   const requiredCompanyKeywords = parseList(context.requiredCompanyKeywords);
-  const compositeRules = context.compositeRules || [];
+  const enterpriseKeywords = context.enterpriseKeywords || [];
+  const includeKeywords = context.includeKeywords || [];
+  const excludeRuleKeywords = context.excludeRuleKeywords || [];
 
   const hasIndustryGate = requiredIndustryKeywords.length > 0;
-  const hasCompanyGate = requiredCompanyKeywords.length > 0 || compositeRules.length > 0;
+  const hasCompanyGate = requiredCompanyKeywords.length > 0;
+  const hasEnterpriseGate = enterpriseKeywords.length > 0;
+  const hasIncludeGate = includeKeywords.length > 0;
+  const hasExcludeGate = excludeRuleKeywords.length > 0;
 
   const kept = [];
   let excluded = 0;
@@ -34,25 +31,29 @@ export function applyKeywordGate(items, context) {
       continue;
     }
 
-    const text = getSearchText(item);
-
-    if (excludeKeywords.length && containsAny(text, excludeKeywords)) {
+    // 1. Global exclude keywords (tracker_settings)
+    if (excludeKeywords.length && matchesAnyKeyword(item, excludeKeywords)) {
       excluded++;
       continue;
     }
 
-    if (compositeRules.some(rule => matchesExclusion(item, rule))) {
+    // 2. Exclude rule keywords (filter_rules.type=exclude_keyword)
+    if (hasExcludeGate && matchesAnyKeyword(item, excludeRuleKeywords)) {
       excluded++;
       continue;
     }
 
-    if (hasIndustryGate || hasCompanyGate) {
-      const industryMatch = hasIndustryGate && containsAny(text, requiredIndustryKeywords);
-      const companyMatch =
-        (requiredCompanyKeywords.length && containsAny(text, requiredCompanyKeywords)) ||
-        (compositeRules.length && compositeRules.some(rule => matchesComposite(item, rule)));
+    // 3. Three-layer progressive structure:
+    //    (enterprise OR ...) AND (include OR ...) AND NOT (exclude OR ...)
+    const enterpriseMatch = hasEnterpriseGate && matchesAnyKeyword(item, enterpriseKeywords);
+    const includeMatch = hasIncludeGate && matchesAnyKeyword(item, includeKeywords);
+    const companyMatch = hasCompanyGate && matchesAnyKeyword(item, requiredCompanyKeywords);
 
-      if (!industryMatch && !companyMatch) {
+    // At least one of the three layers must be configured to apply the gate
+    if (hasEnterpriseGate || hasIncludeGate || hasCompanyGate || hasIndustryGate) {
+      const anyMatch = enterpriseMatch || includeMatch || companyMatch ||
+        (hasIndustryGate && matchesAnyKeyword(item, requiredIndustryKeywords));
+      if (!anyMatch) {
         excluded++;
         continue;
       }

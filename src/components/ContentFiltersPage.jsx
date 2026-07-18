@@ -4,19 +4,6 @@ import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 import { parseContentFiltersCsv, buildContentFiltersCsv, downloadCsv } from "../utils/csvConfig";
 
-function parseJsonArray(value) {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) return parsed;
-    } catch {
-      return value.split(",").map(s => s.trim()).filter(Boolean);
-    }
-  }
-  return [];
-}
-
 export default function ContentFiltersPage({ darkMode, language }) {
   const t = i18n[language]?.contentFilters || i18n.en.contentFilters;
   const [rules, setRules] = useState([]);
@@ -29,18 +16,9 @@ export default function ContentFiltersPage({ darkMode, language }) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  const [newKeyword, setNewKeyword] = useState("");
   const [editingKeyword, setEditingKeyword] = useState(null);
   const [editKeywordValue, setEditKeywordValue] = useState("");
-
-  const [ruleForm, setRuleForm] = useState({
-    name: "",
-    mustInclude: "",
-    mustExclude: "",
-    priority: "0"
-  });
-  const [editingRule, setEditingRule] = useState(null);
-  const [editRuleForm, setEditRuleForm] = useState({ name: "", mustInclude: "", mustExclude: "", priority: "0" });
+  const [newKeywordForType, setNewKeywordForType] = useState({});
 
   const [editingCategory, setEditingCategory] = useState(null);
   const [editCategoryForm, setEditCategoryForm] = useState({ description: "", prompt: "" });
@@ -60,13 +38,7 @@ export default function ContentFiltersPage({ darkMode, language }) {
     outline: "none"
   };
 
-  const labelStyle = {
-    display: "block",
-    marginBottom: 6,
-    fontSize: FONT_SIZES.sm,
-    color: secondaryText,
-    fontWeight: 500
-  };
+
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -104,7 +76,8 @@ export default function ContentFiltersPage({ darkMode, language }) {
 
       const payload = {
         excludeKeywords: parsed.excludeKeywords,
-        compositeRules: parsed.compositeRules,
+        enterpriseKeywords: parsed.enterpriseKeywords || [],
+        includeKeywords: parsed.includeKeywords || [],
         semanticPrompt: parsed.semanticPrompt,
         categories: parsed.categories,
         sources: []
@@ -147,19 +120,21 @@ export default function ContentFiltersPage({ darkMode, language }) {
     document.body.removeChild(a);
   };
 
-  const addKeyword = async (e) => {
-    e.preventDefault();
-    if (!newKeyword.trim()) return;
+
+
+  const addTypedKeyword = async (type) => {
+    const value = (newKeywordForType[type] || "").trim();
+    if (!value) return;
     try {
       await backendApi.createFilterRule({
-        type: "exclude_keyword",
-        name: newKeyword.trim(),
+        type,
+        name: value,
         mustInclude: [],
-        mustExclude: [newKeyword.trim()],
+        mustExclude: type === "exclude_keyword" ? [value] : [],
         active: true,
         priority: 0
       });
-      setNewKeyword("");
+      setNewKeywordForType(prev => ({ ...prev, [type]: "" }));
       loadAll();
       showMessage("success", t.keywordAdded);
     } catch (err) {
@@ -167,7 +142,7 @@ export default function ContentFiltersPage({ darkMode, language }) {
     }
   };
 
-  const deleteKeyword = async (id) => {
+  const deleteTypedKeyword = async (id) => {
     if (!confirm(t.confirmDelete)) return;
     try {
       await backendApi.deleteFilterRule(id);
@@ -177,13 +152,12 @@ export default function ContentFiltersPage({ darkMode, language }) {
     }
   };
 
-  const startEditKeyword = (rule) => {
-    const keyword = parseJsonArray(rule.must_exclude)[0] || rule.name;
+  const startEditTypedKeyword = (rule) => {
     setEditingKeyword(rule.id);
-    setEditKeywordValue(keyword);
+    setEditKeywordValue(rule.name || "");
   };
 
-  const saveKeyword = async (id) => {
+  const saveTypedKeyword = async (id) => {
     const rule = rules.find(r => r.id === id);
     if (!rule) return;
     const value = editKeywordValue.trim();
@@ -192,70 +166,13 @@ export default function ContentFiltersPage({ darkMode, language }) {
       await backendApi.updateFilterRule(id, {
         name: value,
         mustInclude: [],
-        mustExclude: [value],
+        mustExclude: rule.type === "exclude_keyword" ? [value] : [],
         active: true,
         priority: rule.priority || 0
       });
       setEditingKeyword(null);
       loadAll();
       showMessage("success", t.keywordUpdated);
-    } catch (err) {
-      showMessage("error", err.message);
-    }
-  };
-
-  const addCompositeRule = async (e) => {
-    e.preventDefault();
-    if (!ruleForm.mustInclude.trim()) return;
-    try {
-      await backendApi.createFilterRule({
-        type: "composite",
-        name: ruleForm.name.trim() || null,
-        mustInclude: ruleForm.mustInclude.split(";").map(s => s.trim()).filter(Boolean),
-        mustExclude: ruleForm.mustExclude.split(";").map(s => s.trim()).filter(Boolean),
-        active: true,
-        priority: Number(ruleForm.priority) || 0
-      });
-      setRuleForm({ name: "", mustInclude: "", mustExclude: "", priority: "0" });
-      loadAll();
-      showMessage("success", t.ruleAdded);
-    } catch (err) {
-      showMessage("error", `${t.saveFailed}: ${err.message}`);
-    }
-  };
-
-  const deleteCompositeRule = async (id) => {
-    if (!confirm(t.confirmDelete)) return;
-    try {
-      await backendApi.deleteFilterRule(id);
-      loadAll();
-    } catch (err) {
-      showMessage("error", err.message);
-    }
-  };
-
-  const startEditRule = (rule) => {
-    setEditingRule(rule.id);
-    setEditRuleForm({
-      name: rule.name || "",
-      mustInclude: parseJsonArray(rule.must_include).join(";"),
-      mustExclude: parseJsonArray(rule.must_exclude).join(";"),
-      priority: String(rule.priority || 0)
-    });
-  };
-
-  const saveRule = async (id) => {
-    try {
-      await backendApi.updateFilterRule(id, {
-        name: editRuleForm.name.trim() || null,
-        mustInclude: editRuleForm.mustInclude.split(";").map(s => s.trim()).filter(Boolean),
-        mustExclude: editRuleForm.mustExclude.split(";").map(s => s.trim()).filter(Boolean),
-        active: true,
-        priority: Number(editRuleForm.priority) || 0
-      });
-      setEditingRule(null);
-      loadAll();
-      showMessage("success", t.ruleUpdated);
     } catch (err) {
       showMessage("error", err.message);
     }
@@ -310,8 +227,9 @@ export default function ContentFiltersPage({ darkMode, language }) {
     }
   };
 
+  const enterpriseKeywords = rules.filter(r => r.type === "enterprise");
+  const includeKeywords = rules.filter(r => r.type === "include_keyword");
   const excludeKeywords = rules.filter(r => r.type === "exclude_keyword");
-  const compositeRules = rules.filter(r => r.type === "composite");
 
   if (loading) {
     return <div style={{ color: darkMode ? "#888" : "#aaa", padding: 40 }}>{t.loading}</div>;
@@ -415,266 +333,99 @@ export default function ContentFiltersPage({ darkMode, language }) {
         padding: "16px 20px",
         marginBottom: 20
       }}>
-        <h3 style={{ margin: "0 0 12px", color: darkMode ? "#fff" : COLORS.text.primary }}>{t.excludeKeywords}</h3>
-        <form onSubmit={addKeyword} style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-          <input
-            type="text"
-            value={newKeyword}
-            onChange={(e) => setNewKeyword(e.target.value)}
-            placeholder={t.keywordPlaceholder}
-            style={{ ...inputStyle, flex: 1, minWidth: 180 }}
-          />
-          <button type="submit" style={{
-            padding: "8px 16px",
-            borderRadius: BORDER_RADIUS.md,
-            border: "none",
-            background: COLORS.primary,
-            color: "#fff",
-            fontSize: FONT_SIZES.md,
-            fontWeight: 600,
-            cursor: "pointer"
-          }}>{t.add}</button>
-        </form>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {excludeKeywords.map(rule => {
-            const keyword = parseJsonArray(rule.must_exclude)[0] || rule.name;
-            const isEditing = editingKeyword === rule.id;
-            return (
-              <div key={rule.id} style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 10px",
-                borderRadius: BORDER_RADIUS.md,
-                background: COLORS.primaryLight,
-                border: `1px solid ${COLORS.primary}`,
-                transition: `all ${TRANSITIONS.fast}`
-              }}>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editKeywordValue}
-                    onChange={(e) => setEditKeywordValue(e.target.value)}
-                    onBlur={() => saveKeyword(rule.id)}
-                    onKeyDown={(e) => { if (e.key === "Enter") saveKeyword(rule.id); if (e.key === "Escape") setEditingKeyword(null); }}
-                    autoFocus
-                    style={{ ...inputStyle, width: 120, padding: "4px 8px", fontSize: FONT_SIZES.sm }}
-                  />
-                ) : (
-                  <span style={{
-                    color: COLORS.primary,
-                    fontSize: FONT_SIZES.sm,
-                    fontWeight: 500,
-                    cursor: "pointer"
-                  }} onClick={() => startEditKeyword(rule)}>{keyword}</span>
-                )}
-                <button
-                  onClick={() => deleteKeyword(rule.id)}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "#c00",
-                    cursor: "pointer",
-                    fontSize: FONT_SIZES.md,
-                    lineHeight: 1,
-                    padding: 0
-                  }}
-                  title={t.delete}
-                >×</button>
-              </div>
-            );
-          })}
-          {excludeKeywords.length === 0 && (
-            <div style={{ color: secondaryText, fontSize: FONT_SIZES.sm }}>{t.noKeywords}</div>
-          )}
-        </div>
-      </div>
+        <h3 style={{ margin: "0 0 16px", color: darkMode ? "#fff" : COLORS.text.primary }}>{t.compositeRules}</h3>
 
-      <div style={{
-        background: cardBg,
-        borderRadius: BORDER_RADIUS.lg,
-        border: `1px solid ${border}`,
-        padding: "16px 20px",
-        marginBottom: 20
-      }}>
-        <h3 style={{ margin: "0 0 12px", color: darkMode ? "#fff" : COLORS.text.primary }}>{t.compositeRules}</h3>
-        <form onSubmit={addCompositeRule} style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div style={{ flex: "1 1 160px", minWidth: 160 }}>
-            <label style={labelStyle}>{t.ruleName}</label>
-            <input
-              type="text"
-              value={ruleForm.name}
-              onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })}
-              placeholder={t.ruleNamePlaceholder}
-              style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
-            />
-          </div>
-          <div style={{ flex: "2 1 200px", minWidth: 200 }}>
-            <label style={labelStyle}>{t.mustInclude}</label>
-            <input
-              type="text"
-              value={ruleForm.mustInclude}
-              onChange={(e) => setRuleForm({ ...ruleForm, mustInclude: e.target.value })}
-              placeholder={t.mustIncludePlaceholder}
-              style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
-            />
-          </div>
-          <div style={{ flex: "2 1 200px", minWidth: 200 }}>
-            <label style={labelStyle}>{t.mustExclude}</label>
-            <input
-              type="text"
-              value={ruleForm.mustExclude}
-              onChange={(e) => setRuleForm({ ...ruleForm, mustExclude: e.target.value })}
-              placeholder={t.mustExcludePlaceholder}
-              style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
-            />
-          </div>
-          <div style={{ flex: "0 0 100px" }}>
-            <label style={labelStyle}>{t.priority}</label>
-            <input
-              type="number"
-              value={ruleForm.priority}
-              onChange={(e) => setRuleForm({ ...ruleForm, priority: e.target.value })}
-              style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
-            />
-          </div>
-          <button type="submit" style={{
-            padding: "8px 16px",
-            borderRadius: BORDER_RADIUS.md,
-            border: "none",
-            background: COLORS.primary,
-            color: "#fff",
-            fontSize: FONT_SIZES.md,
-            fontWeight: 600,
-            cursor: "pointer"
-          }}>{t.add}</button>
-        </form>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {compositeRules.map(rule => {
-            const isEditing = editingRule === rule.id;
-            return (
-              <div key={rule.id} style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-                padding: "12px 16px",
+        {[{
+          type: "enterprise",
+          label: t.enterpriseKeywords,
+          items: enterpriseKeywords,
+          placeholder: t.enterpriseKeywordPlaceholder
+        }, {
+          type: "include_keyword",
+          label: t.includeKeywords,
+          items: includeKeywords,
+          placeholder: t.includeKeywordPlaceholder
+        }, {
+          type: "exclude_keyword",
+          label: t.excludeKeywords,
+          items: excludeKeywords,
+          placeholder: t.keywordPlaceholder
+        }].map(({ type, label, items, placeholder }) => (
+          <div key={type} style={{ marginBottom: 20, paddingLeft: 20 }}>
+            <h4 style={{ margin: "0 0 10px", color: darkMode ? "#ccc" : COLORS.text.secondary, fontSize: FONT_SIZES.md, fontWeight: 600 }}>{label}</h4>
+            <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+              <input
+                type="text"
+                value={newKeywordForType[type] || ""}
+                onChange={(e) => setNewKeywordForType(prev => ({ ...prev, [type]: e.target.value }))}
+                placeholder={placeholder}
+                style={{ ...inputStyle, flex: 1, minWidth: 180 }}
+              />
+              <button type="button" onClick={() => addTypedKeyword(type)} style={{
+                padding: "8px 16px",
                 borderRadius: BORDER_RADIUS.md,
-                background: darkMode ? "#1c1f2b" : "#f9f9f9",
-                border: `1px solid ${border}`
-              }}>
-                {isEditing ? (
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <div style={{ flex: "1 1 160px", minWidth: 160 }}>
-                      <label style={labelStyle}>{t.ruleName}</label>
-                      <input
-                        type="text"
-                        value={editRuleForm.name}
-                        onChange={(e) => setEditRuleForm({ ...editRuleForm, name: e.target.value })}
-                        style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
-                      />
-                    </div>
-                    <div style={{ flex: "2 1 200px", minWidth: 200 }}>
-                      <label style={labelStyle}>{t.mustInclude}</label>
-                      <input
-                        type="text"
-                        value={editRuleForm.mustInclude}
-                        onChange={(e) => setEditRuleForm({ ...editRuleForm, mustInclude: e.target.value })}
-                        style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
-                      />
-                    </div>
-                    <div style={{ flex: "2 1 200px", minWidth: 200 }}>
-                      <label style={labelStyle}>{t.mustExclude}</label>
-                      <input
-                        type="text"
-                        value={editRuleForm.mustExclude}
-                        onChange={(e) => setEditRuleForm({ ...editRuleForm, mustExclude: e.target.value })}
-                        style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
-                      />
-                    </div>
-                    <div style={{ flex: "0 0 100px" }}>
-                      <label style={labelStyle}>{t.priority}</label>
-                      <input
-                        type="number"
-                        value={editRuleForm.priority}
-                        onChange={(e) => setEditRuleForm({ ...editRuleForm, priority: e.target.value })}
-                        style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
-                      />
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => saveRule(rule.id)} style={{
-                        padding: "8px 16px",
-                        borderRadius: BORDER_RADIUS.md,
-                        border: "none",
-                        background: COLORS.primary,
-                        color: "#fff",
-                        fontSize: FONT_SIZES.sm,
-                        fontWeight: 600,
-                        cursor: "pointer"
-                      }}>{t.save}</button>
-                      <button onClick={() => setEditingRule(null)} style={{
-                        padding: "8px 16px",
-                        borderRadius: BORDER_RADIUS.md,
-                        border: `1px solid ${border}`,
-                        background: "transparent",
-                        color: text,
-                        fontSize: FONT_SIZES.sm,
-                        cursor: "pointer"
-                      }}>{t.cancel}</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, flex: 1, alignItems: "center" }}>
-                      <div style={{ minWidth: 120, fontWeight: 600, color: text }}>
-                        {rule.name || t.unnamedRule}
-                      </div>
-                      <div style={{ fontSize: FONT_SIZES.sm, color: secondaryText, minWidth: 160, flex: 1 }}>
-                        <span style={{ color: COLORS.status.success, fontWeight: 500 }}>{t.include}: </span>
-                        {parseJsonArray(rule.must_include).join("; ") || "-"}
-                      </div>
-                      <div style={{ fontSize: FONT_SIZES.sm, color: secondaryText, minWidth: 160, flex: 1 }}>
-                        <span style={{ color: COLORS.status.error, fontWeight: 500 }}>{t.exclude}: </span>
-                        {parseJsonArray(rule.must_exclude).join("; ") || "-"}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <button
-                        onClick={() => startEditRule(rule)}
-                        style={{
-                          padding: "6px 12px",
-                          borderRadius: BORDER_RADIUS.md,
-                          border: `1px solid ${border}`,
-                          background: "transparent",
-                          color: text,
-                          fontSize: FONT_SIZES.sm,
-                          cursor: "pointer"
-                        }}
-                      >{t.edit}</button>
-                      <button
-                        onClick={() => deleteCompositeRule(rule.id)}
-                        style={{
-                          padding: "6px 12px",
-                          borderRadius: BORDER_RADIUS.md,
-                          border: `1px solid #c00`,
-                          background: "transparent",
-                          color: "#c00",
-                          fontSize: FONT_SIZES.sm,
-                          cursor: "pointer"
-                        }}
-                      >{t.delete}</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {compositeRules.length === 0 && (
-            <div style={{ textAlign: "center", padding: "24px", color: secondaryText, fontSize: FONT_SIZES.sm }}>
-              {t.noRules}
+                border: "none",
+                background: COLORS.primary,
+                color: "#fff",
+                fontSize: FONT_SIZES.md,
+                fontWeight: 600,
+                cursor: "pointer"
+              }}>{t.add}</button>
             </div>
-          )}
-        </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {items.map(rule => {
+                const isEditing = editingKeyword === rule.id;
+                return (
+                  <div key={rule.id} style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 10px",
+                    borderRadius: BORDER_RADIUS.md,
+                    background: COLORS.primaryLight,
+                    border: `1px solid ${COLORS.primary}`,
+                    transition: `all ${TRANSITIONS.fast}`
+                  }}>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editKeywordValue}
+                        onChange={(e) => setEditKeywordValue(e.target.value)}
+                        onBlur={() => saveTypedKeyword(rule.id)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveTypedKeyword(rule.id); if (e.key === "Escape") setEditingKeyword(null); }}
+                        autoFocus
+                        style={{ ...inputStyle, width: 120, padding: "4px 8px", fontSize: FONT_SIZES.sm }}
+                      />
+                    ) : (
+                      <span style={{
+                        color: COLORS.primary,
+                        fontSize: FONT_SIZES.sm,
+                        fontWeight: 500,
+                        cursor: "pointer"
+                      }} onClick={() => startEditTypedKeyword(rule)}>{rule.name}</span>
+                    )}
+                    <button
+                      onClick={() => deleteTypedKeyword(rule.id)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#c00",
+                        cursor: "pointer",
+                        fontSize: FONT_SIZES.md,
+                        lineHeight: 1,
+                        padding: 0
+                      }}
+                      title={t.delete}
+                    >×</button>
+                  </div>
+                );
+              })}
+              {items.length === 0 && (
+                <div style={{ color: secondaryText, fontSize: FONT_SIZES.sm }}>{t.noKeywords}</div>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
       <form onSubmit={saveSemanticConfig} style={{
