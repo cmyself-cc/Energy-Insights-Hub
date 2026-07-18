@@ -20,10 +20,10 @@ router.get("/rules", (_req, res) => {
 
 router.post("/rules", (req, res) => {
   try {
-    const { type, name, mustInclude, mustExclude, active, priority } = req.body;
+    const { type, name, mustInclude, mustExclude, active, priority, purpose = "" } = req.body;
     const result = db.prepare(
-      "INSERT INTO filter_rules (type, name, must_include, must_exclude, active, priority) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(type, name || null, JSON.stringify(toArray(mustInclude)), JSON.stringify(toArray(mustExclude)), active ? 1 : 0, priority || 0);
+      "INSERT INTO filter_rules (type, name, must_include, must_exclude, active, priority, purpose) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(type, name || null, JSON.stringify(toArray(mustInclude)), JSON.stringify(toArray(mustExclude)), active ? 1 : 0, priority || 0, purpose);
     res.json({ data: { id: result.lastInsertRowid } });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -32,10 +32,10 @@ router.post("/rules", (req, res) => {
 
 router.put("/rules/:id", (req, res) => {
   try {
-    const { name, mustInclude, mustExclude, active, priority } = req.body;
+    const { name, mustInclude, mustExclude, active, priority, purpose } = req.body;
     db.prepare(
-      "UPDATE filter_rules SET name = ?, must_include = ?, must_exclude = ?, active = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-    ).run(name || null, JSON.stringify(toArray(mustInclude)), JSON.stringify(toArray(mustExclude)), active ? 1 : 0, priority || 0, req.params.id);
+      "UPDATE filter_rules SET name = ?, must_include = ?, must_exclude = ?, active = ?, priority = ?, purpose = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(name || null, JSON.stringify(toArray(mustInclude)), JSON.stringify(toArray(mustExclude)), active ? 1 : 0, priority || 0, purpose || "", req.params.id);
     res.json({ data: { success: true } });
   } catch (e) {
     res.status(500).json({ error: e.message });
