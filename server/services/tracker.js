@@ -3,7 +3,7 @@ import db from "../db.js";
 import { fetchArticles } from "../crawlers/index.js";
 import { processInsight, loadSemanticConfig } from "./llmProcessor.js";
 import { loadActiveCategories, matchesEnabledCategory } from "./businessCategories.js";
-import { loadFilterRules } from "./filterRules.js";
+import { loadFilterRules, groupRulesByPurpose } from "./filterRules.js";
 import { loadSettings } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 import { applyKeywordGate } from "./keywordGate.js";
@@ -16,13 +16,23 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchSourceItems(source) {
+async function fetchSourceItems(source, filterRules = []) {
+  // For tavily sources, build the query from enterprise keywords if not already set
+  if (source.type === "tavily" && !source.config?.query) {
+    const enterpriseKeywords = filterRules
+      .filter(r => r.type === "enterprise")
+      .map(r => r.name)
+      .slice(0, 30);
+    const query = enterpriseKeywords.join(" ");
+    const config = { ...source.config, query, articleLimit: 10, days: 3 };
+    return fetchArticles({ ...source, config });
+  }
   return fetchArticles(source);
 }
 
-async function processBatch(items, language) {
+async function processBatch(items, language, filterContext = null) {
   const results = [];
-  const filterContext = {
+  const ctx = filterContext || {
     semanticPrompt: loadSemanticConfig(),
     categories: loadActiveCategories(),
     classificationEnabled: Boolean(process.env.LLM_API_KEY)
@@ -30,7 +40,7 @@ async function processBatch(items, language) {
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const batch = items.slice(i, i + BATCH_SIZE);
     const settled = await Promise.allSettled(
-      batch.map(item => processInsight(item, language, filterContext))
+      batch.map(item => processInsight(item, language, ctx))
     );
     for (let j = 0; j < settled.length; j++) {
       const result = settled[j];
@@ -50,7 +60,8 @@ async function processBatch(items, language) {
 
 export async function runTracker(runId = null) {
   const settings = loadSettings();
-  const filterRules = loadFilterRules();
+  const allRules = loadFilterRules();
+  const groupedRules = groupRulesByPurpose(allRules);
   const activeCategories = loadActiveCategories();
 
   const sources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
@@ -88,7 +99,7 @@ export async function runTracker(runId = null) {
   for (const source of sources) {
     try {
       console.log(`[tracker] Fetching source: ${source.name}`);
-      const items = await fetchSourceItems(source);
+      const items = await fetchSourceItems(source, allRules);
 
       // 去重：按 url 或 title
       const newItems = [];
@@ -102,83 +113,96 @@ export async function runTracker(runId = null) {
 
       console.log(`[tracker] Source ${source.name}: fetched ${items.length}, new ${newItems.length}`);
 
-      if (newItems.length > 0) {
-        const enterpriseKeywords = filterRules.filter(r => r.type === "enterprise").map(r => r.name);
-        const includeKeywords = filterRules.filter(r => r.type === "include_keyword").map(r => r.name);
-        const excludeRuleKeywords = filterRules.filter(r => r.type === "exclude_keyword").map(r => r.name);
-        const gate = applyKeywordGate(newItems, {
-          excludeKeywords: settings.excludeKeywords,
-          requiredIndustryKeywords: settings.requiredIndustryKeywords,
-          requiredCompanyKeywords: settings.requiredCompanyKeywords,
-          enterpriseKeywords,
-          includeKeywords,
-          excludeRuleKeywords
-        });
-        console.log(`[tracker] Source ${source.name}: ${gate.kept.length} items after keyword gate (${gate.excluded} excluded)`);
-        if (gate.kept.length === 0) {
-          successCount++;
-          db.prepare(
-            `UPDATE tracker_runs SET
-              sources_success = ?,
-              sources_failed = ?,
-              insights_created = ?,
-              message = ?
-             WHERE id = ?`
-          ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
-          continue;
+      if (newItems.length === 0) { successCount++; continue; }
+
+      // Get purposes for this source
+      const sourcePurposes = (source.purpose || "competitor").split(",").map(s => s.trim()).filter(Boolean);
+      const sourceRules = {};
+      for (const p of sourcePurposes) {
+        if (groupedRules[p]) sourceRules[p] = groupedRules[p];
+      }
+
+      // Keyword gate with purpose-specific rules
+      const gate = applyKeywordGate(newItems, {
+        excludeKeywords: settings.excludeKeywords,
+        purposeRules: sourceRules
+      });
+      console.log(`[tracker] Source ${source.name}: ${gate.kept.length} items after keyword gate (${gate.excluded} excluded)`);
+
+      if (gate.kept.length === 0) {
+        successCount++;
+        db.prepare(
+          `UPDATE tracker_runs SET sources_success = ?, sources_failed = ?, insights_created = ?, message = ? WHERE id = ?`
+        ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
+        continue;
+      }
+
+      // Dedup
+      const deduped = deduplicateItems(gate.kept, {
+        threshold: settings.fuzzyDeduplicationThreshold,
+        lookbackDays: Math.max(1, Math.ceil(settings.lookbackHours / 24) + 1)
+      });
+      console.log(`[tracker] Source ${source.name}: ${deduped.length} items after dedup`);
+
+      const taggedItems = deduped.map(item => ({ ...item, sourceId: source.id }));
+      const candidates = applyPreFilter(taggedItems, settings);
+      console.log(`[tracker] Source ${source.name}: ${candidates.length} candidates after pre-filter`);
+
+      if (candidates.length > 0) {
+        // Group by matched purpose for LLM processing
+        const byPurpose = {};
+        for (const item of candidates) {
+          const p = item.matchedPurpose || "competitor";
+          if (!byPurpose[p]) byPurpose[p] = [];
+          byPurpose[p].push(item);
         }
 
-        const deduped = deduplicateItems(gate.kept, {
-          threshold: settings.fuzzyDeduplicationThreshold,
-          lookbackDays: Math.max(1, Math.ceil(settings.lookbackHours / 24) + 1)
-        });
-        console.log(`[tracker] Source ${source.name}: ${deduped.length} items after dedup`);
+        const allProcessed = [];
+        for (const [purpose, purposeItems] of Object.entries(byPurpose)) {
+          const semanticPrompt = loadSemanticConfig(purpose);
+          const filterContext = {
+            semanticPrompt,
+            categories: loadActiveCategories(),
+            classificationEnabled: Boolean(process.env.LLM_API_KEY)
+          };
+          const processed = await processBatch(purposeItems, LANGUAGE, filterContext);
+          // processInsight returns fresh objects, so re-tag with the batch's purpose
+          for (const row of processed) row.matchedPurpose = purpose;
+          allProcessed.push(...processed);
+        }
 
-        const taggedItems = deduped.map(item => ({ ...item, sourceId: source.id }));
-        const candidates = applyPreFilter(taggedItems, settings);
-        console.log(`[tracker] Source ${source.name}: ${candidates.length} candidates after pre-filter`);
-        if (candidates.length > 0) {
-          const processed = await processBatch(candidates, LANGUAGE);
-          const kept = applyPostFilter(processed, settings)
-            .filter(insight => insight.title && insight.title.trim() !== "")
-            .filter(insight => {
-              if (!classificationEnabled) return true;
-              if (insight.llmFailed) return true;
-              return matchesEnabledCategory(insight, activeCategories);
-            });
-          console.log(`[tracker] Source ${source.name}: ${kept.length} insights after post-filter`);
-          if (kept.length > 0) {
-            const insert = db.prepare(
-              `INSERT INTO insights (
-                source_id, title, summary, url, publish_date, source_type,
-                business_domain, enterprise_type, entities, features, raw_content, categories
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-            );
+        const kept = applyPostFilter(allProcessed, settings)
+          .filter(insight => insight.title && insight.title.trim() !== "")
+          .filter(insight => {
+            if (!classificationEnabled) return true;
+            if (insight.llmFailed) return true;
+            return matchesEnabledCategory(insight, activeCategories);
+          });
+        console.log(`[tracker] Source ${source.name}: ${kept.length} insights after post-filter`);
 
-            const insertMany = db.transaction((rows) => {
-              for (const row of rows) {
-                if (!row.title) continue;
-                insert.run(
-                  source.id,
-                  row.title,
-                  row.summary,
-                  row.url,
-                  row.publishDate,
-                  row.sourceType,
-                  row.businessDomain,
-                  row.enterpriseType,
-                  JSON.stringify(row.entities),
-                  JSON.stringify(row.features),
-                  row.rawContent || row.summary || "",
-                  row.categories ? JSON.stringify(row.categories) : null
-                );
-              }
-            });
-
-            insertMany(kept);
-            insightsCreated += kept.length;
-            console.log(`[tracker] Source ${source.name}: created ${kept.length} insights`);
-          }
+        if (kept.length > 0) {
+          const insert = db.prepare(
+            `INSERT INTO insights (
+              source_id, title, summary, url, publish_date, source_type,
+              business_domain, enterprise_type, entities, features, raw_content, categories, purpose
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          );
+          const insertMany = db.transaction((rows) => {
+            for (const row of rows) {
+              if (!row.title) continue;
+              insert.run(
+                source.id, row.title, row.summary, row.url, row.publishDate,
+                row.sourceType, row.businessDomain, row.enterpriseType,
+                JSON.stringify(row.entities), JSON.stringify(row.features),
+                row.rawContent || row.summary || "",
+                row.categories ? JSON.stringify(row.categories) : null,
+                row.matchedPurpose || "competitor"
+              );
+            }
+          });
+          insertMany(kept);
+          insightsCreated += kept.length;
+          console.log(`[tracker] Source ${source.name}: created ${kept.length} insights`);
         }
       }
 
