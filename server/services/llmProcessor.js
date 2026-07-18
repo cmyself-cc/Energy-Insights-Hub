@@ -2,9 +2,15 @@ import { buildCategoryPrompt } from "./businessCategories.js";
 import { fetchWithTimeout } from "../crawlers/utils.js";
 import db from "../db.js";
 
-export function loadSemanticConfig() {
+export function loadSemanticConfig(purpose = null) {
+  if (purpose) {
+    const row = db
+      .prepare("SELECT content FROM filter_config WHERE type = 'semantic' AND purpose = ? AND active = 1 LIMIT 1")
+      .get(purpose);
+    if (row) return row.content;
+  }
   const row = db
-    .prepare("SELECT content FROM filter_config WHERE type = 'semantic' AND active = 1 LIMIT 1")
+    .prepare("SELECT content FROM filter_config WHERE type = 'semantic' AND (purpose = '' OR purpose IS NULL) AND active = 1 LIMIT 1")
     .get();
   return row ? row.content : "";
 }
