@@ -16,17 +16,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchSourceItems(source, filterRules = []) {
-  // For tavily sources, build the query from enterprise keywords if not already set
-  if (source.type === "tavily" && !source.config?.query) {
-    const enterpriseKeywords = filterRules
-      .filter(r => r.type === "enterprise")
-      .map(r => r.name)
-      .slice(0, 30);
-    const query = enterpriseKeywords.join(" ");
-    const config = { ...source.config, query, articleLimit: 10, days: 3 };
-    return fetchArticles({ ...source, config });
-  }
+async function fetchSourceItems(source) {
   return fetchArticles(source);
 }
 
@@ -99,7 +89,7 @@ export async function runTracker(runId = null) {
   for (const source of sources) {
     try {
       console.log(`[tracker] Fetching source: ${source.name}`);
-      const items = await fetchSourceItems(source, allRules);
+      const items = await fetchSourceItems(source);
 
       // 去重：按 url 或 title
       const newItems = [];

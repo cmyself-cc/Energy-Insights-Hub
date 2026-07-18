@@ -41,3 +41,7 @@ Plan: /Users/cmyself/.kimi-code/sessions/wd_energy-insights-hub_940b6009a622/ses
 - Task 3: ApiConfig reset button calls onClose unconditionally; pass a no-op when inline.
 - Task 4: defaultSubTab prop is additive and not in original brief interface.
 - Task 6: useEffect dependency on activeRun causes interval recreation; poll failure only logged; unknown terminal statuses not handled.
+Task 1: complete (commits ef36bca..3a32590, review approved)
+Task 2: complete (commits 3a32590..c4962cd, review approved)
+Task 3: complete (commits c4962cd..5c7a87c, review approved)
+Task 4: complete (commits 5c7a87c..4343d25, review approved)

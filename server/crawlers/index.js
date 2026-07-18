@@ -3,6 +3,7 @@ import { fetchArticles as websiteFetchArticles } from "./websiteCrawler.js";
 import { fetchArticles as wechatAlbumFetchArticles } from "./wechatAlbumCrawler.js";
 import { fetchArticles as wechatMcpFetchArticles } from "./wechatMcpCrawler.js";
 import { fetchArticles as apiFetchArticles } from "./apiCrawler.js";
+import { fetchArticles as tavilyFetchArticles } from "./tavilyCrawler.js";
 
 export { sleep, fetchWithTimeout, resolveUrl, randomUserAgent } from "./utils.js";
 
@@ -18,6 +19,7 @@ registerCrawler("scrape", { fetchArticles: websiteFetchArticles });
 registerCrawler("wechat_album", { fetchArticles: wechatAlbumFetchArticles });
 registerCrawler("wechat_mcp", { fetchArticles: wechatMcpFetchArticles });
 registerCrawler("api", { fetchArticles: apiFetchArticles });
+registerCrawler("tavily", { fetchArticles: tavilyFetchArticles });
 
 export async function fetchArticles(source) {
   const crawler = registry.get(source.type);
