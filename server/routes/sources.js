@@ -41,7 +41,7 @@ router.get("/:id", (req, res) => {
 
 router.post("/", (req, res) => {
   try {
-    const { name, url, type = "rss", active = 1, config } = req.body;
+    const { name, url, type = "rss", active = 1, config, purpose = "" } = req.body;
     if (!name) {
       return res.status(400).json({ error: "name is required" });
     }
@@ -53,8 +53,8 @@ router.post("/", (req, res) => {
     }
     const configStr = config ? JSON.stringify(config) : null;
     const result = db.prepare(
-      "INSERT INTO sources (name, url, type, active, config) VALUES (?, ?, ?, ?, ?)"
-    ).run(name, url, type, active ? 1 : 0, configStr);
+      "INSERT INTO sources (name, url, type, active, config, purpose) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(name, url, type, active ? 1 : 0, configStr, purpose);
     const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(result.lastInsertRowid);
     res.status(201).json({ data: { ...source, config: parseConfig(source.config) } });
   } catch (e) {
@@ -122,7 +122,7 @@ router.post("/import", (req, res) => {
 
 router.put("/:id", (req, res) => {
   try {
-    const { name, url, type, active, config } = req.body;
+    const { name, url, type, active, config, purpose } = req.body;
     if (!name) {
       return res.status(400).json({ error: "name is required" });
     }
@@ -134,8 +134,8 @@ router.put("/:id", (req, res) => {
     }
     const configStr = config ? JSON.stringify(config) : null;
     db.prepare(
-      "UPDATE sources SET name = ?, url = ?, type = ?, active = ?, config = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-    ).run(name, url, type, active ? 1 : 0, configStr, req.params.id);
+      "UPDATE sources SET name = ?, url = ?, type = ?, active = ?, config = ?, purpose = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(name, url, type, active ? 1 : 0, configStr, purpose || "", req.params.id);
     const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(req.params.id);
     if (!source) return res.status(404).json({ error: "Source not found" });
     res.json({ data: { ...source, config: parseConfig(source.config) } });
