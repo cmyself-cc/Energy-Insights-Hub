@@ -31,7 +31,8 @@ function parseRow(row) {
     features: safeJson(row.features),
     categories: safeJson(row.categories),
     rawContent: row.raw_content,
-    hidden: row.hidden
+    hidden: row.hidden,
+    purpose: row.purpose || "competitor"
   };
 }
 
@@ -82,6 +83,10 @@ router.get("/", (req, res) => {
       conditions.push("(title LIKE ? OR summary LIKE ? OR source_type LIKE ?)");
       const like = `%${search}%`;
       params.push(like, like, like);
+    }
+    if (req.query.purpose) {
+      conditions.push("i.purpose = ?");
+      params.push(req.query.purpose);
     }
 
     const where = conditions.join(" AND ");
