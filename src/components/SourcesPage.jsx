@@ -3,17 +3,23 @@ import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/the
 import { backendApi } from "../utils/backendApi";
 import { parseSourcesCsv, buildSourcesCsv, downloadCsv } from "../utils/csvConfig";
 
+const PURPOSES = [
+  { value: "competitor", zh: "竞争对手", en: "Competitor" },
+  { value: "policy", zh: "政策动态", en: "Policy" },
+  { value: "tech", zh: "技术突破", en: "Tech" }
+];
+
 export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "" });
+  const [form, setForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: ["competitor"] });
   const [trackerRunning, setTrackerRunning] = useState(false);
   const [message, setMessage] = useState(null);
   const [activeRun, setActiveRun] = useState(null);
   const [runProgress, setRunProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "" });
+  const [editForm, setEditForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: [] });
   const fileInputRef = useRef(null);
 
   const languageRef = useRef(language);
@@ -52,6 +58,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
         url: form.mcpUrl.trim(),
         type: form.type,
         active: form.active,
+        purpose: form.purpose.join(","),
         config: { feedId: form.feedId.trim(), articleLimit: 20 }
       };
     } else {
@@ -60,13 +67,14 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
         url: form.url,
         type: form.type,
         active: form.active,
+        purpose: form.purpose.join(","),
         config: {}
       };
     }
 
     try {
       await backendApi.createSource(payload);
-      setForm({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "" });
+      setForm({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: ["competitor"] });
       loadSources();
       setMessage({ type: "success", text: language === "zh" ? "来源已添加" : "Source added" });
     } catch (err) {
@@ -133,7 +141,8 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
       type: source.type || "rss",
       active: source.active !== false,
       mcpUrl: source.type === "wechat_mcp" ? (source.url || "") : "",
-      feedId: source.config?.feedId || ""
+      feedId: source.config?.feedId || "",
+      purpose: (source.purpose || "").split(",").map(s => s.trim()).filter(Boolean)
     });
   };
 
@@ -146,6 +155,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           url: editForm.mcpUrl.trim(),
           type: editForm.type,
           active: editForm.active,
+          purpose: editForm.purpose.join(","),
           config: { feedId: editForm.feedId.trim(), articleLimit: 20 }
         };
       } else {
@@ -154,6 +164,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           url: editForm.url,
           type: editForm.type,
           active: editForm.active,
+          purpose: editForm.purpose.join(","),
           config: {}
         };
       }
@@ -258,6 +269,37 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
     color: darkMode ? "#e8e8e8" : COLORS.text.primary,
     fontSize: FONT_SIZES.base,
     outline: "none"
+  };
+
+  const togglePurpose = (formObj, setFormObj, value) => {
+    const next = formObj.purpose.includes(value)
+      ? formObj.purpose.filter(p => p !== value)
+      : [...formObj.purpose, value];
+    setFormObj({ ...formObj, purpose: next });
+  };
+
+  const renderPurposeCheckboxes = (formObj, setFormObj) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <span style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#aaa" : COLORS.text.secondary }}>
+        {language === "zh" ? "用途" : "Purpose"}:
+      </span>
+      {PURPOSES.map(p => (
+        <label key={p.value} style={{ display: "flex", alignItems: "center", gap: 4, color: darkMode ? "#e8e8e8" : COLORS.text.primary, fontSize: FONT_SIZES.sm }}>
+          <input
+            type="checkbox"
+            checked={formObj.purpose.includes(p.value)}
+            onChange={() => togglePurpose(formObj, setFormObj, p.value)}
+          />
+          {language === "zh" ? p.zh : p.en}
+        </label>
+      ))}
+    </div>
+  );
+
+  const purposeLabel = (value) => {
+    const p = PURPOSES.find(item => item.value === value);
+    if (!p) return value;
+    return language === "zh" ? p.zh : p.en;
   };
 
   return (
@@ -453,6 +495,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
               />
             </>
           )}
+          {renderPurposeCheckboxes(form, setForm)}
           <button type="submit" style={{
             padding: "8px 16px",
             borderRadius: BORDER_RADIUS.md,
@@ -540,6 +583,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                       />
                       {language === "zh" ? "启用" : "Active"}
                     </label>
+                    {renderPurposeCheckboxes(editForm, setEditForm)}
                     <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
                       <button
                         onClick={() => saveEdit(source.id)}
@@ -583,6 +627,18 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                         }}>
                           {source.active ? (language === "zh" ? "启用" : "Active") : (language === "zh" ? "禁用" : "Inactive")}
                         </span>
+                        {(source.purpose || "").split(",").map(s => s.trim()).filter(Boolean).map(p => (
+                          <span key={p} style={{
+                            marginLeft: 6,
+                            fontSize: FONT_SIZES.xs,
+                            color: darkMode ? "#9ec3ff" : "#3a6ea5",
+                            background: darkMode ? "#26324a" : "#e8f0fa",
+                            padding: "2px 6px",
+                            borderRadius: BORDER_RADIUS.sm
+                          }}>
+                            {purposeLabel(p)}
+                          </span>
+                        ))}
                       </div>
                       <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.light, marginTop: 2 }}>
                         {source.url ? `${source.url} · ` : ""}{source.type}
