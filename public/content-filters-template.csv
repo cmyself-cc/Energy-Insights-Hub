@@ -1,4 +1,4 @@
-type,name,include,exclude,description,prompt,active
+type,name,include,exclude,description,prompt,active,purpose
 semantic,,,,,"<语义过滤规则>","",
 enterprise,"ASB 生物柴油",,,,,
 enterprise,"Baker Commodities",,,,,

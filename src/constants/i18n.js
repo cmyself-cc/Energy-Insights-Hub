@@ -233,6 +233,11 @@ export const i18n = {
       loadFailed: "Failed to load filters",
       confirmDelete: "Delete this item?"
     },
+    purposeLabels: {
+      competitor: "Competitor Monitoring",
+      policy: "Policy Monitoring",
+      tech: "Tech Breakthrough"
+    },
   },
   zh: {
     header: {
@@ -467,6 +472,11 @@ export const i18n = {
       categoryUpdated: "分类已更新",
       loadFailed: "加载过滤条件失败",
       confirmDelete: "确定删除此项？"
+    },
+    purposeLabels: {
+      competitor: "竞争监控",
+      policy: "政策监控",
+      tech: "技术突破"
     },
   }
 };
