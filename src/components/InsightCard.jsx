@@ -13,6 +13,27 @@ export default function InsightCard({
 }) {
   const t = i18n[language];
 
+  const purposeLabels = {
+    competitor: language === "zh" ? "竞争监控" : "Competitor",
+    policy: language === "zh" ? "政策监控" : "Policy",
+    tech: language === "zh" ? "技术突破" : "Tech"
+  };
+  const purposeColors = {
+    competitor: "#e74c3c",
+    policy: "#3498db",
+    tech: "#27ae60"
+  };
+
+  const purposeChipStyle = {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: 600,
+    color: "#fff",
+    background: purposeColors[item.purpose] || "#7f8c8d",
+    borderRadius: BORDER_RADIUS.sm,
+    padding: "3px 8px",
+    whiteSpace: "nowrap"
+  };
+
   const chipStyle = {
     fontSize: FONT_SIZES.xs,
     fontWeight: 600,
@@ -95,6 +116,11 @@ export default function InsightCard({
         {item.sourceType && <span>{item.sourceType}</span>}
         {item.source && <span>·</span>}
         {item.source && <span>{item.source}</span>}
+        {item.purpose && (
+          <span style={purposeChipStyle}>
+            {purposeLabels[item.purpose] || item.purpose}
+          </span>
+        )}
       </div>
 
       {(item.features?.length > 0 || item.businessDomain) && (
