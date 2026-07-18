@@ -4,6 +4,12 @@ import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 import { parseContentFiltersCsv, buildContentFiltersCsv, downloadCsv } from "../utils/csvConfig";
 
+const PURPOSES = [
+  { value: "competitor", zh: "竞争对手", en: "Competitor" },
+  { value: "policy", zh: "政策动态", en: "Policy" },
+  { value: "tech", zh: "技术突破", en: "Tech" }
+];
+
 export default function ContentFiltersPage({ darkMode, language }) {
   const t = i18n[language]?.contentFilters || i18n.en.contentFilters;
   const [rules, setRules] = useState([]);
@@ -19,6 +25,7 @@ export default function ContentFiltersPage({ darkMode, language }) {
   const [editingKeyword, setEditingKeyword] = useState(null);
   const [editKeywordValue, setEditKeywordValue] = useState("");
   const [newKeywordForType, setNewKeywordForType] = useState({});
+  const [collapsedPurposes, setCollapsedPurposes] = useState({});
 
   const [editingCategory, setEditingCategory] = useState(null);
   const [editCategoryForm, setEditCategoryForm] = useState({ description: "", prompt: "" });
@@ -122,8 +129,9 @@ export default function ContentFiltersPage({ darkMode, language }) {
 
 
 
-  const addTypedKeyword = async (type) => {
-    const value = (newKeywordForType[type] || "").trim();
+  const addTypedKeyword = async (type, purpose) => {
+    const key = `${purpose}:${type}`;
+    const value = (newKeywordForType[key] || "").trim();
     if (!value) return;
     try {
       await backendApi.createFilterRule({
@@ -132,9 +140,10 @@ export default function ContentFiltersPage({ darkMode, language }) {
         mustInclude: [],
         mustExclude: type === "exclude_keyword" ? [value] : [],
         active: true,
-        priority: 0
+        priority: 0,
+        purpose
       });
-      setNewKeywordForType(prev => ({ ...prev, [type]: "" }));
+      setNewKeywordForType(prev => ({ ...prev, [key]: "" }));
       loadAll();
       showMessage("success", t.keywordAdded);
     } catch (err) {
@@ -168,7 +177,8 @@ export default function ContentFiltersPage({ darkMode, language }) {
         mustInclude: [],
         mustExclude: rule.type === "exclude_keyword" ? [value] : [],
         active: true,
-        priority: rule.priority || 0
+        priority: rule.priority || 0,
+        purpose: rule.purpose || ""
       });
       setEditingKeyword(null);
       loadAll();
@@ -230,6 +240,19 @@ export default function ContentFiltersPage({ darkMode, language }) {
   const enterpriseKeywords = rules.filter(r => r.type === "enterprise");
   const includeKeywords = rules.filter(r => r.type === "include_keyword");
   const excludeKeywords = rules.filter(r => r.type === "exclude_keyword");
+
+  const rulesByPurpose = {};
+  for (const p of PURPOSES) {
+    rulesByPurpose[p.value] = {
+      enterprise: enterpriseKeywords.filter(r => (r.purpose || "competitor") === p.value),
+      include_keyword: includeKeywords.filter(r => (r.purpose || "competitor") === p.value),
+      exclude_keyword: excludeKeywords.filter(r => (r.purpose || "competitor") === p.value)
+    };
+  }
+
+  const togglePurposeSection = (value) => {
+    setCollapsedPurposes(prev => ({ ...prev, [value]: !prev[value] }));
+  };
 
   if (loading) {
     return <div style={{ color: darkMode ? "#888" : "#aaa", padding: 40 }}>{t.loading}</div>;
@@ -335,33 +358,59 @@ export default function ContentFiltersPage({ darkMode, language }) {
       }}>
         <h3 style={{ margin: "0 0 16px", color: darkMode ? "#fff" : COLORS.text.primary }}>{t.compositeRules}</h3>
 
-        {[{
-          type: "enterprise",
-          label: t.enterpriseKeywords,
-          items: enterpriseKeywords,
-          placeholder: t.enterpriseKeywordPlaceholder
-        }, {
-          type: "include_keyword",
-          label: t.includeKeywords,
-          items: includeKeywords,
-          placeholder: t.includeKeywordPlaceholder
-        }, {
-          type: "exclude_keyword",
-          label: t.excludeKeywords,
-          items: excludeKeywords,
-          placeholder: t.keywordPlaceholder
-        }].map(({ type, label, items, placeholder }) => (
+        {PURPOSES.map(p => {
+          const purposeRules = rulesByPurpose[p.value];
+          const collapsed = !!collapsedPurposes[p.value];
+          const totalCount = purposeRules.enterprise.length + purposeRules.include_keyword.length + purposeRules.exclude_keyword.length;
+          return (
+            <div key={p.value} style={{ marginBottom: 16 }}>
+              <div
+                onClick={() => togglePurposeSection(p.value)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  userSelect: "none",
+                  marginBottom: collapsed ? 0 : 12,
+                  color: darkMode ? "#fff" : COLORS.text.primary
+                }}
+              >
+                <span style={{ fontSize: FONT_SIZES.sm, color: secondaryText }}>{collapsed ? "▶" : "▼"}</span>
+                <h4 style={{ margin: 0, fontSize: FONT_SIZES.lg, fontWeight: 700 }}>
+                  {language === "zh" ? p.zh : p.en}
+                </h4>
+                <span style={{ fontSize: FONT_SIZES.sm, color: secondaryText }}>({totalCount})</span>
+              </div>
+              {!collapsed && [{
+                type: "enterprise",
+                label: t.enterpriseKeywords,
+                items: purposeRules.enterprise,
+                placeholder: t.enterpriseKeywordPlaceholder
+              }, {
+                type: "include_keyword",
+                label: t.includeKeywords,
+                items: purposeRules.include_keyword,
+                placeholder: t.includeKeywordPlaceholder
+              }, {
+                type: "exclude_keyword",
+                label: t.excludeKeywords,
+                items: purposeRules.exclude_keyword,
+                placeholder: t.keywordPlaceholder
+              }].map(({ type, label, items, placeholder }) => {
+                const inputKey = `${p.value}:${type}`;
+                return (
           <div key={type} style={{ marginBottom: 20, paddingLeft: 20 }}>
             <h4 style={{ margin: "0 0 10px", color: darkMode ? "#ccc" : COLORS.text.secondary, fontSize: FONT_SIZES.md, fontWeight: 600 }}>{label}</h4>
             <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
               <input
                 type="text"
-                value={newKeywordForType[type] || ""}
-                onChange={(e) => setNewKeywordForType(prev => ({ ...prev, [type]: e.target.value }))}
+                value={newKeywordForType[inputKey] || ""}
+                onChange={(e) => setNewKeywordForType(prev => ({ ...prev, [inputKey]: e.target.value }))}
                 placeholder={placeholder}
                 style={{ ...inputStyle, flex: 1, minWidth: 180 }}
               />
-              <button type="button" onClick={() => addTypedKeyword(type)} style={{
+              <button type="button" onClick={() => addTypedKeyword(type, p.value)} style={{
                 padding: "8px 16px",
                 borderRadius: BORDER_RADIUS.md,
                 border: "none",
@@ -425,7 +474,11 @@ export default function ContentFiltersPage({ darkMode, language }) {
               )}
             </div>
           </div>
-        ))}
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
 
       <form onSubmit={saveSemanticConfig} style={{
