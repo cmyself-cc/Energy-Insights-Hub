@@ -13,6 +13,19 @@ function fromCsv(str) {
   return str.split(",").map(s => s.trim()).filter(Boolean);
 }
 
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+const PURPOSE_KEYS = ["competitor", "policy", "tech"];
+
 const DEFAULT_SETTINGS = {
   lookbackHours: 24,
   maxPerSource: 3,
@@ -27,6 +40,9 @@ const DEFAULT_SETTINGS = {
 
 export default function TrackerSettingsPage({ darkMode, language }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [purposeRules, setPurposeRules] = useState([]);
+  const [purposeSources, setPurposeSources] = useState([]);
+  const [togglingPurpose, setTogglingPurpose] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -34,10 +50,15 @@ export default function TrackerSettingsPage({ darkMode, language }) {
   const fileInputRef = useRef(null);
 
   const t = i18n[language]?.trackerSettings || i18n.zh.trackerSettings;
+  const purposeLabels = i18n[language]?.purposeLabels || i18n.zh.purposeLabels;
 
   useEffect(() => {
-    backendApi.getTrackerSettings()
-      .then(res => {
+    Promise.all([
+      backendApi.getTrackerSettings(),
+      backendApi.getFilterRules(),
+      backendApi.getSources()
+    ])
+      .then(([res, rulesRes, sourcesRes]) => {
         const s = res.data;
         setSettings({
           lookbackHours: s.lookbackHours,
@@ -52,6 +73,8 @@ export default function TrackerSettingsPage({ darkMode, language }) {
             ? s.fuzzyDeduplicationThreshold
             : 0.85
         });
+        setPurposeRules(rulesRes.data || []);
+        setPurposeSources(sourcesRes.data || []);
         setLoading(false);
       })
       .catch(err => {
@@ -62,6 +85,58 @@ export default function TrackerSettingsPage({ darkMode, language }) {
 
   const handleChange = (field, value) => {
     setSettings(prev => ({ ...prev, [field]: value }));
+  };
+
+  // A purpose is "configured" when it has filter rules, and "on" when at
+  // least one of its rules is active. Toggling flips the active flag of all
+  // rules tagged with that purpose (tracker only loads active rules).
+  const purposeStats = {};
+  for (const key of PURPOSE_KEYS) purposeStats[key] = { total: 0, active: 0, sources: 0 };
+  for (const rule of purposeRules) {
+    const p = rule.purpose || "competitor";
+    if (!purposeStats[p]) continue;
+    purposeStats[p].total += 1;
+    if (rule.active) purposeStats[p].active += 1;
+  }
+  for (const source of purposeSources) {
+    const list = (source.purpose || "competitor").split(",").map(s => s.trim()).filter(Boolean);
+    for (const p of list) {
+      if (purposeStats[p]) purposeStats[p].sources += 1;
+    }
+  }
+
+  const handleTogglePurpose = async (purposeKey, enable) => {
+    setTogglingPurpose(purposeKey);
+    setMessage(null);
+    try {
+      const targets = purposeRules.filter(
+        r => (r.purpose || "competitor") === purposeKey && (enable ? !r.active : r.active)
+      );
+      await Promise.all(targets.map(rule => backendApi.updateFilterRule(rule.id, {
+        name: rule.name,
+        mustInclude: parseJsonArray(rule.must_include),
+        mustExclude: parseJsonArray(rule.must_exclude),
+        active: enable,
+        priority: rule.priority || 0,
+        purpose: rule.purpose || ""
+      })));
+      setPurposeRules(prev => prev.map(r => (
+        (r.purpose || "competitor") === purposeKey ? { ...r, active: enable ? 1 : 0 } : r
+      )));
+      setMessage({
+        type: "success",
+        text: language === "zh"
+          ? `${purposeLabels[purposeKey]}已${enable ? "启用" : "停用"}`
+          : `${purposeLabels[purposeKey]} ${enable ? "enabled" : "disabled"}`
+      });
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: `${language === "zh" ? "更新失败" : "Update failed"}: ${err.message}`
+      });
+    } finally {
+      setTogglingPurpose(null);
+    }
   };
 
   const handleSave = async (e) => {
@@ -231,6 +306,66 @@ export default function TrackerSettingsPage({ darkMode, language }) {
             }}
           >{language === "zh" ? "下载模板" : "Download Template"}</button>
         </div>
+      </div>
+
+      <div style={{
+        background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+        borderRadius: BORDER_RADIUS.lg,
+        border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+        padding: "16px 20px",
+        marginBottom: 20,
+        maxWidth: 640
+      }}>
+        <h3 style={{ margin: "0 0 4px", color: darkMode ? "#fff" : COLORS.text.primary }}>
+          {language === "zh" ? "监控目的" : "Monitoring Purposes"}
+        </h3>
+        <p style={{ margin: "0 0 12px", fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.secondary }}>
+          {language === "zh"
+            ? "停用某个目的会将其所有过滤规则设为不启用，跟踪器将不再按该目的过滤。"
+            : "Disabling a purpose deactivates all of its filter rules; the tracker will no longer filter by it."}
+        </p>
+        {PURPOSE_KEYS.map(key => {
+          const stats = purposeStats[key];
+          const enabled = stats.active > 0;
+          const busy = togglingPurpose === key;
+          return (
+            <div key={key} style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 0",
+              borderTop: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`
+            }}>
+              <input
+                type="checkbox"
+                checked={enabled}
+                disabled={busy || stats.total === 0}
+                onChange={e => handleTogglePurpose(key, e.target.checked)}
+                style={{ width: 16, height: 16, cursor: busy || stats.total === 0 ? "not-allowed" : "pointer" }}
+              />
+              <span style={{
+                fontWeight: 600,
+                color: darkMode ? "#e8e8e8" : COLORS.text.primary,
+                fontSize: FONT_SIZES.base,
+                minWidth: 160
+              }}>
+                {purposeLabels[key] || key}
+              </span>
+              <span style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.secondary }}>
+                {stats.total === 0
+                  ? (language === "zh" ? "未配置规则" : "No rules configured")
+                  : (language === "zh"
+                    ? `${stats.active}/${stats.total} 条规则启用 · ${stats.sources} 个来源`
+                    : `${stats.active}/${stats.total} rules active · ${stats.sources} sources`)}
+              </span>
+              {busy && (
+                <span style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : "#aaa" }}>
+                  {language === "zh" ? "更新中..." : "Updating..."}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <form onSubmit={handleSave} style={{
