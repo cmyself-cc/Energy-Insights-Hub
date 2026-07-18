@@ -1,76 +1,40 @@
-# Task 7: Tracker Integration — Report
+# Task 7 Report: Update sources routes to handle purpose
 
-## 1. Status
+**Status:** DONE
 
-Completed.
+## What changed
 
-## 2. Files Created or Modified
+Modified `server/routes/sources.js` (commit `b29c107`, "feat: sources API supports purpose field"), exactly per the brief:
 
-- **Modified:** `server/services/tracker.js`
-  - Added imports for `loadFilterRules`, `applyKeywordFilters` from `./filterRules.js` and `matchesEnabledCategory` from `./businessCategories.js`.
-  - Loaded `filterRules` and `activeCategories` once at the start of `runTracker`.
-  - Added keyword filtering after deduplication in the source loop; logs and continues when no items remain.
-  - Replaced the post-filter step with an inline filter that applies `applyPostFilter`, non-empty title check, and `matchesEnabledCategory`.
-  - Updated the `insights` INSERT statement to include the new `categories` column, persisting `JSON.stringify(row.categories)`.
+1. **POST `/`** (`server/routes/sources.js:44,55-57`): destructures `purpose = ""` from `req.body` and includes it in the INSERT — `INSERT INTO sources (name, url, type, active, config, purpose) VALUES (?, ?, ?, ?, ?, ?)` with `purpose` as the 6th bound parameter. Validation logic unchanged.
+2. **PUT `/:id`** (`server/routes/sources.js:125,136-138`): destructures `purpose` from `req.body` and adds `purpose = ?` to the UPDATE, bound as `purpose || ""`. Validation logic unchanged.
+3. Committed with the exact message from Step 3 of the brief.
 
-- **Created:** `server/migrations/005_insights_categories.sql`
-  - Adds a nullable `categories TEXT` column to the `insights` table to store LLM-assigned business category tags.
+GET routes needed no change — they use `SELECT *`, so `purpose` is returned automatically.
 
-- **Created:** `.superpowers/sdd/task-7-report.md` (this report).
+## Test results
 
-## 3. Verification Commands Run and Their Output
+The project has no `npm test` script; tests use `node:test` (see existing `server/routes/tracker.test.js`). I wrote a temporary test file `server/routes/sources.purpose.tmp.test.js` mirroring that pattern, ran it against an isolated DB (`DB_PATH` env override), then deleted it.
 
-### 3.1 Lint
-
-```bash
-npx eslint server/services/tracker.js --ext js --report-unused-disable-directives --max-warnings 0
+**Command:**
+```
+DB_PATH="$PWD/data/task7-test/test.db" node --test server/routes/sources.purpose.tmp.test.js
 ```
 
-Result: passed (no output, exit code 0).
+**Result:** 3/3 pass —
+- `POST / stores purpose and defaults to empty string` — purpose `"market"` persisted; omitted purpose defaults to `""`
+- `PUT /:id updates purpose and defaults to empty string` — updates to `"policy"`; omitted purpose resets to `""`
+- `GET / returns purpose for all sources` — purpose included in list responses
 
-### 3.2 Unit Tests
-
-```bash
-node --test server/services/filterRules.test.js server/services/businessCategories.test.js server/services/trackerRules.test.js
+**Regression check:**
 ```
-
-Result: 23 tests passed, 0 failed.
-
-### 3.3 Migration Applied
-
-```bash
-sqlite3 data/energy_insights.db ".schema insights"
-sqlite3 data/energy_insights.db "SELECT filename FROM _migrations ORDER BY filename"
+DB_PATH="$PWD/data/task7-test/test2.db" node --test server/routes/tracker.test.js
 ```
+Result: 2 pass / 3 fail. Verified via `git stash` that the same 3 failures occur on the unmodified tree — they are **pre-existing** failures in tracker `/import-config` rule counting, unrelated to this change.
 
-Output confirmed the `insights` table now includes `categories TEXT` and migration `005_insights_categories.sql` is recorded.
+**Lint:** `npx eslint server/routes/sources.js` — clean.
 
-### 3.4 Smoke Test
+## Concerns
 
-Started the server with `node server/index.js` on `PORT=3003` and ran:
-
-```bash
-curl -X POST http://localhost:3003/api/tracker/run
-curl http://localhost:3003/api/tracker/runs/:id
-```
-
-Result: the tracker run completed (`status: completed` / `completed_with_errors` depending on the live source response) and `insights_created` was reported. Server logs showed no errors in the new keyword-filter or category-match code paths.
-
-## 4. Concerns or Follow-up Notes
-
-- The smoke test used the existing seeded source (`New Source`, a WeChat URL). It returned 0 insights because the live crawler hit a Sogou anti-bot/captcha page. This is an environmental/network issue, not a regression in the integration code.
-- No dedicated unit test exists for `runTracker` itself; the smoke test and the passing dependency tests (`filterRules`, `businessCategories`, `trackerRules`) cover the new logic.
-- The migration is additive and safe for existing data; existing rows will simply have `NULL` in `categories`.
-
-
-## Fix
-
-- **File modified:** `server/services/tracker.js`
-  - Changed the `categories` parameter in the `insights` INSERT from `JSON.stringify(row.categories)` to `row.categories ? JSON.stringify(row.categories) : null` so missing categories are persisted as SQL `NULL` instead of the literal string `"undefined"`.
-  - The INSERT parameter list still matches the 12-column columns list.
-
-- **Commit:** `38f12fbe966356c4f23ef1b79a4db3cceb32ccb7..4741e8e3c31baedf7add45966b71a4693172c4aa`
-
-- **Verification:**
-  - `npm run lint` passed (exit code 0).
-  - `node --test server/services/filterRules.test.js server/services/businessCategories.test.js server/services/trackerRules.test.js` passed: 23 tests, 0 failures.
+- 3 pre-existing failures in `server/routes/tracker.test.js` (assertion `1 !== 2` on `rulesImported` counts). Not caused by this task; flag for the task covering the tracker import logic.
+- `PUT /:id` without `purpose` in the body resets it to `""` (per the brief's verbatim `purpose || ""`). Clients doing full-object PUTs are fine, but a partial update would silently clear purpose. This matches the brief exactly, so no action taken.

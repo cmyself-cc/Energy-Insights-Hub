@@ -1,140 +1,45 @@
-# Final Fix Report — Content Filtering & Source Import
+# Final Fix Report: Purpose-Based Monitoring — Whole-Branch Review Findings
 
-## Issues Fixed
+**Date:** 2026-07-18
+**Fixes for:** `.superpowers/sdd/final-review.md` — 3 Important issues
+**Commit:** see `git log` — "fix: purpose monitoring backward compat, fail-closed toggle, seed purpose prompts"
 
-### 1. Truncated seeded category prompts (`server/migrations/004_content_filters.sql:48-57`)
+## Issue 1: Backward compatibility violated — FIXED
 
-**Problem:** Migration seeds `business_categories` with truncated `inclusion_prompt` placeholders ending in `...`. Because `/api/tracker/import-config` skipped existing categories in append mode, uploading `Key Config.xlsx` never replaced the placeholders with the full Excel prompts.
+**Problem:** `tracker.js` defaulted untagged sources (`purpose = ''`) to `"competitor"`, so they were gated by competitor rules only. `groupRulesByPurpose` also forced legacy `purpose = ''` rules into the competitor bucket, inconsistent with `loadFilterRules(purpose)`'s "empty purpose matches everything" convention.
 
-**Fix:** In `server/routes/tracker.js`, append-mode category import now upserts existing categories by running `UPDATE business_categories SET description = ?, inclusion_prompt = ?, active = 1 ... WHERE name = ?` when the category already exists. New categories are still inserted. Replace mode behavior is unchanged.
+**Changes:**
 
-**Files changed:**
-- `server/routes/tracker.js`
-- `server/routes/tracker.test.js` (added regression test)
+- `server/services/filterRules.js` — rewrote `groupRulesByPurpose`: rules with `purpose = ''` are collected as *global* rules and merged into every purpose bucket. If only global rules exist, they are exposed under all known purposes (new exported `PURPOSES = ["competitor", "policy", "tech"]`). No more forcing legacy rules into `competitor`.
+- `server/services/tracker.js:109` — untagged sources (`source.purpose` empty) now pass the **entire** `groupedRules` map to the keyword gate (all rules), restoring pre-purpose behavior.
 
-### 2. Zero insights when no LLM API key (`server/services/llmProcessor.js:48-61` + `server/services/tracker.js`)
+**Verification:** smoke test confirmed global rules merge into every bucket; global-only rules appear under competitor+policy+tech; with the real DB, an untagged source resolves all three buckets (`competitor,policy,tech` — 369/30/38 seeded rules). 16 untagged live sources (Reuters Energy, Bloomberg Energy, IEA News, etc.) are again gated by all rules.
 
-**Problem:** `processInsight` returns an empty `categories` array when `LLM_API_KEY` is unset, and `server/services/tracker.js` unconditionally dropped any insight that did not match an enabled business category.
+## Issue 2: Purpose toggle fails open — FIXED
 
-**Fix:** Added `classificationEnabled: Boolean(process.env.LLM_API_KEY)` to the `filterContext` in `processBatch`, and gated the `matchesEnabledCategory` post-filter in `runTracker` so category matching is only enforced when the LLM is actually invoked.
+**Problem:** The Tracker Settings toggle deactivates all rules of a purpose. Sources tagged only with that purpose then built an empty `sourceRules` map, and `applyKeywordGate` treated empty `purposeRules` as "pass everything through" — disabling a purpose made its sources ingest completely unfiltered.
 
-**Files changed:**
-- `server/services/tracker.js`
+**Change:** `server/services/tracker.js` — when a source declares purposes but none of them have active rules (`sourceRules` empty), the source is now **skipped** (logged as `skipped, no active rules for purpose(s) ...`, counted as success) instead of passing everything through. Untagged sources with no rules configured at all still pass through (true backward-compatible "no gating configured" case).
 
-### 3. Replace-mode deletes outside transaction (`server/services/sourceImporter.js:29-34`)
+**Verification:** with the real DB, deactivated all `tech` rules in a transaction and rebuilt the grouped map: a `tech`-only source resolved to skipped; a `competitor,tech` source kept its competitor rules only. Rolled back afterwards — DB unchanged. Gate unit check: non-empty `purposeRules` with no match excludes the item; empty `purposeRules` still passes through.
 
-**Problem:** In replace mode, source deletes happened before the insert transaction. If the insert failed, previously imported sources were already gone.
+## Issue 3: Per-purpose LLM prompts never seeded — FIXED
 
-**Fix:** Moved the `DELETE FROM sources ...` and `DELETE FROM source_imports` statements inside the same `db.transaction()` that performs the inserts, and recomputed the duplicate-check set after the deletes so the import sees the post-delete state.
+**Problem:** `filter_config` had exactly one `semantic` row with `purpose = ''`, so `loadSemanticConfig(purpose)` always fell back to the global prompt; the spec's three analyst prompts existed only as plumbing.
 
-**Files changed:**
-- `server/services/sourceImporter.js`
+**Changes:**
 
-### 4. Python/pandas runtime dependency not documented (`server/lib/configParser.js:149-171`)
+- New `server/seeds/seedPurposePrompts.js` — exports `PURPOSE_PROMPTS` (竞争情报分析师 / 政策分析师 / 技术分析师, phrased as semantic-exclusion rules matching how `llmProcessor.js` consumes them, keyed to each spec's output fields: 主体公司/事件类型/合作方/交易规模, 政策名称/发文机构/受影响行业, 技术领域/创新点/应用场景) and `seedPurposePrompts()` (insert-if-missing per purpose, so edited prompts are never overwritten). Runnable standalone via `node server/seeds/seedPurposePrompts.js`.
+- `server/seeds/seedPurposeRules.js` — now calls `seedPurposePrompts()` after seeding rules and prints the resulting `filter_config` rows.
 
-**Problem:** Excel parsing shells out to `python3` with `pandas`, but this was not documented. Replacing it with a pure-Node library would add a new runtime npm dependency, which violates the project constraint.
+**Verification:** ran the standalone seed against the live DB — 4 `semantic` rows now exist (`''`, `competitor`, `policy`, `tech`), re-run is idempotent (still 4 rows, no duplicates). `loadSemanticConfig('competitor'|'policy'|'tech')` returns three distinct purpose-specific prompts, distinct from the global fallback.
 
-**Fix:** Documented the requirement in:
-- `docs/superpowers/specs/2026-07-09-content-filtering-design.md` (Excel import section)
-- `AGENTS.md` (new "Backend runtime requirements" section)
+## Checks
 
-**Files changed:**
-- `docs/superpowers/specs/2026-07-09-content-filtering-design.md`
-- `AGENTS.md`
+- `npm run lint` — clean (`--max-warnings 0`).
+- `node --test server/routes/tracker.test.js` — 2 pass / 3 fail, but the 3 failures (`/import-config` category-import counts) are **pre-existing**: verified identical failures on the unmodified tree via `git stash`. Not related to these fixes.
+- Live DB state: 4 semantic config rows; filter_rules unchanged (369 competitor / 30 policy / 38 tech, all active); the deactivation test was transactional and rolled back.
 
-## Verification
+## Not addressed (out of scope, from the review's Minor list)
 
-### Lint
-
-```bash
-npm run lint
-```
-
-Result: **pass** (0 errors, 0 warnings).
-
-### Server unit tests
-
-```bash
-node --test server/services/filterRules.test.js \
-             server/services/businessCategories.test.js \
-             server/lib/configParser.test.js \
-             server/services/sourceImporter.test.js \
-             server/services/trackerRules.test.js \
-             server/services/llmProcessor.test.js \
-             server/lib/sourcesMdLoader.test.js \
-             server/crawlers/websiteCrawler.test.js \
-             server/crawlers/rssCrawler.test.js \
-             server/crawlers/wechatCrawler.test.js \
-             server/routes/tracker.test.js
-```
-
-Result:
-
-```
-# tests 62
-# suites 12
-# pass 62
-# fail 0
-# cancelled 0
-# skipped 0
-# todo 0
-```
-
-Result: **pass**.
-
-## Commit
-
-Fixes committed on branch `feat/tracker-rules`.
-
-
----
-
-## Final Fix — Preserve `active` flag during append-mode category upsert
-
-**Date:** 2026-07-10
-
-**Review finding:** In `server/routes/tracker.js`, append-mode category upsert unconditionally set `active = 1`, re-enabling categories that a user had previously disabled in the UI.
-
-### Fix
-
-Removed `active = 1` from the append-mode `UPDATE business_categories` statement so the existing `active` value is preserved. New categories are still inserted with `active = 1`. Replace-mode behavior is unchanged.
-
-**Files changed:**
-- `server/routes/tracker.js`
-- `server/routes/tracker.test.js` (added regression test)
-
-### Verification
-
-#### Lint
-
-```bash
-npm run lint
-```
-
-Result: **pass** (0 errors, 0 warnings).
-
-#### Tracker route tests
-
-```bash
-node --test server/routes/tracker.test.js
-```
-
-Result:
-
-```
-# tests 5
-# suites 1
-# pass 5
-# fail 0
-# cancelled 0
-# skipped 0
-# todo 0
-```
-
-Result: **pass**.
-
-### Commit
-
-- Branch: `feat/tracker-rules`
-- Commit hash: `27387a0`
-- Commit message: `fix(tracker): preserve active flag during append-mode category upsert`
+Stale Tavily source row (id=61), CSV purpose column not wired in `csvConfig.js`, dead `requiredIndustryKeywords`/`requiredCompanyKeywords` settings, `.env.example` model drift, `filters.js` `/config` `LIMIT 1` without purpose predicate (worth revisiting now that purpose-specific `filter_config` rows exist), plan/progress doc hygiene.

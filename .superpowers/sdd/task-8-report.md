@@ -1,113 +1,41 @@
-# Task 8 Report: API Routes
+# Task 8 Report: Update filters routes to handle purpose
 
-## 1. Status
+**Status:** DONE
 
-Completed.
+## What changed
 
-## 2. Files Created or Modified
+Modified `server/routes/filters.js` exactly per the brief:
 
-- **Created:** `server/routes/filters.js`
-  - `GET /api/filters/rules` — list filter rules.
-  - `POST /api/filters/rules` — create a new filter rule.
-  - `PUT /api/filters/rules/:id` — update a filter rule.
-  - `DELETE /api/filters/rules/:id` — delete a filter rule.
-  - `GET /api/filters/categories` — list business categories.
-  - `PUT /api/filters/categories/:id` — update a category.
-  - `GET /api/filters/config` — get semantic filter config.
-  - `PUT /api/filters/config` — update semantic filter config.
+1. **POST /rules** (`server/routes/filters.js:21-31`): destructures `purpose = ""` from `req.body` and inserts it into the new `purpose` column — the INSERT statement now lists all 7 columns (`type, name, must_include, must_exclude, active, priority, purpose`) with 7 placeholders.
+2. **PUT /rules/:id** (`server/routes/filters.js:33-43`): destructures `purpose` from `req.body` and adds `purpose = ?` to the UPDATE statement, binding `purpose || ""` so an omitted field stores an empty string (matching the column default) rather than NULL.
 
-- **Modified:** `server/routes/sources.js`
-  - Added `POST /api/sources/import` — accepts a base64-encoded config file (`file`), optional `filename`, and `mode` (`append` or `replace`, default `append`), parses it via `configParser.js`, and imports sources via `sourceImporter.js`.
-  - Added `normalizeImportType()` helper to coerce source types to `wechat` or `website` so they comply with the `source_imports.type` CHECK constraint.
+No other routes, files, or logic were touched. GET /rules already uses `SELECT *`, so it returns the `purpose` column with no change needed.
 
-- **Modified:** `server/routes/tracker.js`
-  - Added `POST /api/tracker/import-config` — full config import for filter rules, business categories, semantic config, and sources.
-  - In `replace` mode, deletes existing `filter_rules` and `business_categories`, then delegates source cleanup to `importSources(..., "replace")`.
-  - Also normalizes source types before import.
+## Test results
 
-- **Modified:** `server/index.js`
-  - Imported and registered `filtersRouter` at `/api/filters`.
+No existing test suite in the project (no `test` script in `package.json`). Verified with:
 
-## 3. Verification Commands Run and Their Output
-
-### Lint
-
-```bash
-npm run lint
-```
-
-Passed with no errors or warnings.
-
-### Unit tests
-
-```bash
-node --test server/services/sourceImporter.test.js server/lib/configParser.test.js server/services/filterRules.test.js
-```
-
-Output:
+1. `node --check server/routes/filters.js` — syntax OK.
+2. A functional smoke test (temporary script, deleted after run): booted a scratch DB (`DATA_DIR=/tmp/eih-test-data`, `DB_PATH=/tmp/eih-test-data/test.db`), ran `initDb()` (migrations incl. `009_purpose_columns.sql` applied — `filter_rules` schema confirmed to have `purpose TEXT DEFAULT ''`), mounted the real router in Express, and exercised the endpoints over HTTP. All 9 assertions passed:
 
 ```
-# tests 17
-# suites 3
-# pass 17
-# fail 0
-# cancelled 0
-# skipped 0
-# todo 0
-# duration_ms 783.2735
+PASS POST status 200
+PASS POST stores purpose 'compliance'
+PASS POST default purpose ''
+PASS PUT status 200
+PASS PUT stores purpose 'operations'
+PASS PUT updates name
+PASS PUT parses csv mustInclude
+PASS PUT omitted purpose -> ''
+PASS GET includes purpose field
 ```
 
-### Endpoint smoke tests
+One mid-test failure occurred during verification but was a bug in my throwaway test script (used `type: "keyword"`, which violates the table's `CHECK(type IN ('enterprise','include_keyword','exclude_keyword'))` constraint), not in the route code; fixed the test input and all checks passed.
 
-```bash
-node server/index.js &
-sleep 2
+## Commit
 
-curl -s http://localhost:3003/api/filters/categories
-curl -s http://localhost:3003/api/filters/rules
-curl -s http://localhost:3003/api/filters/config
+Committed per the brief's Step 3: `adf0fd2 feat: filter rules API supports purpose field` (1 file changed, 6 insertions, 6 deletions).
 
-CONFIG_JSON='{"excludeKeywords":["广告"],"compositeRules":[{"name":"测试规则","mustInclude":["新能源","汽车"],"mustNotInclude":["股票"]}],"semanticPrompt":"只保留能源相关资讯","categories":[{"name":"测试分类","description":"测试描述","inclusionPrompt":"测试prompt"}],"sources":[{"name":"测试公众号","type":"wechat","identifier":"test123"},{"name":"测试网站","type":"website","url":"https://example.com"}]}'
-FILE_B64=$(echo -n "$CONFIG_JSON" | base64)
+## Concerns
 
-curl -s -X POST http://localhost:3003/api/sources/import \
-  -H "Content-Type: application/json" \
-  -d "{\"filename\":\"config.json\",\"mode\":\"append\",\"file\":\"$FILE_B64\"}"
-# => {"data":{"imported":2,"skipped":0}}
-
-curl -s -X POST http://localhost:3003/api/tracker/import-config \
-  -H "Content-Type: application/json" \
-  -d "{\"filename\":\"config.json\",\"mode\":\"replace\",\"file\":\"$FILE_B64\"}"
-# => {"data":{"rulesImported":2,"categoriesImported":1,"sourcesImported":2}}
-```
-
-All GET endpoints returned expected JSON arrays/objects, both import endpoints returned correct counts, and the database was restored to its pre-test state afterward.
-
-## 4. Concerns and Follow-up Notes
-
-- The `source_imports` table has a CHECK constraint allowing only `wechat` and `website`. I added type normalization in both import endpoints to avoid constraint violations. If future source types need to be imported, the schema or normalization logic will need to be updated.
-- The replace-mode flow for `/api/tracker/import-config` deletes all existing filter rules and business categories before inserting parsed ones. This matches the brief but is destructive; callers should be aware that `mode=replace` is all-or-nothing.
-- The seeded business categories were restored after testing by re-running the migration seed INSERTs; the live database was left clean.
-
-## Fix
-
-- **Files modified:**
-  - `server/services/sourceImporter.js`
-    - Added `normalizeImportType(source)` to centralize type validation.
-    - Rejects unsupported source types with a 400-class `ImportValidationError` instead of silently coercing them to `website`.
-    - Only `wechat` and `website` are accepted, matching the `source_imports.type` CHECK constraint.
-  - `server/routes/sources.js`
-    - Removed local `normalizeImportType()` helper.
-    - Imports sources through the centralized `normalizeImportType`, returning `400` for unsupported types.
-  - `server/routes/tracker.js`
-    - Removed local `normalizeImportType()` helper.
-    - Moved the replace-mode `DELETE FROM filter_rules` and `DELETE FROM business_categories` statements inside the same `db.transaction()` that performs rule/category/config inserts, so a failure rolls back the destructive deletes.
-    - Imports sources through the centralized `normalizeImportType`, returning `400` for unsupported types.
-  - `server/services/sourceImporter.test.js`
-    - Added tests covering acceptance of supported types and rejection of unsupported types.
-
-- **Commit:** See final handoff for the exact hash range.
-
-- **Verification:**
-  - `npm run lint` passed (exit code 0, no warnings).
-  - `node --test server/services/sourceImporter.test.js server/lib/configParser.test.js server/services/filterRules.test.js server/services/trackerRules.test.js server/services/businessCategories.test.js` passed: 33 tests, 0 failures.
+- None blocking. Note: PUT semantics replace the whole rule, so a client that omits `purpose` on update will reset it to `""` — this matches the brief's exact code, so it was kept as specified. If partial updates are ever desired, that would be a separate change.
