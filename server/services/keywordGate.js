@@ -10,53 +10,48 @@ function parseList(value) {
 
 export function applyKeywordGate(items, context) {
   const excludeKeywords = parseList(context.excludeKeywords);
-  const requiredIndustryKeywords = parseList(context.requiredIndustryKeywords);
-  const requiredCompanyKeywords = parseList(context.requiredCompanyKeywords);
-  const enterpriseKeywords = context.enterpriseKeywords || [];
-  const includeKeywords = context.includeKeywords || [];
-  const excludeRuleKeywords = context.excludeRuleKeywords || [];
-
-  const hasIndustryGate = requiredIndustryKeywords.length > 0;
-  const hasCompanyGate = requiredCompanyKeywords.length > 0;
-  const hasEnterpriseGate = enterpriseKeywords.length > 0;
-  const hasIncludeGate = includeKeywords.length > 0;
-  const hasExcludeGate = excludeRuleKeywords.length > 0;
+  const purposeRules = context.purposeRules || {};
 
   const kept = [];
   let excluded = 0;
 
   for (const item of items) {
-    if (!item.title) {
-      excluded++;
-      continue;
-    }
+    if (!item.title) { excluded++; continue; }
 
-    // 1. Global exclude keywords (tracker_settings)
+    // Global exclude keywords (tracker_settings)
     if (excludeKeywords.length && matchesAnyKeyword(item, excludeKeywords)) {
       excluded++;
       continue;
     }
 
-    // 2. Exclude rule keywords (filter_rules.type=exclude_keyword)
-    if (hasExcludeGate && matchesAnyKeyword(item, excludeRuleKeywords)) {
-      excluded++;
+    // If no purpose rules configured, pass through
+    const hasPurposeRules = Object.keys(purposeRules).length > 0;
+    if (!hasPurposeRules) {
+      kept.push(item);
       continue;
     }
 
-    // 3. Three-layer progressive structure:
-    //    (enterprise OR ...) AND (include OR ...) AND NOT (exclude OR ...)
-    const enterpriseMatch = hasEnterpriseGate && matchesAnyKeyword(item, enterpriseKeywords);
-    const includeMatch = hasIncludeGate && matchesAnyKeyword(item, includeKeywords);
-    const companyMatch = hasCompanyGate && matchesAnyKeyword(item, requiredCompanyKeywords);
+    // Check if item matches at least one purpose
+    let matched = false;
+    for (const [purpose, rules] of Object.entries(purposeRules)) {
+      const subjectMatch = rules.enterprise?.length > 0 && matchesAnyKeyword(item, rules.enterprise);
+      const includeMatch = rules.include_keyword?.length > 0 && matchesAnyKeyword(item, rules.include_keyword);
+      const excludeMatch = rules.exclude_keyword?.length > 0 && matchesAnyKeyword(item, rules.exclude_keyword);
 
-    // At least one of the three layers must be configured to apply the gate
-    if (hasEnterpriseGate || hasIncludeGate || hasCompanyGate || hasIndustryGate) {
-      const anyMatch = enterpriseMatch || includeMatch || companyMatch ||
-        (hasIndustryGate && matchesAnyKeyword(item, requiredIndustryKeywords));
-      if (!anyMatch) {
-        excluded++;
-        continue;
+      // Exclude keyword blocks the match for this purpose
+      if (excludeMatch) continue;
+
+      // Subject OR include keyword matches
+      if (subjectMatch || includeMatch) {
+        matched = true;
+        item.matchedPurpose = purpose; // Tag which purpose matched
+        break;
       }
+    }
+
+    if (!matched) {
+      excluded++;
+      continue;
     }
 
     kept.push(item);
