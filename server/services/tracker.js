@@ -9,7 +9,7 @@ import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 import { applyKeywordGate } from "./keywordGate.js";
 import { deduplicateItems } from "./dedup.js";
 
-const BATCH_SIZE = 5; // 并发数，避免触发频率限制
+const BATCH_SIZE = 2; // 并发数，避免触发频率限制
 const LANGUAGE = process.env.DEFAULT_LANGUAGE || "zh";
 
 function sleep(ms) {
@@ -43,7 +43,7 @@ async function processBatch(items, language) {
     if (results.length === 0 && batch.length > 0) {
       throw new Error(`All ${batch.length} articles in batch failed LLM processing`);
     }
-    if (i + BATCH_SIZE < items.length) await sleep(1000);
+    if (i + BATCH_SIZE < items.length) await sleep(2000);
   }
   return results;
 }

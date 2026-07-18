@@ -107,7 +107,7 @@ If the content is not related to energy or matches the semantic exclusions, set 
       method: "POST",
       headers,
       body: JSON.stringify(body)
-    }, 30000);
+    }, 60000);
 
     if (!response.ok) {
       throw new Error(`LLM API failed: ${response.status}`);
