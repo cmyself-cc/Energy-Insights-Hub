@@ -12,6 +12,79 @@ import { deduplicateItems } from "./dedup.js";
 const BATCH_SIZE = 2; // 并发数，避免触发频率限制
 const LANGUAGE = process.env.DEFAULT_LANGUAGE || "zh";
 
+const SOURCE_TYPE_MAP = {
+  rss: "新闻门户",
+  website: "新闻门户",
+  wechat_mcp: "微信公众号",
+  wechat_album: "微信公众号"
+};
+
+const DOMAIN_KEYWORDS = {
+  "电力&氢能": ["电力", "电网", "储能", "氢能", "电池", "充电", "光伏", "风电", "核电", "水电", "煤电", "电价", "电力市场", "智能电网", "虚拟电厂"],
+  "化工": ["化工", "石化", "石油", "炼化", "乙烯", "聚乙烯", "聚丙烯", "乙烷裂解", "石脑油"],
+  "生物燃料": ["生物燃料", "生物柴油", "SAF", "绿色甲醇", "生物乙醇", "可持续航空燃油"],
+  "LNG/天然气": ["LNG", "天然气", "液化天然气", "接收站", "长协", "煤改气"],
+  "CCS": ["CCS", "CCUS", "碳捕捉", "碳封存", "碳捕集", "二氧化碳"],
+  "移动出行": ["充电桩", "充电站", "加油站", "便利店", "电动汽车", "新能源车", "物流", "货运"],
+  "润滑油": ["润滑油", "基础油", "添加剂", "冷却液", "制动液", "齿轮油"],
+  "战略合作": ["合作", "签约", "战略", "联盟", "合资", "联合"],
+  "收并购": ["收购", "并购", "重组", "股权", "投资", "合资", "兼并"]
+};
+
+const ENTERPRISE_KEYWORDS = {
+  "国有企业": ["中石油", "中石化", "中海油", "国家电网", "南方电网", "国家能源", "华能", "大唐", "华电", "国电投", "三峡", "中广核", "中核", "中国能建", "中国电建", "中国石油", "中国石化"],
+  "民营企业": ["宁德时代", "比亚迪", "蔚来", "小鹏", "理想", "隆基", "通威", "阳光电源", "亿纬锂能", "远景", "金风科技"]
+};
+
+function deriveFields(item, source) {
+  const keywords = item.keywords || [];
+  const text = `${item.title || ""} ${item.summary || ""} ${keywords.join(" ")}`.toLowerCase();
+
+  // Derive sourceType from source type
+  const sourceType = SOURCE_TYPE_MAP[source?.type] || "新闻门户";
+
+  // Derive businessDomain from keywords
+  let businessDomain = "能源转型";
+  for (const [domain, domainKeywords] of Object.entries(DOMAIN_KEYWORDS)) {
+    if (domainKeywords.some(k => text.includes(k.toLowerCase()))) {
+      businessDomain = domain;
+      break;
+    }
+  }
+
+  // Derive enterpriseType from keywords
+  let enterpriseType = "";
+  for (const [type, typeKeywords] of Object.entries(ENTERPRISE_KEYWORDS)) {
+    if (typeKeywords.some(k => text.includes(k.toLowerCase()))) {
+      enterpriseType = type;
+      break;
+    }
+  }
+
+  // Derive categories from keywords
+  const categories = [];
+  for (const [domain, domainKeywords] of Object.entries(DOMAIN_KEYWORDS)) {
+    if (domainKeywords.some(k => text.includes(k.toLowerCase()))) {
+      categories.push(domain);
+    }
+  }
+
+  // Derive entities from keywords (first 2-3)
+  const entities = keywords.slice(0, 3);
+
+  // Derive features from keywords (first 1-2)
+  const features = keywords.slice(0, 2);
+
+  return {
+    sourceType,
+    businessDomain,
+    enterpriseType,
+    entities,
+    features,
+    categories
+  };
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -164,16 +237,18 @@ export async function runTracker(runId = null) {
 
         const allProcessed = [];
         for (const [purpose, purposeItems] of Object.entries(byPurpose)) {
-          const semanticPrompt = loadSemanticConfig(purpose);
           const filterContext = {
-            semanticPrompt,
+            semanticPrompt: loadSemanticConfig(purpose),
             categories: loadActiveCategories(),
             classificationEnabled: Boolean(process.env.LLM_API_KEY)
           };
           const processed = await processBatch(purposeItems, LANGUAGE, filterContext);
           // processInsight returns fresh objects, so re-tag with all matched purposes
+          // and derive other fields algorithmically from keywords
           for (const row of processed) {
             row.matchedPurposes = purposeItems[0].matchedPurposes || [purpose];
+            const derived = deriveFields(row, source);
+            Object.assign(row, derived);
           }
           allProcessed.push(...processed);
         }
