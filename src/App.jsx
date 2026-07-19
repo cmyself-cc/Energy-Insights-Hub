@@ -166,6 +166,14 @@ export default function App() {
     setLoading(false);
   }, [filters, t]);
 
+  // Auto-fetch when filters change (debounced for query input)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchInsights();
+    }, filters.query ? 500 : 0);
+    return () => clearTimeout(timer);
+  }, [filters, fetchInsights]);
+
   const generateNewsletter = useCallback(async (overrideLang) => {
     if (!cart.length) return;
     if (!apiConfig || !apiConfig.apiKey) {

@@ -85,7 +85,7 @@ export const SOURCE_TYPES = {
 
 export const DEFAULT_FILTERS = {
   dateRange: "last30",
-  purposes: [],
+  purposes: ["competitor", "policy", "tech"],
   businessCategory: "all",
   eventCategory: "all",
   sourceType: "all",
