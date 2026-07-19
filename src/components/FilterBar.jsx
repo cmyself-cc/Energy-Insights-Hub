@@ -2,6 +2,12 @@ import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/the
 import { i18n } from "../constants/i18n";
 import { DATE_RANGES, PURPOSE_OPTIONS, BUSINESS_CATEGORIES, EVENT_CATEGORIES, SOURCE_TYPES } from "../constants/taxonomy";
 
+const PURPOSE_DOTS = {
+  competitor: "#e74c3c",
+  policy: "#3498db",
+  tech: "#27ae60"
+};
+
 export default function FilterBar({
   darkMode,
   language,
@@ -35,16 +41,28 @@ export default function FilterBar({
     whiteSpace: "nowrap"
   };
 
-  const purposeBtnStyle = (active) => ({
-    padding: "6px 14px",
+  const purposeBtnStyle = (active, dotColor) => ({
+    padding: "6px 14px 6px 10px",
     borderRadius: BORDER_RADIUS.md,
-    border: `1.5px solid ${active ? COLORS.primary : darkMode ? COLORS.border.dark : COLORS.border.light}`,
-    background: active ? COLORS.primary : "transparent",
+    border: `1.5px solid ${active ? dotColor : darkMode ? COLORS.border.dark : COLORS.border.light}`,
+    background: active ? dotColor : "transparent",
     color: active ? "#fff" : darkMode ? "#aaa" : COLORS.text.secondary,
     fontSize: FONT_SIZES.sm,
     fontWeight: active ? 700 : 500,
     cursor: "pointer",
-    transition: `all ${TRANSITIONS.fast}`
+    transition: `all ${TRANSITIONS.fast}`,
+    display: "flex",
+    alignItems: "center",
+    gap: 6
+  });
+
+  const purposeDotStyle = (color) => ({
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: color,
+    display: "inline-block",
+    flexShrink: 0
   });
 
   const renderOptions = (options) => options.map(o => (
@@ -79,8 +97,9 @@ export default function FilterBar({
           <button
             key={p.key}
             onClick={() => togglePurpose(p.key)}
-            style={purposeBtnStyle(isPurposeActive(p.key))}
+            style={purposeBtnStyle(isPurposeActive(p.key), PURPOSE_DOTS[p.key])}
           >
+            <span style={purposeDotStyle(isPurposeActive(p.key) ? "#fff" : PURPOSE_DOTS[p.key])} />
             {p.label}
           </button>
         ))}

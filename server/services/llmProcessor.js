@@ -44,7 +44,7 @@ function extractContent(data, config) {
   return data.choices?.[0]?.message?.content || "";
 }
 
-export async function processInsight(item, language = "en", filterContext = null) {
+export async function processInsight(item, _language = "en", filterContext = null) {
   const config = {
     providerId: process.env.LLM_PROVIDER || "openai",
     baseUrl: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
@@ -66,8 +66,6 @@ export async function processInsight(item, language = "en", filterContext = null
       categories: []
     };
   }
-
-  const isZh = language === "zh";
 
   const semanticPrompt = filterContext?.semanticPrompt || "";
   const categories = Array.isArray(filterContext?.categories) ? filterContext.categories : [];
@@ -92,19 +90,24 @@ URL: ${item.url}
 
 ${filteringInstructions}
 
+CRITICAL RULES:
+1. title: Extract the CORE EVENT in the most concise Chinese possible (10-20 characters). Remove all noise: source names, dates, author names, filler words. Focus on WHAT happened, WHO did it, and the KEY OUTCOME.
+2. summary: Clean the article of ALL noise (author names, source attribution, dates, filler phrases, advertisements, unrelated context). Write a pure, information-dense summary in Chinese, maximum 200 characters. Every word must carry information.
+3. If the article does NOT match any of the three monitoring purposes (competitor activity, energy policy, technology breakthrough), set title and summary to empty strings.
+
 Return ONLY a valid JSON object (no markdown, no explanation) with these fields:
-- title: string (in ${isZh ? "Chinese" : "English"}, keep it concise)
-- summary: string (2-3 sentences, data-driven, in ${isZh ? "Chinese" : "English"})
-- sourceType: string (in ${isZh ? "Chinese" : "English"}, e.g. 微信公众号, 新闻门户)
-- businessDomain: string (in ${isZh ? "Chinese" : "English"}, e.g. 能源转型, 化工)
-- enterpriseType: string (in ${isZh ? "Chinese" : "English"}, e.g. 国有企业, 民营企业)
-- entities: array of 2-5 strings (key companies/technologies, in ${isZh ? "Chinese" : "English"})
-- features: array of 1-3 strings (category tags, in ${isZh ? "Chinese" : "English"})
+- title: string (concise Chinese, 10-20 characters, core event only)
+- summary: string (pure information, max 200 Chinese characters, no noise)
+- sourceType: string (e.g. 微信公众号, 新闻门户)
+- businessDomain: string (e.g. 能源转型, 化工)
+- enterpriseType: string (e.g. 国有企业, 民营企业)
+- entities: array of 2-5 strings (key companies/technologies)
+- features: array of 1-3 strings (category tags)
 - keywords: array of exactly 3 strings (specific searchable keywords: company names, technology names, event names, or policy names. NOT generic concepts. Examples: 宁德时代, 钠离子电池, 136号文, 电价改革, 中石化, CCUS)
 - categories: array of strings (business category names from the list above)
 - publishDate: string (ISO 8601 date, e.g. 2026-07-08)
 
-If the content is not related to energy or matches the semantic exclusions, set title and summary to empty strings.`;
+If the content does not match any monitoring purpose or matches semantic exclusions, set title and summary to empty strings.`;
 
   const messages = [{ role: "user", content: prompt }];
   const { url, headers, body } = buildRequest(config, messages, 1500, 0.5);
