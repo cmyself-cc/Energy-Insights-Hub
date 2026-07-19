@@ -127,6 +127,16 @@ export default function App() {
     storage.saveLanguage(newLanguage);
   };
 
+  function getDateRange(dateRange) {
+    if (dateRange === "noLimit") return {};
+    const days = { last7: 7, last30: 30, last90: 90 };
+    const d = days[dateRange];
+    if (!d) return {};
+    const date = new Date();
+    date.setDate(date.getDate() - d);
+    return { dateFrom: date.toISOString().split("T")[0] };
+  }
+
   const fetchInsights = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -135,9 +145,11 @@ export default function App() {
       const params = {
         pageSize: 100,
         search: filters.query || undefined,
-        businessDomain: filters.businessDomain !== "all" ? filters.businessDomain : undefined,
-        enterpriseType: filters.enterpriseType !== "all" ? filters.enterpriseType : undefined,
-        sourceType: filters.sourceType !== "all" ? filters.sourceType : undefined
+        sourceType: filters.sourceType !== "all" ? filters.sourceType : undefined,
+        businessCategory: filters.businessCategory !== "all" ? filters.businessCategory : undefined,
+        eventCategory: filters.eventCategory !== "all" ? filters.eventCategory : undefined,
+        purposes: (filters.purposes || []).length > 0 ? filters.purposes.join(",") : undefined,
+        ...getDateRange(filters.dateRange)
       };
       const res = await backendApi.getInsights(params);
       setInsights(res.data || []);

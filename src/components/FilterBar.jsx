@@ -1,6 +1,6 @@
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
-import { DATE_RANGES, BUSINESS_DOMAINS, ENTERPRISE_TYPES, SOURCE_TYPES } from "../constants/taxonomy";
+import { DATE_RANGES, PURPOSE_OPTIONS, BUSINESS_CATEGORIES, EVENT_CATEGORIES, SOURCE_TYPES } from "../constants/taxonomy";
 
 export default function FilterBar({
   darkMode,
@@ -35,101 +35,139 @@ export default function FilterBar({
     whiteSpace: "nowrap"
   };
 
+  const purposeBtnStyle = (active) => ({
+    padding: "6px 14px",
+    borderRadius: BORDER_RADIUS.md,
+    border: `1.5px solid ${active ? COLORS.primary : darkMode ? COLORS.border.dark : COLORS.border.light}`,
+    background: active ? COLORS.primary : "transparent",
+    color: active ? "#fff" : darkMode ? "#aaa" : COLORS.text.secondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: active ? 700 : 500,
+    cursor: "pointer",
+    transition: `all ${TRANSITIONS.fast}`
+  });
+
   const renderOptions = (options) => options.map(o => (
     <option key={o.key} value={o.key}>{o.label}</option>
   ));
 
+  const togglePurpose = (purpose) => {
+    const current = filters.purposes || [];
+    const next = current.includes(purpose)
+      ? current.filter(p => p !== purpose)
+      : [...current, purpose];
+    onChange({ ...filters, purposes: next });
+  };
+
+  const isPurposeActive = (purpose) => (filters.purposes || []).includes(purpose);
+
   return (
     <div style={{
       display: "flex",
-      flexWrap: "wrap",
-      alignItems: "center",
-      gap: "12px 16px",
+      flexDirection: "column",
+      gap: 12,
       padding: "16px 20px",
       background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
       borderRadius: BORDER_RADIUS.lg,
       border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
       marginBottom: 20
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={labelStyle}>{t.competitiveIntelligence.dateFilter}</span>
-        <select
-          value={filters.dateRange}
-          onChange={(e) => onChange({ ...filters, dateRange: e.target.value })}
-          style={selectStyle}
-        >
-          {renderOptions(DATE_RANGES[language])}
-        </select>
+      {/* 监控类型 - 可复选按钮 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={labelStyle}>{language === "zh" ? "监控类型" : "Monitor Type"}</span>
+        {PURPOSE_OPTIONS[language].map(p => (
+          <button
+            key={p.key}
+            onClick={() => togglePurpose(p.key)}
+            style={purposeBtnStyle(isPurposeActive(p.key))}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={labelStyle}>{t.competitiveIntelligence.businessDomain}</span>
-        <select
-          value={filters.businessDomain}
-          onChange={(e) => onChange({ ...filters, businessDomain: e.target.value })}
-          style={{ ...selectStyle, minWidth: 140 }}
-        >
-          {renderOptions(BUSINESS_DOMAINS[language])}
-        </select>
-      </div>
+      {/* 筛选下拉 + 搜索 */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={labelStyle}>{language === "zh" ? "日期" : "Date"}</span>
+          <select
+            value={filters.dateRange}
+            onChange={(e) => onChange({ ...filters, dateRange: e.target.value })}
+            style={selectStyle}
+          >
+            {renderOptions(DATE_RANGES[language])}
+          </select>
+        </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={labelStyle}>{t.competitiveIntelligence.enterpriseType}</span>
-        <select
-          value={filters.enterpriseType}
-          onChange={(e) => onChange({ ...filters, enterpriseType: e.target.value })}
-          style={{ ...selectStyle, minWidth: 140 }}
-        >
-          {renderOptions(ENTERPRISE_TYPES[language])}
-        </select>
-      </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={labelStyle}>{language === "zh" ? "业务" : "Business"}</span>
+          <select
+            value={filters.businessCategory}
+            onChange={(e) => onChange({ ...filters, businessCategory: e.target.value })}
+            style={{ ...selectStyle, minWidth: 140 }}
+          >
+            {renderOptions(BUSINESS_CATEGORIES[language])}
+          </select>
+        </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={labelStyle}>{t.competitiveIntelligence.sourceType}</span>
-        <select
-          value={filters.sourceType}
-          onChange={(e) => onChange({ ...filters, sourceType: e.target.value })}
-          style={selectStyle}
-        >
-          {renderOptions(SOURCE_TYPES[language])}
-        </select>
-      </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={labelStyle}>{language === "zh" ? "事件" : "Event"}</span>
+          <select
+            value={filters.eventCategory}
+            onChange={(e) => onChange({ ...filters, eventCategory: e.target.value })}
+            style={{ ...selectStyle, minWidth: 140 }}
+          >
+            {renderOptions(EVENT_CATEGORIES[language])}
+          </select>
+        </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 220 }}>
-        <input
-          type="text"
-          value={filters.query}
-          onChange={(e) => onChange({ ...filters, query: e.target.value })}
-          onKeyDown={(e) => e.key === "Enter" && onSearch()}
-          placeholder={t.competitiveIntelligence.keywordSearch}
-          style={{
-            flex: 1,
-            padding: "7px 12px",
-            borderRadius: BORDER_RADIUS.md,
-            border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-            background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
-            color: darkMode ? "#e8e8e8" : COLORS.text.primary,
-            fontSize: FONT_SIZES.md,
-            outline: "none"
-          }}
-        />
-        <button
-          onClick={onSearch}
-          disabled={loading}
-          style={{
-            padding: "7px 16px",
-            borderRadius: BORDER_RADIUS.md,
-            border: "none",
-            background: loading ? "#aaa" : COLORS.primary,
-            color: "#fff",
-            fontSize: FONT_SIZES.md,
-            fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer",
-            transition: `all ${TRANSITIONS.fast}`
-          }}
-        >
-          {loading ? t.buttons.fetching : t.competitiveIntelligence.searchButton}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={labelStyle}>{language === "zh" ? "来源" : "Source"}</span>
+          <select
+            value={filters.sourceType}
+            onChange={(e) => onChange({ ...filters, sourceType: e.target.value })}
+            style={selectStyle}
+          >
+            {renderOptions(SOURCE_TYPES[language])}
+          </select>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 220 }}>
+          <input
+            type="text"
+            value={filters.query}
+            onChange={(e) => onChange({ ...filters, query: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && onSearch()}
+            placeholder={t.competitiveIntelligence.keywordSearch}
+            style={{
+              flex: 1,
+              padding: "7px 12px",
+              borderRadius: BORDER_RADIUS.md,
+              border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+              background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+              color: darkMode ? "#e8e8e8" : COLORS.text.primary,
+              fontSize: FONT_SIZES.md,
+              outline: "none"
+            }}
+          />
+          <button
+            onClick={onSearch}
+            disabled={loading}
+            style={{
+              padding: "7px 16px",
+              borderRadius: BORDER_RADIUS.md,
+              border: "none",
+              background: loading ? "#aaa" : COLORS.primary,
+              color: "#fff",
+              fontSize: FONT_SIZES.md,
+              fontWeight: 600,
+              cursor: loading ? "not-allowed" : "pointer",
+              transition: `all ${TRANSITIONS.fast}`
+            }}
+          >
+            {loading ? t.buttons.fetching : t.competitiveIntelligence.searchButton}
+          </button>
+        </div>
       </div>
     </div>
   );

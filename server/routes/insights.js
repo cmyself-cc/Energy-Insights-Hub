@@ -47,7 +47,10 @@ router.get("/", (req, res) => {
       businessDomain,
       enterpriseType,
       sourceType,
-      search
+      search,
+      purposes,
+      businessCategory,
+      eventCategory
     } = req.query;
 
     const conditions = ["1=1"];
@@ -87,6 +90,27 @@ router.get("/", (req, res) => {
     if (req.query.purpose) {
       conditions.push("i.purpose = ?");
       params.push(req.query.purpose);
+    }
+
+    // Multi-purpose filter: purposes=competitor,policy,tech
+    if (purposes) {
+      const purposeList = purposes.split(",").map(s => s.trim()).filter(Boolean);
+      if (purposeList.length > 0) {
+        conditions.push(`i.purpose IN (${purposeList.map(() => "?").join(",")})`);
+        params.push(...purposeList);
+      }
+    }
+
+    // Business category filter: categories JSON array contains the value
+    if (businessCategory) {
+      conditions.push("categories LIKE ?");
+      params.push(`%"${businessCategory}"%`);
+    }
+
+    // Event category filter: categories JSON array contains the value
+    if (eventCategory) {
+      conditions.push("categories LIKE ?");
+      params.push(`%"${eventCategory}"%`);
     }
 
     const where = conditions.join(" AND ");
