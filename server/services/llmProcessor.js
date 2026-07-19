@@ -95,11 +95,12 @@ ${filteringInstructions}
 Return ONLY a valid JSON object (no markdown, no explanation) with these fields:
 - title: string (in ${isZh ? "Chinese" : "English"}, keep it concise)
 - summary: string (2-3 sentences, data-driven, in ${isZh ? "Chinese" : "English"})
-- sourceType: string (in ${isZh ? "Chinese" : "English"}, e.g. 微信公众号 / WeChat Official Account, 新闻门户 / News Portal)
-- businessDomain: string (in ${isZh ? "Chinese" : "English"}, e.g. 能源转型 / Energy Transition, 化工 / Chemicals)
-- enterpriseType: string (in ${isZh ? "Chinese" : "English"}, e.g. 国有企业 / SOE, 民营企业 / Private)
+- sourceType: string (in ${isZh ? "Chinese" : "English"}, e.g. 微信公众号, 新闻门户)
+- businessDomain: string (in ${isZh ? "Chinese" : "English"}, e.g. 能源转型, 化工)
+- enterpriseType: string (in ${isZh ? "Chinese" : "English"}, e.g. 国有企业, 民营企业)
 - entities: array of 2-5 strings (key companies/technologies, in ${isZh ? "Chinese" : "English"})
 - features: array of 1-3 strings (category tags, in ${isZh ? "Chinese" : "English"})
+- keywords: array of exactly 3 strings (specific searchable keywords: company names, technology names, event names, or policy names. NOT generic concepts. Examples: 宁德时代, 钠离子电池, 136号文, 电价改革, 中石化, CCUS)
 - categories: array of strings (business category names from the list above)
 - publishDate: string (ISO 8601 date, e.g. 2026-07-08)
 
@@ -134,6 +135,7 @@ If the content is not related to energy or matches the semantic exclusions, set 
       enterpriseType: parsed.enterpriseType || "",
       entities: Array.isArray(parsed.entities) ? parsed.entities : [],
       features: Array.isArray(parsed.features) ? parsed.features : [],
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 3) : [],
       categories: Array.isArray(parsed.categories) ? parsed.categories : []
     };
   } catch (e) {
@@ -148,6 +150,7 @@ If the content is not related to energy or matches the semantic exclusions, set 
       enterpriseType: "",
       entities: [],
       features: [],
+      keywords: [],
       categories: [],
       llmFailed: true
     };

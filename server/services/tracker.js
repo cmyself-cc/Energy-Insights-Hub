@@ -152,12 +152,14 @@ export async function runTracker(runId = null) {
       console.log(`[tracker] Source ${source.name}: ${candidates.length} candidates after pre-filter`);
 
       if (candidates.length > 0) {
-        // Group by matched purpose for LLM processing
+        // Group by matched purposes for LLM processing
         const byPurpose = {};
         for (const item of candidates) {
-          const p = item.matchedPurpose || "competitor";
-          if (!byPurpose[p]) byPurpose[p] = [];
-          byPurpose[p].push(item);
+          const purposes = item.matchedPurposes || ["competitor"];
+          for (const p of purposes) {
+            if (!byPurpose[p]) byPurpose[p] = [];
+            byPurpose[p].push(item);
+          }
         }
 
         const allProcessed = [];
@@ -169,8 +171,10 @@ export async function runTracker(runId = null) {
             classificationEnabled: Boolean(process.env.LLM_API_KEY)
           };
           const processed = await processBatch(purposeItems, LANGUAGE, filterContext);
-          // processInsight returns fresh objects, so re-tag with the batch's purpose
-          for (const row of processed) row.matchedPurpose = purpose;
+          // processInsight returns fresh objects, so re-tag with all matched purposes
+          for (const row of processed) {
+            row.matchedPurposes = purposeItems[0].matchedPurposes || [purpose];
+          }
           allProcessed.push(...processed);
         }
 
@@ -187,8 +191,8 @@ export async function runTracker(runId = null) {
           const insert = db.prepare(
             `INSERT INTO insights (
               source_id, title, summary, url, publish_date, source_type,
-              business_domain, enterprise_type, entities, features, raw_content, categories, purpose
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              business_domain, enterprise_type, entities, features, raw_content, categories, purpose, keywords
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           );
           const insertMany = db.transaction((rows) => {
             for (const row of rows) {
@@ -199,7 +203,8 @@ export async function runTracker(runId = null) {
                 JSON.stringify(row.entities), JSON.stringify(row.features),
                 row.rawContent || row.summary || "",
                 row.categories ? JSON.stringify(row.categories) : null,
-                row.matchedPurpose || "competitor"
+                row.matchedPurposes ? JSON.stringify(row.matchedPurposes) : JSON.stringify(["competitor"]),
+                JSON.stringify(row.keywords || [])
               );
             }
           });

@@ -31,8 +31,8 @@ export function applyKeywordGate(items, context) {
       continue;
     }
 
-    // Check if item matches at least one purpose
-    let matched = false;
+    // Check which purposes this item matches (collect ALL, not just first)
+    const matchedPurposes = [];
     for (const [purpose, rules] of Object.entries(purposeRules)) {
       const subjectMatch = rules.enterprise?.length > 0 && matchesAnyKeyword(item, rules.enterprise);
       const includeMatch = rules.include_keyword?.length > 0 && matchesAnyKeyword(item, rules.include_keyword);
@@ -43,16 +43,16 @@ export function applyKeywordGate(items, context) {
 
       // Subject OR include keyword matches
       if (subjectMatch || includeMatch) {
-        matched = true;
-        item.matchedPurpose = purpose; // Tag which purpose matched
-        break;
+        matchedPurposes.push(purpose);
       }
     }
 
-    if (!matched) {
+    if (matchedPurposes.length === 0) {
       excluded++;
       continue;
     }
+
+    item.matchedPurposes = matchedPurposes;
 
     kept.push(item);
   }

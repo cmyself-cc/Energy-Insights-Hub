@@ -15,6 +15,7 @@ function safeJson(value) {
 
 function parseRow(row) {
   if (!row) return row;
+  const purposes = safeJson(row.purpose);
   return {
     id: row.id,
     title: row.title,
@@ -29,10 +30,11 @@ function parseRow(row) {
     enterpriseType: row.enterprise_type,
     entities: safeJson(row.entities),
     features: safeJson(row.features),
+    keywords: safeJson(row.keywords),
     categories: safeJson(row.categories),
     rawContent: row.raw_content,
     hidden: row.hidden,
-    purpose: row.purpose || "competitor"
+    purposes: purposes.length > 0 ? purposes : ["competitor"]
   };
 }
 

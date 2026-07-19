@@ -286,6 +286,9 @@ export default function App() {
               onClearCart={clearCart}
               onGenerateNewsletter={generateNewsletter}
               summarizing={summarizing}
+              onKeywordClick={(keyword) => {
+                setFilters(prev => ({ ...prev, query: keyword }));
+              }}
             />
           )}
 

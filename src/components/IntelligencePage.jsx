@@ -29,7 +29,7 @@ export default function IntelligencePage(props) {
   const {
     darkMode, language, filters, onFilterChange, onSearch, loading, fetched, error,
     insights, bookmarks, hidden, cart, onToggleCart, onToggleBookmark, onHide, onAiInterpret,
-    onClearCart, onGenerateNewsletter, summarizing
+    onClearCart, onGenerateNewsletter, summarizing, onKeywordClick
   } = props;
   const [subTab, setSubTab] = useState("feed");
 
@@ -135,7 +135,11 @@ export default function IntelligencePage(props) {
               {visibleItems.length} {language === "zh" ? "条结果" : "results"}
             </div>
           </div>
-          <div className="insight-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          <div style={{
+            columnWidth: 340,
+            columnGap: 16,
+            columnFill: "balance"
+          }}>
             {visibleItems.map((item, i) => {
               const inCart = !!cart.find(c => c.title === item.title);
               const bookmarked = !!bookmarks.find(b => b.title === item.title);
@@ -143,8 +147,12 @@ export default function IntelligencePage(props) {
                 <div
                   key={item.id || i}
                   onClick={() => onToggleCart(item)}
-                  className="insight-card-wrapper"
-                  style={{ cursor: "pointer", position: "relative" }}
+                  style={{
+                    cursor: "pointer",
+                    position: "relative",
+                    breakInside: "avoid",
+                    marginBottom: 16
+                  }}
                 >
                   {inCart && (
                     <div style={{
@@ -172,6 +180,7 @@ export default function IntelligencePage(props) {
                     onBookmark={(e) => { e?.stopPropagation(); onToggleBookmark(item); }}
                     onHide={(e) => { e?.stopPropagation(); onHide(item); }}
                     onAiInterpret={(e) => { e?.stopPropagation(); onAiInterpret(item); }}
+                    onKeywordClick={onKeywordClick}
                   />
                 </div>
               );
