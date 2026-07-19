@@ -182,7 +182,7 @@ export async function runTracker(runId = null) {
           .filter(insight => insight.title && insight.title.trim() !== "")
           .filter(insight => {
             if (!classificationEnabled) return true;
-            if (insight.llmFailed) return true;
+            if (insight.llmFailed) return false; // Filter out LLM-failed articles - they can't be verified as matching a purpose
             return matchesEnabledCategory(insight, activeCategories);
           });
         console.log(`[tracker] Source ${source.name}: ${kept.length} insights after post-filter`);

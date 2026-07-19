@@ -85,7 +85,7 @@ If the article matches a semantic exclusion or belongs to no business category, 
   const prompt = `You are an energy industry analyst. Read the following article and extract a structured insight.
 
 Title: ${item.title}
-Content: ${item.summary || item.rawContent || ""}
+Content: ${item.rawContent || item.summary || ""}
 URL: ${item.url}
 
 ${filteringInstructions}
