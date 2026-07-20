@@ -146,8 +146,11 @@ router.put("/:id", (req, res) => {
 
 router.delete("/:id", (req, res) => {
   try {
-    db.prepare("DELETE FROM sources WHERE id = ?").run(req.params.id);
-    res.json({ success: true });
+    const sourceId = req.params.id;
+    // Delete insights first (foreign key constraint)
+    db.prepare("DELETE FROM insights WHERE source_id = ?").run(sourceId);
+    const result = db.prepare("DELETE FROM sources WHERE id = ?").run(sourceId);
+    res.json({ success: true, deleted: result.changes });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
