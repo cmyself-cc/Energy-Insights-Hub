@@ -1,6 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { recordFeedback, getFeedbackStats } from "../services/feedbackService.js";
+import { generateSuggestions } from "../services/feedbackSuggestionGenerator.js";
 
 const router = Router();
 
@@ -49,6 +50,15 @@ router.post("/suggestions/:id/accept", (req, res) => {
     ).run(req.params.id);
 
     res.json({ data: { success: true } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/generate-suggestions", async (_req, res) => {
+  try {
+    const result = await generateSuggestions();
+    res.json({ data: result });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
