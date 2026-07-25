@@ -33,6 +33,15 @@ export const backendApi = {
   },
   hideInsight: (id) => request(`/insights/${id}/hide`, { method: "POST" }),
   unhideInsight: (id) => request(`/insights/${id}/unhide`, { method: "POST" }),
+  recordFeedback: (insightId, action, reason) => request("/feedback", {
+    method: "POST",
+    body: JSON.stringify({ insightId, action, reason: reason || undefined })
+  }),
+  getFeedbackStats: () => request("/feedback/stats"),
+  getFeedbackSuggestions: () => request("/feedback/suggestions"),
+  acceptFeedbackSuggestion: (id) => request(`/feedback/suggestions/${id}/accept`, { method: "POST" }),
+  rejectFeedbackSuggestion: (id) => request(`/feedback/suggestions/${id}/reject`, { method: "POST" }),
+  generateFeedbackSuggestions: () => request("/feedback/generate-suggestions", { method: "POST" }),
 
   // Sources
   getSources: () => request("/sources"),
