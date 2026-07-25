@@ -8,6 +8,7 @@ import { loadSettings } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 import { applyKeywordGate } from "./keywordGate.js";
 import { deduplicateItems } from "./dedup.js";
+import { applyUserFeedbackScore, loadSemanticWeights } from "./feedbackWeights.js";
 
 const BATCH_SIZE = 2; // 并发数，避免触发频率限制
 const LANGUAGE = process.env.DEFAULT_LANGUAGE || "zh";
@@ -284,7 +285,7 @@ export async function runTracker(runId = null) {
           Object.assign(row, derived);
         }
 
-        const kept = applyPostFilter(allProcessed, settings)
+        let kept = applyPostFilter(allProcessed, settings)
           .filter(insight => insight.title && insight.title.trim() !== "")
           .filter(insight => {
             if (!classificationEnabled) return true;
@@ -294,6 +295,14 @@ export async function runTracker(runId = null) {
             return matchesEnabledCategory(insight, activeCategories);
           });
         console.log(`[tracker] Source ${source.name}: ${kept.length} insights after post-filter`);
+
+        const semanticWeights = loadSemanticWeights();
+        const hasWeights = semanticWeights.boost.length > 0 || semanticWeights.suppress.length > 0;
+        if (hasWeights) {
+          const scored = applyUserFeedbackScore(kept, { weights: semanticWeights });
+          console.log(`[tracker] Source ${source.name}: ${scored.dropped.length} dropped by feedback weights, ${scored.kept.length} kept`);
+          kept = scored.kept;
+        }
 
         if (kept.length > 0) {
           const insert = db.prepare(
