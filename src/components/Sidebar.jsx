@@ -2,9 +2,9 @@ import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/the
 import { i18n } from "../constants/i18n";
 
 const MENU_ITEMS = [
-  { key: "intelligence", icon: "📊", i18nKey: "sidebarTitle" },
-  { key: "reports", icon: "📝", i18nKey: "reports" },
-  { key: "configuration", icon: "⚙️", i18nKey: "configuration" }
+  { key: "intelligence", icon: "◧", i18nKey: "sidebarTitle" },
+  { key: "reports", icon: "≡", i18nKey: "reports" },
+  { key: "configuration", icon: "⚙", i18nKey: "configuration" }
 ];
 
 
@@ -57,11 +57,25 @@ export default function Sidebar({ darkMode, language, activeTab, onTabChange, co
         <div style={{
           marginTop: "auto",
           padding: "16px 24px",
-          fontSize: FONT_SIZES.xs,
-          color: darkMode ? "#666" : COLORS.text.light,
           borderTop: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`
         }}>
-          Energy Insights Hub
+          <a
+            href="https://cmyself.cc"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "block" }}
+          >
+            <img
+              src="/cmflow-logo.png"
+              alt="CMFlow Apps"
+              style={{
+                width: "100%",
+                maxWidth: 160,
+                height: "auto",
+                display: "block"
+              }}
+            />
+          </a>
         </div>
       )}
     </aside>

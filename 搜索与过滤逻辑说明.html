@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Energy Insights Hub - 搜索与过滤逻辑说明</title>
+  <style>
+    :root {
+      --bg: #f6f8fa;
+      --card: #ffffff;
+      --text: #1f2328;
+      --muted: #656d76;
+      --border: #d0d7de;
+      --code: #f6f8fa;
+      --llm: #fff3cd;
+      --api: #d1ecf1;
+      --algo: #d4edda;
+      --warn: #f8d7da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      margin: 0;
+      padding: 24px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 28px; margin-bottom: 8px; }
+    .subtitle { color: var(--muted); margin-bottom: 24px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    h2 { font-size: 20px; margin-top: 0; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    h3 { font-size: 16px; margin-top: 20px; margin-bottom: 10px; color: #0969da; }
+    p { margin: 10px 0; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    code {
+      background: var(--code);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+      font-size: 0.92em;
+      border: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .llm { background: var(--llm); color: #856404; }
+    .api { background: var(--api); color: #0c5460; }
+    .algo { background: var(--algo); color: #155724; }
+    .warn { background: var(--warn); color: #721c24; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--bg); font-weight: 600; }
+    .highlight {
+      background: #fff8c5;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 4px solid #f9a825;
+      margin: 14px 0;
+    }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 14px 0;
+      padding: 14px;
+      background: var(--bg);
+      border-radius: 8px;
+    }
+    .flow-step {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+    .arrow { color: var(--muted); font-size: 18px; }
+    .pre-box {
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Energy Insights Hub 搜索与过滤逻辑说明</h1>
+  <div class="subtitle">生成时间：2026-07-24 · 基于当前代码版本整理</div>
+
+  <div class="card">
+    <h2>一、整体流程概览</h2>
+    <p>Tracker 每次运行时，按以下顺序处理每个活跃来源：</p>
+    <div class="flow">
+      <span class="flow-step">1. 抓取源内容</span>
+      <span class="arrow">→</span>
+      <span class="flow-step">2. URL/标题去重</span>
+      <span class="arrow">→</span>
+      <span class="flow-step">3. 关键词门控过滤</span>
+      <span class="arrow">→</span>
+      <span class="flow-step">4. 模糊去重</span>
+      <span class="arrow">→</span>
+      <span class="flow-step">5. 预过滤（时间/数量）</span>
+      <span class="arrow">→</span>
+      <span class="flow-step">6. LLM 语义处理</span>
+      <span class="arrow">→</span>
+      <span class="flow-step">7. 后过滤与入库</span>
+    </div>
+    <p>其中只有第 1 步（部分来源）和第 6 步会调用外部 API/LLM，其余均为本地算法。</p>
+  </div>
+
+  <div class="card">
+    <h2>二、数据来源与抓取逻辑</h2>
+    <p>当前数据库中活跃来源：<code>api × 23</code>、<code>website × 5</code>、<code>wechat_mcp × 1</code>。</p>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:110px">来源类型</th>
+          <th>抓取方式</th>
+          <th>外部依赖</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>rss</code></td>
+          <td><span class="badge algo">本地算法</span></td>
+          <td>无</td>
+          <td>使用 <code>rss-parser</code> 解析 RSS 订阅，取前 N 条，提取标题、摘要、链接、发布时间。</td>
+        </tr>
+        <tr>
+          <td><code>website</code></td>
+          <td><span class="badge algo">本地算法</span></td>
+          <td>目标网站 HTTP 请求</td>
+          <td>三级 fallback：① 自动发现 RSS 并解析；② 读取 sitemap.xml；③ 解析首页 HTML 列表并抓取详情页。使用随机 User-Agent、Cheerio 提取正文。</td>
+        </tr>
+        <tr>
+          <td><code>wechat_mcp</code></td>
+          <td><span class="badge api">外部 API</span></td>
+          <td>MCP SSE 服务器</td>
+          <td>通过 SSE 长连接连接本地/远程 MCP 服务器，调用 <code>list_wechat_feeds</code>、<code>get_feed_articles</code>、<code>get_article_fulltext</code> 获取公众号文章。</td>
+        </tr>
+        <tr>
+          <td><code>api</code>（Tavily）</td>
+          <td><span class="badge api">外部 API</span></td>
+          <td>Tavily Search API</td>
+          <td>用 Tavily 搜索指定 domain/query，返回结果后过滤掉首页/分类页/PDF，保留新闻类文章。</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="highlight">
+      <strong>注意：</strong> 所有抓取的文章对象统一为 <code>{ title, summary, url, publishDate, rawContent, source }</code>。其中 <code>rawContent</code> 是 LLM 后续处理的主要输入。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>三、关键词门控过滤（Keyword Gate）</h2>
+    <p>文件：<code>server/services/keywordGate.js</code></p>
+    <p>匹配范围：<strong>title + summary</strong>（不读 rawContent，减少计算）。</p>
+    
+    <h3>3.1 三层递进规则</h3>
+    <p>每个监控类型（competitor / policy / tech）独立配置三层关键词：</p>
+    <ul>
+      <li><strong>enterprise（企业/主体关键词）</strong>：该类型关注的企业、机构或技术主体。</li>
+      <li><strong>include_keyword（包含关键词）</strong>：事件性质关键词，如合作、投资、收购、并购、政策、技术突破等。</li>
+      <li><strong>exclude_keyword（排除关键词）</strong>：只要出现就整体排除该文章的关键词，如指数、股价、涨停、住宅。</li>
+    </ul>
+
+    <h3>3.2 匹配逻辑（当前已改为 AND）</h3>
+    <div class="pre-box">对所有文章：
+  1. 先检查全局 excludeKeywords（tracker_settings.exclude_keywords），命中则丢弃。
+  2. 对每个 purpose：
+       if exclude_keyword 命中 → 该 purpose 不匹配
+       if enterprise 命中 AND include_keyword 命中 → 该 purpose 匹配
+  3. 收集所有匹配的 purpose 列表（matchedPurposes）。
+  4. 如果没有任何 purpose 匹配 → 丢弃。
+</div>
+    <p><strong>关键变更：</strong> 现在所有监控类型都必须同时满足 <code>enterprise AND include_keyword</code>，不是“或”关系。例如竞争监控需要同时提到某家企业 <strong>并且</strong> 出现投资/合作/收购等词。</p>
+
+    <h3>3.3 当前配置数量</h3>
+    <table>
+      <thead><tr><th>监控类型</th><th>enterprise</th><th>include_keyword</th><th>exclude_keyword</th></tr></thead>
+      <tbody>
+        <tr><td>competitor</td><td>201</td><td>55</td><td>113</td></tr>
+        <tr><td>policy</td><td>8</td><td>12</td><td>10</td></tr>
+        <tr><td>tech</td><td>17</td><td>13</td><td>8</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>四、去重机制</h2>
+    <p>文件：<code>server/services/dedup.js</code></p>
+    <p><span class="badge algo">本地算法</span> 两层去重：</p>
+    <ol>
+      <li><strong>URL 精确去重</strong>：与本次 batch 内及数据库近 N 天的 URL 比对。</li>
+      <li><strong>标题模糊去重</strong>：使用 2-gram Dice 系数，阈值默认 0.85。标题相似度 ≥ 0.85 视为重复。</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>五、预过滤（Pre-filter）</h2>
+    <p>文件：<code>server/services/trackerRules.js</code></p>
+    <p><span class="badge algo">本地算法</span> 两步：</p>
+    <ol>
+      <li><strong>时间过滤</strong>：只保留 <code>publishDate</code> 在 lookbackHours（默认 24 小时）内的文章。30 天模式需手动改为 720。</li>
+      <li><strong>每来源数量限制</strong>：每个来源最多保留 <code>max_per_source</code> 篇（默认 3），按时间倒序。</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>六、LLM 语义处理</h2>
+    <p>文件：<code>server/services/llmProcessor.js</code></p>
+    <p><span class="badge llm">外部 LLM API</span> 这是唯一调用大语言模型的地方。</p>
+
+    <h3>6.1 LLM 输入</h3>
+    <ul>
+      <li>API 地址：由环境变量 <code>LLM_BASE_URL</code> 决定（当前为 Siliconflow）。</li>
+      <li>模型：由 <code>LLM_MODEL</code> 决定。</li>
+      <li>请求内容：文章的 <code>title + rawContent</code>（LLM 读原文，不只是摘要）。</li>
+    </ul>
+
+    <h3>6.2 LLM 输出字段</h3>
+    <table>
+      <thead><tr><th>字段</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code>title</code></td><td>10-20 字中文精炼标题，剔除来源名、日期、作者。</td></tr>
+        <tr><td><code>summary</code></td><td>150 字以内信息密集摘要，清理噪音。</td></tr>
+        <tr><td><code>keywords</code></td><td>恰好 3 个具体可搜索关键词（企业/技术/事件/政策）。</td></tr>
+        <tr><td><code>purposes</code></td><td>监控类型数组：competitor / policy / tech，不符合则返回 []，文章丢弃。</td></tr>
+        <tr><td><code>categories</code></td><td>1-3 个业务/事件分类，至少包含一个业务分类。</td></tr>
+        <tr><td><code>china_relevance</code></td><td>是否与中国强相关（中国发生/中国企业/中国政策/中国市场），false 则丢弃。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>6.3 并发与限流</h3>
+    <ul>
+      <li>每次批量处理 2 篇文章（<code>BATCH_SIZE = 2</code>）。</li>
+      <li>每批之间 sleep 2 秒。</li>
+      <li>单条 LLM 请求超时 60 秒。</li>
+    </ul>
+    <div class="highlight">
+      <strong>为什么最近 0 张 insight？</strong><br>
+      最近一次运行：26 个来源成功抓取，3 个失败。关键词门控能通过的文章是存在的（微信公众号 15/20、财联社 6/10、腾讯新闻 7/10 等），但 LLM 处理阶段大量超时/被限流（<code>This operation was aborted</code>），导致全部被丢弃。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>七、后过滤与入库</h2>
+    <p>文件：<code>server/services/tracker.js</code>、<code>server/services/trackerRules.js</code></p>
+    <p><span class="badge algo">本地算法</span> LLM 返回后执行以下过滤：</p>
+    <ol>
+      <li>去掉 LLM 处理失败的文章（<code>llmFailed = true</code>）。</li>
+      <li>去掉 <code>chinaRelevance = false</code> 的文章。</li>
+      <li>去掉 <code>purposes</code> 为空的文章。</li>
+      <li>按用户启用的业务分类（business_categories.active=1）再过滤。</li>
+      <li>去掉无标题的文章；超长正文（>200 字）已被你要求丢弃（代码中有体现）。</li>
+    </ol>
+    <p>最终存入 <code>insights</code> 表，字段包括来源、标题、摘要、URL、发布时间、来源类型、业务域、企业类型、实体、关键词、分类、监控类型等。</p>
+  </div>
+
+  <div class="card">
+    <h2>八、配置项清单</h2>
+    <table>
+      <thead><tr><th>配置位置</th><th>作用</th><th>当前值/数量</th></tr></thead>
+      <tbody>
+        <tr><td>环境变量 <code>LLM_API_KEY</code></td><td>LLM 调用凭证</td><td>已配置（Siliconflow）</td></tr>
+        <tr><td>环境变量 <code>TAVILY_API_KEY</code></td><td>Tavily 搜索凭证</td><td>已配置，但免费额度已用完</td></tr>
+        <tr><td>环境变量 <code>WECHAT_MCP_URL</code></td><td>微信公众号 MCP 服务器地址</td><td>http://Jasons-MacBook-Air.local:4001/sse</td></tr>
+        <tr><td><code>tracker_settings.lookback_hours</code></td><td>抓取时间窗口</td><td>默认 24，需手动改为 720 才能跑 30 天</td></tr>
+        <tr><td><code>tracker_settings.max_per_source</code></td><td>每来源保留篇数</td><td>默认 3</td></tr>
+        <tr><td><code>tracker_settings.exclude_keywords</code></td><td>全局排除关键词</td><td>股票,证券,股市,行情,广告,推广,赞助</td></tr>
+        <tr><td><code>filter_rules</code></td><td>三层关键词规则</td><td>competitor 201/55/113；policy 8/12/10；tech 17/13/8</td></tr>
+        <tr><td><code>business_categories</code></td><td>业务/事件分类</td><td>11 个分类</td></tr>
+        <tr><td><code>sources.purpose</code></td><td>来源服务的监控类型</td><td>api/website/wechat_mcp 多来源</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>九、LLM / 外部 API 调用点汇总</h2>
+    <table>
+      <thead><tr><th>调用点</th><th>文件</th><th>依赖</th><th>是否可本地替代</th></tr></thead>
+      <tbody>
+        <tr><td>Website/RSS 抓取</td><td><code>server/crawlers/*.js</code></td><td>目标网站 HTTP</td><td>否（必须联网）</td></tr>
+        <tr><td>Tavily 搜索</td><td><code>server/crawlers/apiCrawler.js</code></td><td>Tavily API</td><td>否</td></tr>
+        <tr><td>微信公众号 MCP</td><td><code>server/crawlers/wechatMcpCrawler.js</code></td><td>MCP SSE 服务器</td><td>否</td></tr>
+        <tr><td>标题精炼、摘要生成、分类、中国相关性判断</td><td><code>server/services/llmProcessor.js</code></td><td>LLM API（Siliconflow）</td><td>否（当前设计依赖 LLM）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>十、当前状态与下一步建议</h2>
+    <ul>
+      <li><span class="badge warn">阻塞</span> Tavily 免费额度已用完，所有 <code>api</code> 类型来源会失败。需要等待每日刷新或升级付费。</li>
+      <li><span class="badge warn">阻塞</span> Siliconflow LLM 处理大量超时/被限流。建议降低并发：将 <code>BATCH_SIZE</code> 从 2 改为 1，sleep 从 2 秒增加到 5 秒。</li>
+      <li>关键词门控 AND 逻辑已生效，但 AND 逻辑会显著减少命中量，需确认这是否符合预期。</li>
+      <li>数据库当前仅有 2 条 insight，是之前 OR 逻辑的旧数据；建议删除后重新运行 30 天抓取。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>十一、关键代码文件索引</h2>
+    <table>
+      <thead><tr><th>文件</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td><code>server/services/tracker.js</code></td><td>主调度流程，串联抓取、过滤、LLM、入库。</td></tr>
+        <tr><td><code>server/services/keywordGate.js</code></td><td>三层关键词门控。</td></tr>
+        <tr><td><code>server/services/filterRules.js</code></td><td>读取并分组 filter_rules。</td></tr>
+        <tr><td><code>server/services/llmProcessor.js</code></td><td>调用 LLM 生成标题/摘要/关键词/分类/监控类型。</td></tr>
+        <tr><td><code>server/services/dedup.js</code></td><td>URL + 标题模糊去重。</td></tr>
+        <tr><td><code>server/services/trackerRules.js</code></td><td>时间过滤、每来源数量限制、包含条件过滤。</td></tr>
+        <tr><td><code>server/services/businessCategories.js</code></td><td>业务分类读取与匹配。</td></tr>
+        <tr><td><code>server/crawlers/index.js</code></td><td>抓取器注册与分发。</td></tr>
+        <tr><td><code>server/crawlers/websiteCrawler.js</code></td><td>Website 三级抓取策略。</td></tr>
+        <tr><td><code>server/crawlers/rssCrawler.js</code></td><td>RSS 抓取。</td></tr>
+        <tr><td><code>server/crawlers/apiCrawler.js</code></td><td>Tavily 搜索。</td></tr>
+        <tr><td><code>server/crawlers/wechatMcpCrawler.js</code></td><td>微信公众号 MCP 抓取。</td></tr>
+        <tr><td><code>server/lib/trackerSettings.js</code></td><td>Tracker 设置默认值与读取。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

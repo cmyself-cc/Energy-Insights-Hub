@@ -77,7 +77,7 @@ export default function IntelligencePage(props) {
           gap: 10
         }}>
           <div style={{ fontSize: FONT_SIZES.md, color: COLORS.primary, fontWeight: 600 }}>
-            🛒 {cart.length} insight{cart.length > 1 ? "s" : ""} {t.cart.itemsSelected}
+            Selected: {cart.length} insight{cart.length > 1 ? "s" : ""} {t.cart.itemsSelected}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={onClearCart} style={{
@@ -191,21 +191,18 @@ export default function IntelligencePage(props) {
 
       {!loading && subTab === "bookmarks" && bookmarks.length === 0 && (
         <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🔖</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.placeholders.noBookmarks}</div>
         </div>
       )}
 
       {!loading && subTab === "feed" && !fetched && (
         <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⚡</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.placeholders.noInsights}</div>
         </div>
       )}
 
       {!loading && subTab === "feed" && fetched && visibleItems.length === 0 && (
         <div style={{ textAlign: "center", padding: "80px 20px", color: "#aaa" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#bbb" }}>{t.competitiveIntelligence.noResults}</div>
         </div>
       )}

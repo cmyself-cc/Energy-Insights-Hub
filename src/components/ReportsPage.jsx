@@ -104,7 +104,7 @@ export default function ReportsPage({ darkMode, language, onViewReport }) {
                 cursor: "pointer"
               }}
             >
-              ✕ {t.buttons.close}
+              {t.buttons.close}
             </button>
           </div>
         </div>
@@ -153,7 +153,6 @@ export default function ReportsPage({ darkMode, language, onViewReport }) {
           borderRadius: BORDER_RADIUS.xl,
           border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`
         }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📝</div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>
             {language === "zh" ? "暂无保存的报告" : "No saved reports yet"}
           </div>

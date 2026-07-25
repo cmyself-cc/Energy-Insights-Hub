@@ -208,7 +208,6 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
             <>
               {!interpretation && history.length === 0 && !generating && (
                 <div style={{ textAlign: "center", padding: "40px 20px" }}>
-                  <div style={{ fontSize: 40, marginBottom: 16 }}>✨</div>
                   <button
                     onClick={() => generateInterpretation()}
                     style={{
@@ -285,7 +284,7 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
                   color: darkMode ? "#aaa" : COLORS.text.secondary,
                   fontSize: FONT_SIZES.base
                 }}>
-                  <span style={{ animation: "pulse 1.5s infinite" }}>⚡</span>
+                  <span style={{ animation: "pulse 1.5s infinite" }}>●</span>
                   <span>{t.competitiveIntelligence.aiGenerating}</span>
                   <button
                     onClick={handleStop}

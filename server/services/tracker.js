@@ -12,6 +12,18 @@ import { deduplicateItems } from "./dedup.js";
 const BATCH_SIZE = 2; // 并发数，避免触发频率限制
 const LANGUAGE = process.env.DEFAULT_LANGUAGE || "zh";
 
+let isTrackerRunning = false;
+
+function hasRunningTrackerInDb() {
+  // Only consider runs started within the last hour; older 'running' rows are stale
+  // from previous crashes and should not block new runs.
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const row = db
+    .prepare("SELECT id FROM tracker_runs WHERE status = 'running' AND started_at >= ? LIMIT 1")
+    .get(oneHourAgo);
+  return !!row;
+}
+
 const SOURCE_TYPE_MAP = {
   rss: "新闻门户",
   website: "新闻门户",
@@ -36,6 +48,10 @@ const ENTERPRISE_KEYWORDS = {
   "民营企业": ["宁德时代", "比亚迪", "蔚来", "小鹏", "理想", "隆基", "通威", "阳光电源", "亿纬锂能", "远景", "金风科技"]
 };
 
+const BUSINESS_CATEGORIES = [
+  "电力&氢能", "储能", "光伏", "油气", "CCS", "化工", "LNG/天然气", "移动出行", "润滑油", "生物燃料"
+];
+
 function deriveFields(item, source) {
   const keywords = item.keywords || [];
   const text = `${item.title || ""} ${item.summary || ""} ${keywords.join(" ")}`.toLowerCase();
@@ -43,12 +59,32 @@ function deriveFields(item, source) {
   // Derive sourceType from source type
   const sourceType = SOURCE_TYPE_MAP[source?.type] || "新闻门户";
 
-  // Derive businessDomain from keywords
+  // LLM-provided categories take precedence
+  let categories = Array.isArray(item.categories) ? item.categories : [];
+
+  // Fallback: derive categories from keywords if LLM did not return any
+  if (categories.length === 0) {
+    for (const [domain, domainKeywords] of Object.entries(DOMAIN_KEYWORDS)) {
+      if (domainKeywords.some(k => text.includes(k.toLowerCase()))) {
+        categories.push(domain);
+      }
+    }
+  }
+
+  // Derive businessDomain from the first business category
   let businessDomain = "能源转型";
-  for (const [domain, domainKeywords] of Object.entries(DOMAIN_KEYWORDS)) {
-    if (domainKeywords.some(k => text.includes(k.toLowerCase()))) {
-      businessDomain = domain;
+  for (const c of categories) {
+    if (BUSINESS_CATEGORIES.includes(c)) {
+      businessDomain = c;
       break;
+    }
+  }
+  if (businessDomain === "能源转型") {
+    for (const [domain, domainKeywords] of Object.entries(DOMAIN_KEYWORDS)) {
+      if (domainKeywords.some(k => text.includes(k.toLowerCase()))) {
+        businessDomain = domain;
+        break;
+      }
     }
   }
 
@@ -58,14 +94,6 @@ function deriveFields(item, source) {
     if (typeKeywords.some(k => text.includes(k.toLowerCase()))) {
       enterpriseType = type;
       break;
-    }
-  }
-
-  // Derive categories from keywords
-  const categories = [];
-  for (const [domain, domainKeywords] of Object.entries(DOMAIN_KEYWORDS)) {
-    if (domainKeywords.some(k => text.includes(k.toLowerCase()))) {
-      categories.push(domain);
     }
   }
 
@@ -122,12 +150,28 @@ async function processBatch(items, language, filterContext = null) {
 }
 
 export async function runTracker(runId = null) {
-  const settings = loadSettings();
-  const allRules = loadFilterRules();
-  const groupedRules = groupRulesByPurpose(allRules);
-  const activeCategories = loadActiveCategories();
+  if (isTrackerRunning || hasRunningTrackerInDb()) {
+    console.log("[tracker] Another tracker run is already in progress. Skipping.");
+    if (runId) {
+      db.prepare(
+        `UPDATE tracker_runs SET
+          status = 'completed',
+          finished_at = CURRENT_TIMESTAMP,
+          message = ?
+         WHERE id = ?`
+      ).run("Skipped: another tracker run is already in progress.", runId);
+    }
+    return;
+  }
 
-  const sources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
+  isTrackerRunning = true;
+  try {
+    const settings = loadSettings();
+    const allRules = loadFilterRules();
+    const groupedRules = groupRulesByPurpose(allRules);
+    const activeCategories = loadActiveCategories();
+
+    const sources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
   if (sources.length === 0) {
     console.log("[tracker] No active sources to track.");
     if (runId) {
@@ -225,39 +269,28 @@ export async function runTracker(runId = null) {
       console.log(`[tracker] Source ${source.name}: ${candidates.length} candidates after pre-filter`);
 
       if (candidates.length > 0) {
-        // Group by matched purposes for LLM processing
-        const byPurpose = {};
-        for (const item of candidates) {
-          const purposes = item.matchedPurposes || ["competitor"];
-          for (const p of purposes) {
-            if (!byPurpose[p]) byPurpose[p] = [];
-            byPurpose[p].push(item);
-          }
-        }
-
-        const allProcessed = [];
-        for (const [purpose, purposeItems] of Object.entries(byPurpose)) {
-          const filterContext = {
-            semanticPrompt: loadSemanticConfig(purpose),
-            categories: loadActiveCategories(),
-            classificationEnabled: Boolean(process.env.LLM_API_KEY)
-          };
-          const processed = await processBatch(purposeItems, LANGUAGE, filterContext);
-          // processInsight returns fresh objects, so re-tag with all matched purposes
-          // and derive other fields algorithmically from keywords
-          for (const row of processed) {
-            row.matchedPurposes = purposeItems[0].matchedPurposes || [purpose];
-            const derived = deriveFields(row, source);
-            Object.assign(row, derived);
-          }
-          allProcessed.push(...processed);
+        // Let the LLM decide final purposes and categories in a single pass.
+        const filterContext = {
+          semanticPrompt: loadSemanticConfig(),
+          categories: loadActiveCategories(),
+          classificationEnabled: Boolean(process.env.LLM_API_KEY)
+        };
+        const allProcessed = await processBatch(candidates, LANGUAGE, filterContext);
+        for (const row of allProcessed) {
+          // Prefer LLM-decided purposes; fall back to keyword-gate purposes if LLM returned none
+          const llmPurposes = Array.isArray(row.purposes) ? row.purposes : [];
+          row.matchedPurposes = llmPurposes.length > 0 ? llmPurposes : (row.matchedPurposes || ["competitor"]);
+          const derived = deriveFields(row, source);
+          Object.assign(row, derived);
         }
 
         const kept = applyPostFilter(allProcessed, settings)
           .filter(insight => insight.title && insight.title.trim() !== "")
           .filter(insight => {
             if (!classificationEnabled) return true;
-            if (insight.llmFailed) return false; // Filter out LLM-failed articles - they can't be verified as matching a purpose
+            if (insight.llmFailed) return false; // Filter out LLM-failed articles
+            if (!insight.matchedPurposes || insight.matchedPurposes.length === 0) return false; // LLM did not assign a purpose
+            if (insight.chinaRelevance === false) return false; // Drop non-China content
             return matchesEnabledCategory(insight, activeCategories);
           });
         console.log(`[tracker] Source ${source.name}: ${kept.length} insights after post-filter`);
@@ -265,16 +298,17 @@ export async function runTracker(runId = null) {
         if (kept.length > 0) {
           const insert = db.prepare(
             `INSERT INTO insights (
-              source_id, title, summary, url, publish_date, source_type,
+              source_id, title, summary, url, publish_date, source_type, source_name,
               business_domain, enterprise_type, entities, features, raw_content, categories, purpose, keywords
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           );
           const insertMany = db.transaction((rows) => {
             for (const row of rows) {
               if (!row.title) continue;
               insert.run(
                 source.id, row.title, row.summary, row.url, row.publishDate,
-                row.sourceType, row.businessDomain, row.enterpriseType,
+                row.sourceType, row.source || null,
+                row.businessDomain, row.enterpriseType,
                 JSON.stringify(row.entities), JSON.stringify(row.features),
                 row.rawContent || row.summary || "",
                 row.categories ? JSON.stringify(row.categories) : null,
@@ -336,6 +370,9 @@ export async function runTracker(runId = null) {
   );
 
   console.log(`[tracker] Run ${runId} completed. Success: ${successCount}, Failed: ${failedCount}, Insights: ${insightsCreated}`);
+  } finally {
+    isTrackerRunning = false;
+  }
 }
 
 export function startScheduler() {

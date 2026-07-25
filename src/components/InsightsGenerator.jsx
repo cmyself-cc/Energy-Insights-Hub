@@ -417,7 +417,7 @@ function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenera
                   display: "flex", alignItems: "center", gap: 5
                 }}
               >
-                {savingReport ? "💾 ..." : "💾 Save"}
+                {savingReport ? "Saving..." : "Save"}
               </button>
             )}
             <button
@@ -428,7 +428,7 @@ function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenera
                 background: "transparent", color: "#fff",
                 fontWeight: 700, fontSize: FONT_SIZES.md, cursor: "pointer"
               }}
-            >✕ {tl.buttons.close}</button>
+            >{tl.buttons.close}</button>
           </div>
         </div>
 
@@ -474,7 +474,6 @@ function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenera
           >
             {generating ? (
               <div style={{ textAlign: "center", padding: "80px 20px" }}>
-                <div style={{ fontSize: 44, marginBottom: 20 }}>⚡</div>
                 <div style={{ fontSize: FONT_SIZES.lg, fontWeight: 600, marginBottom: 12 }}>{tl.newsletter.generatingMessage}</div>
                 <div style={{ fontSize: FONT_SIZES.md, color: darkMode ? "#aaa" : "#666" }}>{tl.newsletter.generatingWait}</div>
               </div>
@@ -482,7 +481,6 @@ function InsightsGenerator({ items, onClose, darkMode, defaultLanguage, onGenera
               <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
             ) : (
               <div style={{ textAlign: "center", padding: "80px 20px" }}>
-                <div style={{ fontSize: 44, marginBottom: 20 }}>📝</div>
                 <div style={{ fontSize: FONT_SIZES.lg, fontWeight: 600, marginBottom: 12 }}>{tl.newsletter.readyMessage}</div>
                 <button
                   onClick={() => generateNewsletter()}

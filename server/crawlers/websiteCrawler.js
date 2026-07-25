@@ -351,7 +351,7 @@ export async function fetchArticles(source) {
       const articles = await fetchRssArticles(feeds[0], config);
       if (articles.length > 0) {
         console.log(`[website] RSS returned ${articles.length} articles`);
-        return articles;
+        return articles.map(a => ({ ...a, source: source.name || "" }));
       }
     }
   }
@@ -362,7 +362,7 @@ export async function fetchArticles(source) {
       const articles = await fetchSitemapArticles(source.url, config);
       if (articles.length > 0) {
         console.log(`[website] Sitemap returned ${articles.length} articles`);
-        return articles;
+        return articles.map(a => ({ ...a, source: source.name || "" }));
       }
     } catch (e) {
       console.error("[website] Sitemap strategy failed:", e.message);
@@ -394,7 +394,7 @@ export async function fetchArticles(source) {
 
     if (articles.length > 0) {
       console.log(`[website] HTML list returned ${articles.length} articles`);
-      return articles;
+      return articles.map(a => ({ ...a, source: source.name || "" }));
     }
   }
 

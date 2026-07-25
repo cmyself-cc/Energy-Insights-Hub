@@ -50,6 +50,9 @@ export default function InsightCard({
 
   const keywords = (item.keywords || []).slice(0, 3);
   const purposes = item.purposes || ["competitor"];
+  const sourceType = (item.sourceType || "").toLowerCase();
+  const isWechat = sourceType.includes("微信") || sourceType.includes("wechat");
+  const displaySource = item.source && String(item.source) !== String(item.sourceId) ? item.source : null;
 
   return (
     <div style={{
@@ -106,15 +109,28 @@ export default function InsightCard({
       <div style={{
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
         gap: 8,
         marginBottom: 12,
         fontSize: FONT_SIZES.sm,
         color: darkMode ? "#888" : COLORS.text.light
       }}>
-        <span>{formatDate(item.date)}</span>
-        {item.source && <span>·</span>}
-        {item.source && <span>{item.source}</span>}
-        {item.source && purposes.length > 0 && <span>·</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>{formatDate(item.date)}</span>
+          {displaySource && <span>·</span>}
+          {displaySource && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {isWechat && (
+                <img
+                  src="/wechat-icon.png"
+                  alt="微信"
+                  style={{ width: 16, height: 16, flexShrink: 0, display: "inline-block" }}
+                />
+              )}
+              <span>{displaySource}</span>
+            </span>
+          )}
+        </div>
         <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
           {purposes.map(p => (
             <span
@@ -175,7 +191,6 @@ export default function InsightCard({
             flexShrink: 0
           }}
         >
-          <span>✨</span>
           <span>{t.competitiveIntelligence.aiInterpret}</span>
         </button>
       </div>

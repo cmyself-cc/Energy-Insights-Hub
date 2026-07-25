@@ -1,12 +1,12 @@
 export const i18n = {
   en: {
     header: {
-      title: "⚡ Energy Insights",
+      title: "Energy Insights",
       subtitle: "Stay updated with the latest energy news & trends"
     },
     tabs: {
-      feed: "📡 Feed",
-      bookmarks: "🔖 Bookmarks"
+      feed: "Feed",
+      bookmarks: "Bookmarks"
     },
     search: {
       placeholder: "Search a specific topic (e.g. battery storage, LNG exports...)"
@@ -24,33 +24,33 @@ export const i18n = {
       noLimit:    "No Limit"
     },
     buttons: {
-      getInsights: "⚡ Get Energy Insights",
-      refreshInsights: "🔄 Refresh Insights",
+      getInsights: "Get Energy Insights",
+      refreshInsights: "Refresh Insights",
       fetching: "Fetching insights...",
-      summarize: "📰 Summarize",
+      summarize: "Summarize",
       generating: "Generating...",
       clearCart: "Clear",
-      generateNewsletter: "📰 Generate Newsletter",
-      apiConfig: "⚙️ API Config",
-      searchConfig: "🔍 Search Config",
-      testConnection: "🧪 Test Connection",
+      generateNewsletter: "Generate Newsletter",
+      apiConfig: "API Config",
+      searchConfig: "Search Config",
+      testConnection: "Test Connection",
       testing: "Testing...",
-      saveConfig: "💾 Save Config",
-      darkMode: "🌙 Dark",
-      lightMode: "☀ Light",
-      language: "🌐 Language",
+      saveConfig: "Save Config",
+      darkMode: "Dark",
+      lightMode: "Light",
+      language: "Language",
       close: "Close",
-      downloadPDF: "⬇ PDF",
+      downloadPDF: "Download PDF",
       generatingPDF: "Generating..."
     },
     cart: {
       itemsSelected: "selected — ready to generate newsletter"
     },
     apiConfig: {
-      title: "⚙️ API Configuration",
+      title: "API Configuration",
       subtitle: "Configure LLM and Search APIs",
-      tabLlm: "🤖 LLM Config",
-      tabSearch: "🔍 Search Config",
+      tabLlm: "LLM Config",
+      tabSearch: "Search Config",
       apiProvider: "API Provider",
       model: "Model Selection",
       apiKey: "API Key",
@@ -60,7 +60,7 @@ export const i18n = {
       searchApiKey: "Search API Key",
       searchApiKeyPlaceholder: "Enter {provider} API Key",
       searchApiKeyInfo: "Search API Key will be securely stored in your browser's local storage",
-      resetAll: "🗑️ Reset All Config",
+      resetAll: "Reset All Config",
       resetConfirm: "Are you sure you want to reset all API configurations? This will clear both LLM and Search API settings."
     },
     searchConfig: {
@@ -70,7 +70,7 @@ export const i18n = {
       apiKeyPlaceholder: "Enter {provider} API Key"
     },
     newsletter: {
-      title: "⚡ Energy Insights Generator",
+      title: "Energy Insights Generator",
       language: "Language:",
       generatingMessage: "Generating insights analysis...",
       generatingWait: "This may take a few seconds, please wait...",
@@ -80,10 +80,10 @@ export const i18n = {
       contents: "Contents",
       sections: "Sections",
       sidebarTitle: "Energy Insights — Contents",
-      overview: "📊 Overview",
-      keyInsights: "💡 Key Insights",
-      outlook: "🔮 Outlook & Recommendations",
-      dataSummary: "📈 Data Summary"
+      overview: "Overview",
+      keyInsights: "Key Insights",
+      outlook: "Outlook & Recommendations",
+      dataSummary: "Data Summary"
     },
     placeholders: {
       noBookmarks: "No bookmarks yet. Bookmark insights from the feed.",
@@ -121,16 +121,16 @@ export const i18n = {
       refreshButton: "Refresh Page"
     },
     insightCard: {
-      viewOriginal: "🔗 View original"
+      viewOriginal: "View original"
     },
     hints: {
-      clickToAdd: "💡 Click a card to add it to your newsletter selection"
+      clickToAdd: "Click a card to add it to your newsletter selection"
     },
     competitiveIntelligence: {
-      pageTitle: "Competitive Intelligence",
+      pageTitle: "Market Intelligence",
       cockpitTitle: "Management Cockpit",
       moduleName: "Insights",
-      sidebarTitle: "Competitive Intelligence",
+      sidebarTitle: "Market Intelligence",
       sources: "Sources",
       configuration: "Configuration",
       contentFiltersTab: "Content Filters",
@@ -241,12 +241,12 @@ export const i18n = {
   },
   zh: {
     header: {
-      title: "⚡ 能源洞察",
+      title: "能源洞察",
       subtitle: "及时了解最新能源新闻和趋势"
     },
     tabs: {
-      feed: "📡 信息流",
-      bookmarks: "🔖 书签"
+      feed: "信息流",
+      bookmarks: "书签"
     },
     search: {
       placeholder: "搜索特定主题（例如：电池存储、LNG出口...）"
@@ -264,33 +264,33 @@ export const i18n = {
       noLimit:    "不限"
     },
     buttons: {
-      getInsights: "⚡ 获取能源洞察",
-      refreshInsights: "🔄 刷新洞察",
+      getInsights: "获取能源洞察",
+      refreshInsights: "刷新洞察",
       fetching: "获取中...",
-      summarize: "📰 汇总",
+      summarize: "汇总",
       generating: "生成中...",
       clearCart: "清空",
-      generateNewsletter: "📰 生成简报",
-      apiConfig: "⚙️ API配置",
-      searchConfig: "🔍 搜索配置",
-      testConnection: "🧪 测试连接",
+      generateNewsletter: "生成简报",
+      apiConfig: "API配置",
+      searchConfig: "搜索配置",
+      testConnection: "测试连接",
       testing: "测试中...",
-      saveConfig: "💾 保存配置",
-      darkMode: "🌙 深色",
-      lightMode: "☀ 浅色",
-      language: "🌐 语言",
+      saveConfig: "保存配置",
+      darkMode: "深色",
+      lightMode: "浅色",
+      language: "语言",
       close: "关闭",
-      downloadPDF: "⬇ PDF",
+      downloadPDF: "下载 PDF",
       generatingPDF: "生成中..."
     },
     cart: {
       itemsSelected: "已选择 — 准备生成简报"
     },
     apiConfig: {
-      title: "⚙️ API配置",
+      title: "API配置",
       subtitle: "配置大模型和搜索API",
-      tabLlm: "🤖 大模型配置",
-      tabSearch: "🔍 搜索配置",
+      tabLlm: "大模型配置",
+      tabSearch: "搜索配置",
       apiProvider: "API提供商",
       model: "模型选择",
       apiKey: "API Key",
@@ -300,7 +300,7 @@ export const i18n = {
       searchApiKey: "搜索API Key",
       searchApiKeyPlaceholder: "输入{provider}的API Key",
       searchApiKeyInfo: "搜索API Key将安全保存在您的浏览器本地存储中",
-      resetAll: "🗑️ 重置所有配置",
+      resetAll: "重置所有配置",
       resetConfirm: "确定要重置所有API配置吗？这将清除大模型和搜索API的配置。"
     },
     searchConfig: {
@@ -310,7 +310,7 @@ export const i18n = {
       apiKeyPlaceholder: "输入{provider}的API Key"
     },
     newsletter: {
-      title: "⚡ 能源洞察生成器",
+      title: "能源洞察生成器",
       language: "语言:",
       generatingMessage: "正在生成洞察分析...",
       generatingWait: "这可能需要几秒钟时间，请稍候...",
@@ -320,10 +320,10 @@ export const i18n = {
       contents: "目录",
       sections: "章节",
       sidebarTitle: "能源洞察-目录",
-      overview: "📊 概览",
-      keyInsights: "💡 核心洞察",
-      outlook: "🔮 展望与建议",
-      dataSummary: "📈 数据汇总"
+      overview: "概览",
+      keyInsights: "核心洞察",
+      outlook: "展望与建议",
+      dataSummary: "数据汇总"
     },
     placeholders: {
       noBookmarks: "暂无书签。从信息流中添加书签。",
@@ -361,16 +361,16 @@ export const i18n = {
       refreshButton: "刷新页面"
     },
     insightCard: {
-      viewOriginal: "🔗 查看原文"
+      viewOriginal: "查看原文"
     },
     hints: {
-      clickToAdd: "💡 点击卡片将其添加到简报选择中"
+      clickToAdd: "点击卡片将其添加到简报选择中"
     },
     competitiveIntelligence: {
-      pageTitle: "竞争情报",
+      pageTitle: "市场洞察",
       cockpitTitle: "管理驾驶舱",
       moduleName: "洞察",
-      sidebarTitle: "竞争情报",
+      sidebarTitle: "市场洞察",
       sources: "数据来源",
       configuration: "配置",
       contentFiltersTab: "内容过滤",

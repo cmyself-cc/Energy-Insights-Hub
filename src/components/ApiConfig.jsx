@@ -232,7 +232,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
           alignItems: "center"
         }}>
           <div>
-            <div style={{ color: "#fff", fontWeight: 800, fontSize: 18 }}>⚙️ API 配置</div>
+            <div style={{ color: "#fff", fontWeight: 800, fontSize: 18 }}>API 配置</div>
             <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 2 }}>配置大模型和搜索API</div>
           </div>
           <button
@@ -248,7 +248,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
               cursor: "pointer"
             }}
           >
-            ✕ 关闭
+            关闭
           </button>
         </div>
       )}
@@ -273,7 +273,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
             cursor: "pointer"
           }}
         >
-          🤖 大模型配置
+          大模型配置
         </button>
         <button
           onClick={() => setActiveTab("search")}
@@ -289,7 +289,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
             cursor: "pointer"
           }}
         >
-          🔍 搜索配置
+          搜索配置
         </button>
       </div>
 
@@ -405,7 +405,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
                     fontWeight: 500
                   }}
                 >
-                  {showApiKey ? "🙈" : "👁️"}
+                  {showApiKey ? "Hide" : "Show"}
                 </button>
               </div>
               <div style={{ fontSize: 12, color: darkMode ? "#888" : "#999", marginTop: 6 }}>
@@ -443,7 +443,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
                   cursor: llmTesting ? "not-allowed" : "pointer"
                 }}
               >
-                {llmTesting ? "测试中..." : "🧪 测试连接"}
+                {llmTesting ? "测试中..." : "测试连接"}
               </button>
               <button
                 onClick={handleSave}
@@ -459,7 +459,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
                   cursor: "pointer"
                 }}
               >
-                💾 保存配置
+                保存配置
               </button>
             </div>
           </>
@@ -538,7 +538,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
                     fontWeight: 500
                   }}
                 >
-                  {showSearchApiKey ? "🙈" : "👁️"}
+                  {showSearchApiKey ? "Hide" : "Show"}
                 </button>
               </div>
               <div style={{ fontSize: 12, color: darkMode ? "#888" : "#999", marginTop: 6 }}>
@@ -576,7 +576,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
                   cursor: searchTesting ? "not-allowed" : "pointer"
                 }}
               >
-                {searchTesting ? "测试中..." : "🧪 测试连接"}
+                {searchTesting ? "测试中..." : "测试连接"}
               </button>
               <button
                 onClick={handleSave}
@@ -592,7 +592,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
                   cursor: "pointer"
                 }}
               >
-                💾 保存配置
+                保存配置
               </button>
             </div>
           </>
@@ -621,7 +621,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
               cursor: "pointer"
             }}
           >
-            🗑️ 重置所有配置
+            重置所有配置
           </button>
         </div>
       </div>

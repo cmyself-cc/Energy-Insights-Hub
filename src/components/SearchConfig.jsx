@@ -117,7 +117,7 @@ export default function SearchConfig({ onClose, onSave, currentConfig, darkMode 
           alignItems: "center"
         }}>
           <div>
-            <div style={{ color: "#fff", fontWeight: 800, fontSize: 18 }}>🔍 {t.searchConfig.title}</div>
+            <div style={{ color: "#fff", fontWeight: 800, fontSize: 18 }}>{t.searchConfig.title}</div>
             <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 2 }}>{t.searchConfig.subtitle}</div>
           </div>
           <button
@@ -133,7 +133,7 @@ export default function SearchConfig({ onClose, onSave, currentConfig, darkMode 
               cursor: "pointer"
             }}
           >
-            ✕ {t.buttons.close}
+            {t.buttons.close}
           </button>
         </div>
 
@@ -211,7 +211,7 @@ export default function SearchConfig({ onClose, onSave, currentConfig, darkMode 
                   fontWeight: 500
                 }}
               >
-                {showApiKey ? "🙈" : "👁️"}
+                {showApiKey ? "Hide" : "Show"}
               </button>
             </div>
             <div style={{ fontSize: 12, color: darkMode ? "#888" : "#999", marginTop: 6 }}>

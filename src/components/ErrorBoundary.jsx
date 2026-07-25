@@ -41,7 +41,7 @@ class ErrorBoundary extends Component {
             textAlign: "center",
             boxShadow: "0 4px 20px rgba(0,0,0,0.1)"
           }}>
-            <div style={{ fontSize: "64px", marginBottom: "16px" }}>😵</div>
+            <div style={{ fontSize: "24px", fontWeight: 700, color: COLORS.primary, marginBottom: "16px" }}>Error</div>
             <h2 style={{
               color: COLORS.primary,
               fontSize: "24px",

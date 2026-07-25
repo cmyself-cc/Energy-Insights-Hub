@@ -41,8 +41,8 @@ export function applyKeywordGate(items, context) {
       // Exclude keyword blocks the match for this purpose
       if (excludeMatch) continue;
 
-      // Subject OR include keyword matches
-      if (subjectMatch || includeMatch) {
+      // All purposes require BOTH enterprise AND include_keyword (AND logic)
+      if (subjectMatch && includeMatch) {
         matchedPurposes.push(purpose);
       }
     }

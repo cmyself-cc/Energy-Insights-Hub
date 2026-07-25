@@ -69,7 +69,7 @@ export default function CardActions({ darkMode, language, bookmarked, onBookmark
             onClick={(e) => { e.stopPropagation(); onBookmark(); setOpen(false); }}
             style={menuItemStyle}
           >
-            {bookmarked ? `🔖 ${t.competitiveIntelligence.removeBookmark}` : `☆ ${t.competitiveIntelligence.bookmark}`}
+            {bookmarked ? `${t.competitiveIntelligence.removeBookmark}` : `${t.competitiveIntelligence.bookmark}`}
           </button>
           {itemUrl && (
             <a
@@ -79,14 +79,14 @@ export default function CardActions({ darkMode, language, bookmarked, onBookmark
               onClick={(e) => { e.stopPropagation(); setOpen(false); }}
               style={{ ...menuItemStyle, textDecoration: "none", display: "block" }}
             >
-              🔗 {t.competitiveIntelligence.viewOriginal}
+              {t.competitiveIntelligence.viewOriginal}
             </a>
           )}
           <button
             onClick={(e) => { e.stopPropagation(); onHide(); setOpen(false); }}
             style={menuItemStyle}
           >
-            🙈 {t.competitiveIntelligence.hide}
+            {t.competitiveIntelligence.hide}
           </button>
         </div>
       )}

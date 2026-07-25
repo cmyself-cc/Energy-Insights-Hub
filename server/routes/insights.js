@@ -24,7 +24,7 @@ function parseRow(row) {
     date: row.publish_date,
     publishDate: row.publish_date,
     sourceId: row.source_id,
-    source: row.source_name || row.source_id,
+    source: row.source_name || row.config_source_name || row.source_id,
     sourceType: row.source_type,
     businessDomain: row.business_domain,
     enterpriseType: row.enterprise_type,
@@ -36,6 +36,22 @@ function parseRow(row) {
     hidden: row.hidden,
     purposes: purposes.length > 0 ? purposes : ["competitor"]
   };
+}
+
+function buildPurposeCondition(purposeList) {
+  const orConditions = [];
+  const orParams = [];
+  for (const p of purposeList) {
+    orConditions.push("i.purpose LIKE ?");
+    orParams.push(`%"${p}"%`);
+    orConditions.push("i.purpose = ?");
+    orParams.push(p);
+  }
+  // Empty/NULL purpose defaults to competitor for backward compatibility
+  if (purposeList.includes("competitor")) {
+    orConditions.push("(i.purpose = '' OR i.purpose IS NULL)");
+  }
+  return { condition: `(${orConditions.join(" OR ")})`, params: orParams };
 }
 
 router.get("/", (req, res) => {
@@ -89,17 +105,21 @@ router.get("/", (req, res) => {
       const like = `%${search}%`;
       params.push(like, like, like);
     }
+
     if (req.query.purpose) {
-      conditions.push("i.purpose = ?");
-      params.push(req.query.purpose);
+      const singlePurpose = req.query.purpose.trim();
+      const { condition, params: pParams } = buildPurposeCondition([singlePurpose]);
+      conditions.push(condition);
+      params.push(...pParams);
     }
 
     // Multi-purpose filter: purposes=competitor,policy,tech
     if (purposes) {
       const purposeList = purposes.split(",").map(s => s.trim()).filter(Boolean);
       if (purposeList.length > 0) {
-        conditions.push(`i.purpose IN (${purposeList.map(() => "?").join(",")})`);
-        params.push(...purposeList);
+        const { condition, params: pParams } = buildPurposeCondition(purposeList);
+        conditions.push(condition);
+        params.push(...pParams);
       }
     }
 
@@ -121,7 +141,7 @@ router.get("/", (req, res) => {
 
     const countRow = db.prepare(`SELECT COUNT(*) as total FROM insights i WHERE ${where}`).get(...params);
     const rows = db.prepare(
-      `SELECT i.*, s.name as source_name FROM insights i LEFT JOIN sources s ON i.source_id = s.id WHERE ${where} ORDER BY i.publish_date DESC, i.id DESC LIMIT ? OFFSET ?`
+      `SELECT i.*, s.name as config_source_name FROM insights i LEFT JOIN sources s ON i.source_id = s.id WHERE ${where} ORDER BY i.publish_date DESC, i.id DESC LIMIT ? OFFSET ?`
     ).all(...params, limit, offset);
 
     res.json({

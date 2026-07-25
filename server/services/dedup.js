@@ -24,15 +24,25 @@ export function deduplicateItems(items, options = {}) {
   const recentUrlSet = new Set(
     recent.map(r => normalizeUrl(r.url || "")).filter(Boolean)
   );
+  const recentRawUrlSet = new Set(
+    recent.map(r => (r.url || "").toLowerCase().trim()).filter(Boolean)
+  );
   const recentTitles = recent.map(r => r.title).filter(Boolean);
 
   const result = [];
   const seenUrls = new Set();
+  const seenRawUrls = new Set();
   const seenTitles = new Set();
 
   for (const item of items) {
     const urlKey = item.url ? normalizeUrl(item.url) : null;
+    const rawUrlKey = item.url ? item.url.toLowerCase().trim() : null;
+
+    // Strong URL dedup: normalized and raw lowercased URL
     if (urlKey && (seenUrls.has(urlKey) || recentUrlSet.has(urlKey))) {
+      continue;
+    }
+    if (rawUrlKey && (seenRawUrls.has(rawUrlKey) || recentRawUrlSet.has(rawUrlKey))) {
       continue;
     }
 
@@ -52,6 +62,7 @@ export function deduplicateItems(items, options = {}) {
     }
 
     if (urlKey) seenUrls.add(urlKey);
+    if (rawUrlKey) seenRawUrls.add(rawUrlKey);
     if (normTitle) seenTitles.add(normTitle);
     result.push(item);
   }

@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 
 const DEFAULT_ARTICLE_LIMIT = 20;
-const DEFAULT_LOOKBACK_HOURS = 24;
+const DEFAULT_LOOKBACK_HOURS = 720; // default 30 days to match tracker lookback
 
 function parseConfig(source) {
   let config = source.config || {};
@@ -188,6 +188,24 @@ async function fetchFeedArticles(session, feedId, limit, requestIdRef) {
   return Array.isArray(articles) ? articles : [];
 }
 
+function pickAccountName(item, feedName) {
+  const candidates = [
+    item.accountName,
+    item.account,
+    item.author,
+    item.sourceName,
+    item.source,
+    item.feedName,
+    item.mpName,
+    item.officialAccount,
+    item.bizName
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return feedName || "";
+}
+
 async function fetchFullText(session, articleId, requestIdRef) {
   try {
     const html = await callTool(
@@ -222,6 +240,7 @@ export async function fetchArticles(source) {
   const requestIdRef = { id: 10 };
 
   try {
+    const feedNameById = {};
     let feedIds = [];
     if (feedId) {
       feedIds = [feedId];
@@ -234,7 +253,12 @@ export async function fetchArticles(source) {
         {},
         requestIdRef.id++
       );
-      feedIds = (Array.isArray(feeds) ? feeds : []).map(f => f.id).filter(Boolean);
+      for (const f of Array.isArray(feeds) ? feeds : []) {
+        if (!f.id) continue;
+        feedIds.push(f.id);
+        const name = f.name || f.title || f.accountName || f.account || f.author || "";
+        feedNameById[f.id] = name.trim();
+      }
     }
 
     if (feedIds.length === 0) {
@@ -247,6 +271,7 @@ export async function fetchArticles(source) {
 
     for (const id of feedIds) {
       try {
+        const feedName = feedNameById[id] || "";
         const feedArticles = await fetchFeedArticles(session, id, perFeedLimit, requestIdRef);
         for (const item of feedArticles) {
           try {
@@ -263,7 +288,8 @@ export async function fetchArticles(source) {
               summary,
               url: item.link || `https://mp.weixin.qq.com/s/${item.id}`,
               publishDate,
-              rawContent
+              rawContent,
+              source: pickAccountName(item, feedName)
             });
           } catch (e) {
             console.error(`[wechat_mcp] Failed to process article ${item.id}:`, e.message);

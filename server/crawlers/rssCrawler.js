@@ -25,7 +25,8 @@ export async function fetchArticles(source) {
           summary: item.contentSnippet || item.content || "",
           url: item.link || "",
           publishDate: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-          rawContent: item["content:encoded"] || item.content || ""
+          rawContent: item["content:encoded"] || item.content || "",
+          source: source.name || ""
         };
       } catch (err) {
         console.error("RSS item normalization failed:", err.message, "item:", item);

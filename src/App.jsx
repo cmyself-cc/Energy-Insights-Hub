@@ -235,7 +235,6 @@ export default function App() {
         darkMode={darkMode}
         language={language}
         onLanguageToggle={handleLanguageToggle}
-        onApiConfig={() => setShowApiConfig(true)}
       />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -378,7 +377,7 @@ export default function App() {
         }}
         title={darkMode ? t.buttons.lightMode : t.buttons.darkMode}
       >
-        {darkMode ? "☀" : "🌙"}
+        {darkMode ? "☼" : "☾"}
       </button>
 
       <ToastContainer toasts={toasts} removeToast={removeToast} darkMode={darkMode} />

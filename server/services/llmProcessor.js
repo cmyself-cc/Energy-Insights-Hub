@@ -66,23 +66,46 @@ export async function processInsight(item, _language = "en", _filterContext = nu
     };
   }
 
-  const prompt = `You are an energy industry analyst. Read the following article and extract a structured insight.
+  const categoryNames = (_filterContext?.categories || [])
+    .map(c => c.name)
+    .filter(Boolean);
+  const categoryList = categoryNames.length > 0 ? categoryNames.join("、") : "电力&氢能、储能、光伏、油气、CCS、化工、LNG/天然气、移动出行、润滑油、生物燃料、战略合作、收并购、项目";
+
+  const prompt = `你是一名能源行业分析师。请阅读以下文章并提取结构化洞察。
 
 Title: ${item.title}
 Content: ${item.rawContent || item.summary || ""}
 URL: ${item.url}
 
 CRITICAL RULES:
-1. title: Extract the CORE EVENT in the most concise Chinese possible (10-20 characters). Remove all noise: source names, dates, author names, filler words. Focus on WHAT happened, WHO did it, and the KEY OUTCOME.
-2. summary: Clean the article of ALL noise (author names, source attribution, dates, filler phrases, advertisements, unrelated context). Write a pure, information-dense summary in Chinese, maximum 150 characters. Every word must carry information.
+1. title: 用最精简的中文（10-20字）概括核心事件。剔除来源名、日期、作者名、废话词，聚焦发生了什么、主体是谁、关键结果。
+2. summary: 清理所有噪音（作者名、来源署名、日期、填充短语、广告、无关上下文），用中文写一个信息密集的摘要，最多150字，每个字都要携带信息。
+3. keywords: 恰好3个字符串，必须是具体可搜索的关键词：公司名称、技术名称、事件名称或政策名称。不要宽泛概念。示例：宁德时代、钠离子电池、136号文、电价改革、中石化、CCUS。
+4. purposes: 根据内容判断该文章属于哪些监控类型（可多选）。必须严格符合以下定义：
+   - competitor: 涉及能源企业的投资、收购、合作、签约、合资、并购等竞争动态
+   - policy: 涉及政策、规划、通知、批复、标准、方案、意见等的发布或解读
+   - tech: 涉及技术突破、创新、研发、专利、量产、示范应用等技术进展
+   如果文章内容不符合以上任何一类，返回空数组 []，该文章将被丢弃。
+5. categories: 从以下分类中选择最相关的1-3个：${categoryList}。必须至少包含一个业务分类（电力&氢能、储能、光伏、油气、CCS、化工、LNG/天然气、移动出行、润滑油、生物燃料），可再搭配事件分类（战略合作、收并购、项目）。
+6. china_relevance: 判断这篇文章是否与中国强相关（发生在中国、涉及中国企业/机构、中国政策、中国市场或中国技术）。只返回布尔值 true 或 false。
 
-Return ONLY a valid JSON object (no markdown, no explanation) with exactly these three fields:
-- title: string (concise Chinese, 10-20 characters, core event only)
-- summary: string (pure information, max 150 Chinese characters, no noise)
-- keywords: array of exactly 3 strings (specific searchable keywords: company names, technology names, event names, or policy names. NOT generic concepts. Examples: 宁德时代, 钠离子电池, 136号文, 电价改革, 中石化, CCUS)`;
+CRITICAL: 只有 china_relevance 为 true 的文章才保留。如果内容与中国无关（如仅涉及越南、美国、欧洲本地市场且与中国无关联），必须返回空数组 []，该文章将被丢弃。
+
+Return ONLY a valid JSON object (no markdown, no explanation) with exactly these fields:
+- title: string
+- summary: string (max 150 Chinese characters)
+- keywords: array of exactly 3 strings
+- purposes: array of strings (competitor, policy, tech, or empty [])
+- categories: array of strings
+- china_relevance: boolean
+- title: string
+- summary: string (max 150 Chinese characters)
+- keywords: array of exactly 3 strings
+- purposes: array of strings (competitor, policy, tech, or empty [])
+- categories: array of strings`;
 
   const messages = [{ role: "user", content: prompt }];
-  const { url, headers, body } = buildRequest(config, messages, 1500, 0.5);
+  const { url, headers, body } = buildRequest(config, messages, 2000, 0.5);
 
   try {
     const response = await fetchWithTimeout(url, {
@@ -105,13 +128,16 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
       summary: parsed.summary || item.summary,
       url: item.url,
       publishDate: item.publishDate,
+      source: item.source || "",
       sourceType: item.sourceType || "",
       businessDomain: item.businessDomain || "",
       enterpriseType: item.enterpriseType || "",
       entities: item.entities || [],
       features: item.features || [],
       keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 3) : [],
-      categories: item.categories || []
+      categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+      purposes: Array.isArray(parsed.purposes) ? parsed.purposes : [],
+      chinaRelevance: parsed.china_relevance === true
     };
   } catch (e) {
     console.error("LLM process failed:", e.message);
@@ -127,6 +153,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
       features: [],
       keywords: [],
       categories: [],
+      purposes: [],
       llmFailed: true
     };
   }

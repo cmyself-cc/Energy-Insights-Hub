@@ -7,10 +7,10 @@ import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 
 const TABS = [
-  { key: "sources", icon: "🌐", labelKey: "sources" },
-  { key: "filters", icon: "🛡️", labelKey: "contentFiltersTab" },
-  { key: "tracker", icon: "⚙️", labelKey: "trackerSettingsTab" },
-  { key: "api", icon: "🔑", labelKey: "apiConfigTab" }
+  { key: "sources", icon: "◎", labelKey: "sources" },
+  { key: "filters", icon: "▣", labelKey: "contentFiltersTab" },
+  { key: "tracker", icon: "⚙", labelKey: "trackerSettingsTab" },
+  { key: "api", icon: "◇", labelKey: "apiConfigTab" }
 ];
 
 export default function ConfigurationPage({ darkMode, language, apiConfig, onApiConfigSave, onTrackerComplete }) {
