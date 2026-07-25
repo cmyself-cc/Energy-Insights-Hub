@@ -1,41 +1,26 @@
-# Task 8 Report: Update filters routes to handle purpose
+# Task 8 Report: LLM Suggestion Generator
 
-**Status:** DONE
+## Summary
+Implemented `POST /api/feedback/generate-suggestions` — an endpoint that analyzes the latest 100 user feedback entries via LLM and generates keyword/enterprise filtering rule suggestions in the `feedback_rules_suggestions` table.
 
-## What changed
+## Files Changed
 
-Modified `server/routes/filters.js` exactly per the brief:
+### Created: `server/services/feedbackSuggestionGenerator.js`
+- Exports `generateSuggestions()` async function
+- Reads `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` from env (same pattern as `llmProcessor.js`)
+- Uses `fetchWithTimeout` from `../crawlers/utils.js`
+- Supports both OpenAI and Anthropic providers via `buildRequest()` / `extractContent()`
+- Loads up to 100 recent feedback rows, sends them as JSON to the LLM with a Chinese prompt asking for rule suggestions
+- Parses LLM response, inserts suggestions into `feedback_rules_suggestions` table in a transaction
+- Returns `{ generated: N }`
 
-1. **POST /rules** (`server/routes/filters.js:21-31`): destructures `purpose = ""` from `req.body` and inserts it into the new `purpose` column — the INSERT statement now lists all 7 columns (`type, name, must_include, must_exclude, active, priority, purpose`) with 7 placeholders.
-2. **PUT /rules/:id** (`server/routes/filters.js:33-43`): destructures `purpose` from `req.body` and adds `purpose = ?` to the UPDATE statement, binding `purpose || ""` so an omitted field stores an empty string (matching the column default) rather than NULL.
+### Modified: `server/routes/feedback.js`
+- Added import: `import { generateSuggestions } from "../services/feedbackSuggestionGenerator.js";`
+- Added route: `POST /generate-suggestions` (async handler, returns `{ data: result }` on success, `{ error: message }` on failure)
 
-No other routes, files, or logic were touched. GET /rules already uses `SELECT *`, so it returns the `purpose` column with no change needed.
-
-## Test results
-
-No existing test suite in the project (no `test` script in `package.json`). Verified with:
-
-1. `node --check server/routes/filters.js` — syntax OK.
-2. A functional smoke test (temporary script, deleted after run): booted a scratch DB (`DATA_DIR=/tmp/eih-test-data`, `DB_PATH=/tmp/eih-test-data/test.db`), ran `initDb()` (migrations incl. `009_purpose_columns.sql` applied — `filter_rules` schema confirmed to have `purpose TEXT DEFAULT ''`), mounted the real router in Express, and exercised the endpoints over HTTP. All 9 assertions passed:
-
-```
-PASS POST status 200
-PASS POST stores purpose 'compliance'
-PASS POST default purpose ''
-PASS PUT status 200
-PASS PUT stores purpose 'operations'
-PASS PUT updates name
-PASS PUT parses csv mustInclude
-PASS PUT omitted purpose -> ''
-PASS GET includes purpose field
-```
-
-One mid-test failure occurred during verification but was a bug in my throwaway test script (used `type: "keyword"`, which violates the table's `CHECK(type IN ('enterprise','include_keyword','exclude_keyword'))` constraint), not in the route code; fixed the test input and all checks passed.
+## Verification
+- Server was already running on port 3001 (existing instance)
+- `curl -X POST http://localhost:3001/api/feedback/generate-suggestions` returned `{"data":{"generated":1}}` — endpoint functional, LLM call succeeded, 1 suggestion generated from existing feedback data
 
 ## Commit
-
-Committed per the brief's Step 3: `adf0fd2 feat: filter rules API supports purpose field` (1 file changed, 6 insertions, 6 deletions).
-
-## Concerns
-
-- None blocking. Note: PUT semantics replace the whole rule, so a client that omits `purpose` on update will reset it to `""` — this matches the brief's exact code, so it was kept as specified. If partial updates are ever desired, that would be a separate change.
+- `29b4f2d` — `feat(feedback): add LLM suggestion generator`

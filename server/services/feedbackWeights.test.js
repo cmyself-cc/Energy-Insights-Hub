@@ -1,7 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import db from "../db.js";
 import { applyUserFeedbackScore, loadSemanticWeights } from "./feedbackWeights.js";
 
 describe("feedbackWeights", () => {
+  beforeEach(() => {
+    db.prepare("DELETE FROM feedback_semantic_weights").run();
+  });
+
   it("loads empty weights when none exist", () => {
     const weights = loadSemanticWeights();
     expect(weights.boost).toEqual([]);
