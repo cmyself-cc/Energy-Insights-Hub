@@ -23,7 +23,7 @@ function snapshotInsight(insightId) {
   };
 }
 
-function updateWeight(term, action, reasonCategory) {
+const updateWeight = db.transaction((term, action, reasonCategory) => {
   const existing = db.prepare("SELECT * FROM feedback_semantic_weights WHERE term = ? AND action = ?").get(term, action);
   if (existing) {
     db.prepare(
@@ -34,7 +34,7 @@ function updateWeight(term, action, reasonCategory) {
       "INSERT INTO feedback_semantic_weights (term, term_type, action, reason_category, score) VALUES (?, 'keyword', ?, ?, 1)"
     ).run(term, action, reasonCategory || null);
   }
-}
+});
 
 function updateWeightsFromFeedback(feedback) {
   const terms = feedback.keywords || [];

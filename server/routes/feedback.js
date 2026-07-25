@@ -8,6 +8,9 @@ const router = Router();
 router.post("/", (req, res) => {
   try {
     const { insightId, action, reason } = req.body;
+    if (!["bookmark", "hide"].includes(action)) {
+      return res.status(400).json({ error: "action must be 'bookmark' or 'hide'" });
+    }
     if (!insightId || !action) {
       return res.status(400).json({ error: "insightId and action are required" });
     }

@@ -13,6 +13,7 @@ export default function FeedbackPage({ darkMode, language }) {
   const [stats, setStats] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const load = async () => {
     try {
@@ -22,8 +23,10 @@ export default function FeedbackPage({ darkMode, language }) {
       ]);
       setStats(statsRes.data);
       setSuggestions(sugRes.data || []);
+      setError(null);
     } catch (e) {
       console.error("Feedback load failed:", e);
+      setError(e.message);
     }
   };
 
@@ -36,18 +39,29 @@ export default function FeedbackPage({ darkMode, language }) {
       await load();
     } catch (e) {
       console.error("Generate suggestions failed:", e);
+      setError(e.message);
     }
     setLoading(false);
   };
 
   const handleAccept = async (id) => {
-    await backendApi.acceptFeedbackSuggestion(id);
-    await load();
+    try {
+      await backendApi.acceptFeedbackSuggestion(id);
+      await load();
+    } catch (e) {
+      console.error("Accept suggestion failed:", e);
+      setError(e.message);
+    }
   };
 
   const handleReject = async (id) => {
-    await backendApi.rejectFeedbackSuggestion(id);
-    await load();
+    try {
+      await backendApi.rejectFeedbackSuggestion(id);
+      await load();
+    } catch (e) {
+      console.error("Reject suggestion failed:", e);
+      setError(e.message);
+    }
   };
 
   const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
@@ -59,6 +73,20 @@ export default function FeedbackPage({ darkMode, language }) {
       <h2 style={{ fontSize: FONT_SIZES.xl, color: text, marginBottom: 16 }}>
         {language === "zh" ? "我的反馈" : "My Feedback"}
       </h2>
+
+      {error && (
+        <div style={{
+          background: "#fff0f0",
+          border: "1px solid #fcc",
+          borderRadius: BORDER_RADIUS.lg,
+          padding: "14px 18px",
+          color: "#c00",
+          fontSize: FONT_SIZES.base,
+          marginBottom: 20
+        }}>
+          {error}
+        </div>
+      )}
 
       {stats && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
