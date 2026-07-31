@@ -10,4 +10,5 @@ jobs:
     runs-on: [self-hosted, mac-mini]
     steps:
       - name: Deploy
-        run: "$HOME/Live Projects/CMFlow/deploy/energy-insights-hub.sh"
+        run: |
+          bash "$HOME/Live Projects/CMFlow/deploy/energy-insights-hub.sh"
