@@ -48,8 +48,7 @@ export default function TrackerProgress({ darkMode, language }) {
       border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
       borderRadius: 20,
       padding: "4px 14px",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-      zIndex: 110
+      boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
     }}>
       {phase !== "storing" && (
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.primary, animation: "tp-pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />

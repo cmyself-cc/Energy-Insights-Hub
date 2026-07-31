@@ -8,6 +8,11 @@ const emptySearch = () => ({ providerName: "", baseUrl: "", apiKey: "" });
 export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = false, inline = false }) {
   const [activeTab, setActiveTab] = useState("llm");
   const [saved, setSaved] = useState([]);
+  const [searchSaved, setSearchSaved] = useState(null);
+  const [activeId, setActiveId] = useState(() => {
+    const configs = storage.getApiConfigs();
+    return configs.length > 0 ? configs[0].id : null;
+  });
   const [editingId, setEditingId] = useState(null);
 
   // LLM form
@@ -22,7 +27,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
   const [searchTestResult, setSearchTestResult] = useState(null);
   const [searchTesting, setSearchTesting] = useState(false);
 
-  useEffect(() => { setSaved(storage.getApiConfigs()); }, []);
+  useEffect(() => { setSaved(storage.getApiConfigs()); setSearchSaved(storage.getSearchConfig()); }, []);
 
   const inputStyle = {
     width: "100%", padding: "10px 14px", borderRadius: 8,
@@ -72,17 +77,27 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
         baseUrl: form.baseUrl.trim(),
         apiKey: form.apiKey.trim()
       });
+      setSearchSaved(storage.getSearchConfig());
     }
     setSaved(storage.getApiConfigs());
+    setActiveId(storage.getApiConfigs()?.[0]?.id || null);
     setEditingId(null);
     setLlm(emptyLlm());
     setSearch(emptySearch());
+  };
+
+  const setActive = (id) => {
+    storage.switchApiConfig(id);
+    setActiveId(id);
+    setSaved(storage.getApiConfigs());
+    window.dispatchEvent(new Event("api-config-updated"));
   };
 
   const handleDelete = (id) => {
     const configs = storage.getApiConfigs().filter(c => c.id !== id);
     localStorage.setItem("energy_insights_api_config", JSON.stringify(configs));
     setSaved(configs);
+    if (id === activeId) setActiveId(null);
     window.dispatchEvent(new Event("api-config-updated"));
   };
 
@@ -136,15 +151,23 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
 
       {/* Saved configs list */}
       {saved.length > 0 && (
-        <div style={{ padding: "16px 24px 0" }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: darkMode ? "#888" : "#999", marginBottom: 8, textTransform: "uppercase" }}>已保存的配置</div>
+        <div style={{ padding: "0 24px 16px", borderTop: `1px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}` }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: darkMode ? "#888" : "#999", marginBottom: 8, marginTop: 16, textTransform: "uppercase" }}>已保存的配置</div>
           {saved.map(c => (
             <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, marginBottom: 6, background: editingId === c.id ? COLORS.primaryLight : (darkMode ? "#222" : "#f5f5f5"), border: `1px solid ${darkMode ? COLORS.border.dark : "#e8e8e8"}` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: darkMode ? "#e8e8e8" : "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.providerName}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: darkMode ? "#e8e8e8" : "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.providerName}</span>
+                  {c.id === activeId && (
+                    <span style={{ fontSize: 10, color: "#fff", background: COLORS.primary, padding: "1px 6px", borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>生效中</span>
+                  )}
+                </div>
                 <div style={{ fontSize: 11, color: darkMode ? "#888" : "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.modelId} · {c.baseUrl}</div>
               </div>
               <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                {c.id !== activeId && (
+                  <button onClick={() => setActive(c.id)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${COLORS.primary}`, background: COLORS.primary, color: "#fff", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>设为生效</button>
+                )}
                 <button onClick={() => handleEdit(c)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${COLORS.primary}`, background: "transparent", color: COLORS.primary, fontSize: 12, cursor: "pointer" }}>编辑</button>
                 <button onClick={() => handleDelete(c.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #c00", background: "transparent", color: "#c00", fontSize: 12, cursor: "pointer" }}>删除</button>
               </div>
@@ -153,8 +176,19 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
         </div>
       )}
 
-      {/* Form */}
-      <div style={{ padding: "20px 24px", borderTop: saved.length > 0 ? `1px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}` : "none" }}>
+      {/* Search API saved config */}
+      {searchSaved && searchSaved.providerName && (
+        <div style={{ padding: "0 24px 16px", borderTop: `1px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}` }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: darkMode ? "#888" : "#999", marginBottom: 8, marginTop: 16, textTransform: "uppercase" }}>搜索 API</div>
+          <div style={{ padding: "10px 14px", borderRadius: 8, background: darkMode ? "#222" : "#f5f5f5", border: `1px solid ${darkMode ? COLORS.border.dark : "#e8e8e8"}` }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: darkMode ? "#e8e8e8" : "#333" }}>{searchSaved.providerName}</div>
+            <div style={{ fontSize: 11, color: darkMode ? "#888" : "#999" }}>{searchSaved.baseUrl}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Form - always visible */}
+      <div style={{ padding: "20px 24px" }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: darkMode ? "#888" : "#999", marginBottom: 12, textTransform: "uppercase" }}>
           {editingId ? "编辑配置" : "新增配置"}
         </div>

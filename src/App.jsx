@@ -233,7 +233,6 @@ export default function App() {
   return (
     <div style={{
       height: "100vh",
-      overflow: "hidden",
       background: bg,
       fontFamily: "'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif",
       transition: `background ${TRANSITIONS.normal}`,
@@ -244,6 +243,7 @@ export default function App() {
         darkMode={darkMode}
         language={language}
         onLanguageToggle={handleLanguageToggle}
+        onOpenApiConfig={() => setShowApiConfig(true)}
       />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>

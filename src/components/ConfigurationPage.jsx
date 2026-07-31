@@ -21,6 +21,8 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
   const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
 
   const [message, setMessage] = useState(null);
+  const [presets, setPresets] = useState(["", "", ""]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {

@@ -331,8 +331,8 @@ Formatting Requirements:
     }
   },
 
-  interpretArticle: async (item, question = "", language = "en", history = [], signal = null) => {
-    const config = storage.getApiConfig();
+  interpretArticle: async (item, question = "", language = "en", history = [], signal = null, modelOverride = null) => {
+    const config = modelOverride || storage.getApiConfig();
     if (!config || !config.apiKey) {
       throw new Error("API_KEY_REQUIRED");
     }
