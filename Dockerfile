@@ -8,7 +8,7 @@ WORKDIR /build
 RUN npm config set registry https://registry.npmmirror.com
 
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts && npx playwright install chromium --with-deps 2>/dev/null || true
+RUN npm ci --ignore-scripts
 
 COPY vite.config.js ./
 COPY index.html ./
@@ -18,13 +18,7 @@ RUN npm run build
 
 FROM node:22-alpine
 
-RUN apk add --no-cache python3 make g++ \
-    chromium \
-    nss freetype harfbuzz ca-certificates ttf-freefont \
-    && rm -rf /var/cache/apk/*
-
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
