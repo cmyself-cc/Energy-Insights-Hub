@@ -1,0 +1,13 @@
+name: Deploy to Mac Mini
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, mac-mini]
+    steps:
+      - name: Deploy
+        run: "$HOME/Live Projects/CMFlow/deploy/energy-insights-hub.sh"
