@@ -191,6 +191,24 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
     }
   };
 
+  const stopTracker = async () => {
+    if (!confirm(language === "zh" ? "确定要终止当前跟踪吗？已抓取的内容将被保留。" : "Stop the current tracker? Content already fetched will be kept.")) return;
+    try {
+      await backendApi.stopTracker();
+      setTimeout(async () => {
+        try {
+          const res = await backendApi.getTrackerStatus();
+          if (!res.data.active) {
+            setTrackerRunning(false);
+            setActiveRun(null);
+          }
+        } catch (e) { /* ignore */ }
+      }, 2000);
+    } catch (err) {
+      setMessage({ type: "error", text: err.message });
+    }
+  };
+
   const importFromMd = async () => {
     setLoading(true);
     try {
@@ -321,21 +339,20 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           {language === "zh" ? "数据来源" : "Data Sources"}
         </h1>
         <button
-          onClick={runTracker}
-          disabled={trackerRunning}
+          onClick={trackerRunning ? stopTracker : runTracker}
           style={{
             padding: "8px 16px",
             borderRadius: BORDER_RADIUS.md,
             border: "none",
-            background: trackerRunning ? "#aaa" : COLORS.primary,
+            background: trackerRunning ? "#d32f2f" : COLORS.primary,
             color: "#fff",
             fontSize: FONT_SIZES.md,
             fontWeight: 600,
-            cursor: trackerRunning ? "not-allowed" : "pointer"
+            cursor: "pointer"
           }}
         >
           {trackerRunning
-            ? (language === "zh" ? "运行中..." : "Running...")
+            ? `⏹ ${language === "zh" ? "终止跟踪" : "Stop Tracker"}`
             : (language === "zh" ? "立即运行跟踪" : "Run Tracker Now")}
         </button>
         <button
@@ -366,29 +383,6 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           marginBottom: 16
         }}>
           {message.text}
-        </div>
-      )}
-
-      {activeRun && activeRun.status === "running" && (
-        <div style={{
-          background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
-          border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-          borderRadius: BORDER_RADIUS.lg, padding: "16px 20px", marginBottom: 20
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: FONT_SIZES.sm, color: darkMode ? "#aaa" : COLORS.text.secondary }}>
-            <span>{language === "zh" ? "正在跟踪..." : "Tracking in progress..."}</span>
-            <span>{runProgress}%</span>
-          </div>
-          <div style={{
-            height: 8, borderRadius: BORDER_RADIUS.sm,
-            background: darkMode ? "#2a2d3a" : "#e0e0e0",
-            overflow: "hidden"
-          }}>
-            <div style={{
-              width: `${runProgress}%`, height: "100%",
-              background: COLORS.primary, transition: "width 0.3s ease"
-            }} />
-          </div>
         </div>
       )}
 

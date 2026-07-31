@@ -2,15 +2,24 @@ import { useState, useRef, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 
-export default function CardActions({ darkMode, language, bookmarked, onBookmark, onHide, itemUrl }) {
+const HIDE_REASONS = [
+  { key: "irrelevant", label: { zh: "不相关", en: "Irrelevant" } },
+  { key: "duplicate", label: { zh: "重复/已看过", en: "Duplicate / Seen" } },
+  { key: "low_quality", label: { zh: "质量差", en: "Low quality" } },
+  { key: "not_now", label: { zh: "暂时不感兴趣", en: "Not now" } }
+];
+
+export default function CardActions({ darkMode, language, bookmarked, onBookmark, onHide, onAiInterpret }) {
   const t = i18n[language];
   const [open, setOpen] = useState(false);
+  const [showReason, setShowReason] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) {
         setOpen(false);
+        setShowReason(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -28,6 +37,17 @@ export default function CardActions({ darkMode, language, bookmarked, onBookmark
     textAlign: "left",
     cursor: "pointer",
     transition: `background ${TRANSITIONS.fast}`
+  };
+
+  const startHide = (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    setShowReason(true);
+  };
+
+  const confirmHide = (reason) => {
+    onHide(reason);
+    setShowReason(false);
   };
 
   return (
@@ -71,22 +91,45 @@ export default function CardActions({ darkMode, language, bookmarked, onBookmark
           >
             {bookmarked ? `${t.competitiveIntelligence.removeBookmark}` : `${t.competitiveIntelligence.bookmark}`}
           </button>
-          {itemUrl && (
-            <a
-              href={itemUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => { e.stopPropagation(); setOpen(false); }}
-              style={{ ...menuItemStyle, textDecoration: "none", display: "block" }}
-            >
-              {t.competitiveIntelligence.viewOriginal}
-            </a>
-          )}
           <button
-            onClick={(e) => { e.stopPropagation(); onHide(); setOpen(false); }}
+            onClick={(e) => { e.stopPropagation(); onAiInterpret(); setOpen(false); }}
             style={menuItemStyle}
           >
+            {t.competitiveIntelligence.aiInterpret}
+          </button>
+          <button onClick={startHide} style={menuItemStyle}>
             {t.competitiveIntelligence.hide}
+          </button>
+        </div>
+      )}
+
+      {showReason && (
+        <div style={{
+          position: "absolute",
+          top: 32,
+          right: 0,
+          minWidth: 180,
+          background: darkMode ? COLORS.background.cardDark : "#fff",
+          border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+          borderRadius: BORDER_RADIUS.md,
+          boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+          zIndex: 25,
+          padding: "8px 0"
+        }}>
+          <div style={{ padding: "8px 14px", fontSize: FONT_SIZES.sm, color: darkMode ? "#aaa" : COLORS.text.light }}>
+            {language === "zh" ? "为什么隐藏？" : "Why hide?"}
+          </div>
+          {HIDE_REASONS.map(r => (
+            <button
+              key={r.key}
+              onClick={(e) => { e.stopPropagation(); confirmHide(r.key); }}
+              style={menuItemStyle}
+            >
+              {r.label[language] || r.label.en}
+            </button>
+          ))}
+          <button onClick={(e) => { e.stopPropagation(); setShowReason(false); }} style={menuItemStyle}>
+            {language === "zh" ? "取消" : "Cancel"}
           </button>
         </div>
       )}

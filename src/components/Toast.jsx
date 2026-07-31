@@ -37,10 +37,6 @@ export default function Toast({ message, type = "success", duration = 3000, onCl
 
   return (
     <div style={{
-      position: "fixed",
-      top: "20px",
-      right: "20px",
-      zIndex: 2000,
       padding: "12px 20px",
       borderRadius: 8,
       background: style.background,
@@ -53,7 +49,7 @@ export default function Toast({ message, type = "success", duration = 3000, onCl
       alignItems: "center",
       gap: 8,
       opacity: visible ? 1 : 0,
-      transform: visible ? "translateY(0)" : "translateY(-20px)",
+      transform: visible ? "translateX(0)" : "translateX(40px)",
       transition: "all 0.3s ease"
     }}>
       <span style={{ fontSize: 16 }}>{style.icon}</span>

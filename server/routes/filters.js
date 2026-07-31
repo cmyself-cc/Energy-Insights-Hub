@@ -72,10 +72,16 @@ router.put("/categories/:id", (req, res) => {
   }
 });
 
-router.get("/config", (_req, res) => {
+router.get("/config", (req, res) => {
   try {
-    const row = db.prepare("SELECT * FROM filter_config WHERE type = 'semantic' LIMIT 1").get();
-    res.json({ data: row || { type: "semantic", content: "", active: 1 } });
+    const purpose = req.query.purpose || "";
+    let row;
+    if (purpose) {
+      row = db.prepare("SELECT * FROM filter_config WHERE type = 'semantic' AND purpose = ? LIMIT 1").get(purpose);
+    } else {
+      row = db.prepare("SELECT * FROM filter_config WHERE type = 'semantic' AND (purpose = '' OR purpose IS NULL) LIMIT 1").get();
+    }
+    res.json({ data: row || { type: "semantic", content: "", active: 1, purpose: purpose || "" } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -84,13 +90,44 @@ router.get("/config", (_req, res) => {
 router.put("/config", (req, res) => {
   try {
     const { content, active } = req.body;
-    const existing = db.prepare("SELECT id FROM filter_config WHERE type = 'semantic' LIMIT 1").get();
+    const purpose = req.query.purpose || "";
+    let existing;
+    if (purpose) {
+      existing = db.prepare("SELECT id FROM filter_config WHERE type = 'semantic' AND purpose = ? LIMIT 1").get(purpose);
+    } else {
+      existing = db.prepare("SELECT id FROM filter_config WHERE type = 'semantic' AND (purpose = '' OR purpose IS NULL) LIMIT 1").get();
+    }
     if (existing) {
       db.prepare("UPDATE filter_config SET content = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .run(content || "", active ? 1 : 0, existing.id);
     } else {
-      db.prepare("INSERT INTO filter_config (type, content, active) VALUES ('semantic', ?, ?)")
-        .run(content || "", active ? 1 : 0);
+      db.prepare("INSERT INTO filter_config (type, content, active, purpose) VALUES ('semantic', ?, ?, ?)")
+        .run(content || "", active ? 1 : 0, purpose);
+    }
+    res.json({ data: { success: true } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// AI presets
+router.get("/ai-presets", (_req, res) => {
+  try {
+    const row = db.prepare("SELECT content FROM filter_config WHERE type = 'ai_presets' LIMIT 1").get();
+    res.json({ data: row ? JSON.parse(row.content) : [] });
+  } catch (e) {
+    res.json({ data: [] });
+  }
+});
+
+router.put("/ai-presets", (req, res) => {
+  try {
+    const content = JSON.stringify(req.body.presets || []);
+    const existing = db.prepare("SELECT id FROM filter_config WHERE type = 'ai_presets' LIMIT 1").get();
+    if (existing) {
+      db.prepare("UPDATE filter_config SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(content, existing.id);
+    } else {
+      db.prepare("INSERT INTO filter_config (type, content, active) VALUES ('ai_presets', ?, 1)").run(content);
     }
     res.json({ data: { success: true } });
   } catch (e) {

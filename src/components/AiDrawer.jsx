@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { api } from "../utils/api";
+import { backendApi } from "../utils/backendApi";
 
 const DISCLAIMER_KEY = "energy_insights_ai_disclaimer_accepted";
 
@@ -19,6 +20,21 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
   const [error, setError] = useState(null);
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState([]);
+  const [presets, setPresets] = useState([]);
+
+  useEffect(() => {
+    backendApi.getAiPresets().then(res => {
+      const data = res.data;
+      if (Array.isArray(data) && data.length > 0) {
+        setPresets(data);
+        localStorage.setItem("ai_presets", JSON.stringify(data));
+      } else {
+        setPresets(JSON.parse(localStorage.getItem("ai_presets") || "[]"));
+      }
+    }).catch(() => {
+      setPresets(JSON.parse(localStorage.getItem("ai_presets") || "[]"));
+    });
+  }, []);
   const abortRef = useRef(null);
   const contentRef = useRef(null);
 
@@ -77,6 +93,21 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
     }
   };
 
+  const renderMarkdown = (text) => {
+    if (!text) return "";
+    let html = text
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/^### (.+)$/gm, "<h4 style='margin:10px 0 2px;font-size:16px;font-weight:700'>$1</h4>")
+      .replace(/^## (.+)$/gm, "<h3 style='margin:12px 0 4px;font-size:18px;font-weight:700'>$1</h3>")
+      .replace(/^# (.+)$/gm, "<h2 style='margin:14px 0 6px;font-size:18px;font-weight:700'>$1</h2>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/^- (.+)$/gm, "<li style='margin:2px 0 2px 16px'>$1</li>")
+      .replace(/(<li.*<\/li>\n?)+/g, "<ul style='margin:4px 0;padding:0'>$&</ul>")
+      .replace(/`([^`]+)`/g, "<code style='background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-size:13px'>$1</code>")
+      .replace(/\n\n/g, "</p><p style='margin:6px 0'>")
+      .replace(/\n/g, "<br/>");
+    return html;
+  };
   const handleAsk = (e) => {
     e.preventDefault();
     if (!question.trim() || generating) return;
@@ -208,6 +239,22 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
             <>
               {!interpretation && history.length === 0 && !generating && (
                 <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginBottom: 20 }}>
+                    {presets.map((p, i) => (
+                      <button
+                        key={i}
+                        onClick={() => generateInterpretation(p)}
+                        style={{
+                          padding: "8px 14px", borderRadius: BORDER_RADIUS.md,
+                          border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+                          background: darkMode ? "#1c1f2b" : "#fff",
+                          color: darkMode ? "#ccc" : COLORS.text.secondary,
+                          fontSize: FONT_SIZES.sm, cursor: "pointer", maxWidth: 220,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                        }}
+                      >{p}</button>
+                    ))}
+                  </div>
                   <button
                     onClick={() => generateInterpretation()}
                     style={{
@@ -228,17 +275,16 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
 
               {interpretation && (
                 <div style={{
-                  marginBottom: 20,
+                  marginBottom: 16,
                   padding: "14px 16px",
                   borderRadius: BORDER_RADIUS.lg,
                   background: darkMode ? "#1c1f2b" : COLORS.primaryLight,
                   color: darkMode ? "#e8e8e8" : COLORS.text.primary,
                   fontSize: FONT_SIZES.base,
-                  lineHeight: 1.7,
-                  whiteSpace: "pre-wrap"
-                }}>
-                  {interpretation}
-                </div>
+                  lineHeight: 1.65
+                }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(interpretation) }}
+                />
               )}
 
               {history.map((h, idx) => (
@@ -265,11 +311,10 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
                     background: darkMode ? "#1c1f2b" : COLORS.primaryLight,
                     color: darkMode ? "#e8e8e8" : COLORS.text.primary,
                     fontSize: FONT_SIZES.base,
-                    lineHeight: 1.7,
-                    whiteSpace: "pre-wrap"
-                  }}>
-                    {h.answer}
-                  </div>
+                    lineHeight: 1.65
+                  }}
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(h.answer) }}
+                  />
                 </div>
               ))}
 
@@ -331,7 +376,28 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
         </div>
 
         {!showDisclaimer && (
-          <form
+          <>
+            <div style={{
+              padding: "8px 20px", display: "flex", gap: 6, flexWrap: "wrap",
+              borderTop: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`
+            }}>
+              {presets.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setQuestion(p); }}
+                  disabled={generating}
+                  style={{
+                    padding: "4px 10px", borderRadius: 12, cursor: generating ? "default" : "pointer",
+                    border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+                    background: darkMode ? "#1c1f2b" : "#f5f5f5",
+                    color: darkMode ? "#aaa" : "#666", fontSize: 11,
+                    maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    opacity: generating ? 0.5 : 1
+                  }}
+                >{p}</button>
+              ))}
+            </div>
+            <form
             onSubmit={handleAsk}
             style={{
               padding: "14px 20px",
@@ -375,6 +441,7 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
               ➤
             </button>
           </form>
+          </>
         )}
       </div>
     </div>

@@ -1,5 +1,20 @@
 import { matchesAnyKeyword } from "./filterRules.js";
 
+const DEFAULT_INDUSTRY_KEYWORDS = [
+  "电力", "氢能", "储能", "光伏", "油气", "CCS", "LNG", "天然气",
+  "风电", "核电", "电池", "充电", "碳中和", "碳捕集",
+  "生物燃料", "润滑油", "化工", "炼化"
+];
+
+export function applyIndustryFilter(items, industryKeywords) {
+  const keywords = industryKeywords && industryKeywords.length > 0 ? industryKeywords : DEFAULT_INDUSTRY_KEYWORDS;
+  if (!keywords || keywords.length === 0) return items;
+  return items.filter(item => {
+    const text = `${item.title || ""} ${item.summary || ""}`.toLowerCase();
+    return keywords.some(k => text.includes(String(k).toLowerCase()));
+  });
+}
+
 function parseList(value) {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
   if (typeof value === "string" && value.trim()) {

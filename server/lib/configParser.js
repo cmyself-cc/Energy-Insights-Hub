@@ -30,7 +30,7 @@ export function parseJsonConfig(payload) {
       name: s.name,
       identifier: s.identifier || null,
       type: s.type === "wechat" ? "wechat_mcp" : s.type,
-      url: s.type === "wechat" ? (process.env.WECHAT_MCP_URL || "http://192.168.5.134:4001/sse") : (s.url || ""),
+      url: s.type === "wechat" ? (process.env.WECHAT_MCP_URL || "http://Jasons-MacBook-Air.local:4001/sse") : (s.url || ""),
       config: s.config ? JSON.stringify(s.config) : (s.type === "wechat" ? JSON.stringify({ articleLimit: 20 }) : null)
     })).filter(s => s.name && s.type)
   };
@@ -124,7 +124,7 @@ function buildPythonScript() {
     "            sources.append({",
     "                'name': name,",
     "                'type': 'wechat_mcp',",
-    "                'url': os.environ.get('WECHAT_MCP_URL', 'http://192.168.5.134:4001/sse'),",
+    "                'url': os.environ.get('WECHAT_MCP_URL', 'http://Jasons-MacBook-Air.local:4001/sse'),",
     "                'config': {'articleLimit': 20}",
     "            })",
     "        elif website and (website.startswith('http://') or website.startswith('https://')):",

@@ -138,7 +138,8 @@ export default function IntelligencePage(props) {
           <div style={{
             columnWidth: 340,
             columnGap: 16,
-            columnFill: "balance"
+            columnFill: "auto",
+            paddingBottom: 80
           }}>
             {visibleItems.map((item, i) => {
               const inCart = !!cart.find(c => c.title === item.title);
@@ -149,36 +150,21 @@ export default function IntelligencePage(props) {
                   onClick={() => onToggleCart(item)}
                   style={{
                     cursor: "pointer",
-                    position: "relative",
+                    display: "inline-block",
+                    width: "100%",
+                    marginTop: 0,
                     breakInside: "avoid",
                     marginBottom: 16
                   }}
                 >
-                  {inCart && (
-                    <div style={{
-                      position: "absolute",
-                      top: 10,
-                      left: 10,
-                      zIndex: 5,
-                      background: COLORS.primary,
-                      color: "#fff",
-                      borderRadius: "50%",
-                      width: 22,
-                      height: 22,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 13,
-                      fontWeight: 700
-                    }}>✓</div>
-                  )}
                   <InsightCard
                     item={item}
                     darkMode={darkMode}
                     language={language}
                     bookmarked={bookmarked}
+                    inCart={inCart}
                     onBookmark={(e) => { e?.stopPropagation(); onToggleBookmark(item); }}
-                    onHide={(e) => { e?.stopPropagation(); onHide(item); }}
+                    onHide={(reason) => { onHide(item, reason); }}
                     onAiInterpret={(e) => { e?.stopPropagation(); onAiInterpret(item); }}
                     onKeywordClick={onKeywordClick}
                   />

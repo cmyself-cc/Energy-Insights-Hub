@@ -6,6 +6,15 @@ import { importSources, normalizeImportType } from "../services/sourceImporter.j
 
 const router = Router();
 
+router.post("/stop", (_req, res) => {
+  try {
+    db.prepare("UPDATE tracker_runs SET stop_requested = 1 WHERE status = 'running'").run();
+    res.json({ data: { success: true } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post("/run", async (_req, res) => {
   try {
     // 在后台运行，立即返回运行 ID
@@ -162,6 +171,23 @@ router.post("/import-config", (req, res) => {
     if (e.statusCode === 400) {
       return res.status(400).json({ error: e.message });
     }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/status", (_req, res) => {
+  try {
+    const running = db.prepare(
+      "SELECT id, sources_total, sources_success, sources_failed, insights_created, phase, phase_progress, status, started_at FROM tracker_runs WHERE status = 'running' AND started_at >= datetime('now', '-1 hour') ORDER BY id DESC LIMIT 1"
+    ).get();
+    if (!running) {
+      const last = db.prepare(
+        "SELECT id, status FROM tracker_runs ORDER BY id DESC LIMIT 1"
+      ).get();
+      return res.json({ data: { active: false, lastRun: last || null } });
+    }
+    res.json({ data: { active: true, ...running } });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });

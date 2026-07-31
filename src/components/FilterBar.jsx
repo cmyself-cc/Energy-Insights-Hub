@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
-import { DATE_RANGES, PURPOSE_OPTIONS, BUSINESS_CATEGORIES, EVENT_CATEGORIES, SOURCE_TYPES } from "../constants/taxonomy";
+import { DATE_RANGES, PURPOSE_OPTIONS, EVENT_CATEGORIES, SOURCE_TYPES } from "../constants/taxonomy";
+import { backendApi } from "../utils/backendApi";
 
 const PURPOSE_DOTS = {
   competitor: "#e74c3c",
@@ -17,6 +19,13 @@ export default function FilterBar({
   loading
 }) {
   const t = i18n[language];
+  const [businessCategories, setBusinessCategories] = useState([]);
+
+  useEffect(() => {
+    backendApi.getIndustryCategories().then(res => {
+      setBusinessCategories(res.data || []);
+    }).catch(() => {});
+  }, []);
 
   const selectStyle = {
     padding: "7px 28px 7px 12px",
@@ -125,7 +134,10 @@ export default function FilterBar({
             onChange={(e) => onChange({ ...filters, businessCategory: e.target.value })}
             style={{ ...selectStyle, minWidth: 140 }}
           >
-            {renderOptions(BUSINESS_CATEGORIES[language])}
+            <option key="all" value="all">{language === "zh" ? "全部" : "All"}</option>
+            {businessCategories.filter(c => c.active).map(c => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
           </select>
         </div>
 

@@ -6,12 +6,18 @@ import { loadActiveCategories, matchesEnabledCategory } from "./businessCategori
 import { loadFilterRules, groupRulesByPurpose } from "./filterRules.js";
 import { loadSettings } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
-import { applyKeywordGate } from "./keywordGate.js";
+import { applyKeywordGate, applyIndustryFilter } from "./keywordGate.js";
 import { deduplicateItems } from "./dedup.js";
 import { applyUserFeedbackScore, loadSemanticWeights } from "./feedbackWeights.js";
 
 const BATCH_SIZE = 2; // 并发数，避免触发频率限制
 const LANGUAGE = process.env.DEFAULT_LANGUAGE || "zh";
+
+function setPhase(runId, phase, progress) {
+  if (!runId) return;
+  db.prepare("UPDATE tracker_runs SET phase = ?, phase_progress = ? WHERE id = ?")
+    .run(phase, progress, runId);
+}
 
 let isTrackerRunning = false;
 
@@ -204,160 +210,286 @@ export async function runTracker(runId = null) {
   let insightsCreated = 0;
   const errors = [];
 
-  for (const source of sources) {
+  // =====================================================================
+  // Phase 1: Fetching (0-40%)
+  // =====================================================================
+  setPhase(runId, "fetching", 0);
+
+  const allCollected = [];
+
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i];
+
+    // Check stop flag before each source
+    const stopReq = db.prepare("SELECT stop_requested FROM tracker_runs WHERE id = ?").get(runId);
+    if (stopReq && stopReq.stop_requested) {
+      console.log("[tracker] Stop requested during fetching phase");
+      break;
+    }
+
     try {
       console.log(`[tracker] Fetching source: ${source.name}`);
       const items = await fetchSourceItems(source);
 
-      // 去重：按 url 或 title
-      const newItems = [];
+      // Per-item DB dedup
+      let newCount = 0;
       for (const item of items) {
         if (!item.title) continue;
         const existing = db.prepare(
           "SELECT id FROM insights WHERE url = ? OR title = ?"
         ).get(item.url || "", item.title);
-        if (!existing) newItems.push(item);
-      }
-
-      console.log(`[tracker] Source ${source.name}: fetched ${items.length}, new ${newItems.length}`);
-
-      if (newItems.length === 0) { successCount++; continue; }
-
-      // Get purposes for this source
-      const sourcePurposes = (source.purpose || "").split(",").map(s => s.trim()).filter(Boolean);
-      let sourceRules;
-      if (sourcePurposes.length === 0) {
-        // Untagged source: gate with ALL rules (backward compatible)
-        sourceRules = groupedRules;
-      } else {
-        sourceRules = {};
-        for (const p of sourcePurposes) {
-          if (groupedRules[p]) sourceRules[p] = groupedRules[p];
-        }
-        if (Object.keys(sourceRules).length === 0) {
-          // The source's purpose(s) have no active rules (e.g. purpose disabled in
-          // Tracker Settings): skip the source instead of letting everything through.
-          console.log(`[tracker] Source ${source.name}: skipped, no active rules for purpose(s) ${sourcePurposes.join(", ")}`);
-          successCount++;
-          continue;
+        if (!existing) {
+          allCollected.push({ ...item, sourceId: source.id, source });
+          newCount++;
         }
       }
 
-      // Keyword gate with purpose-specific rules
-      const gate = applyKeywordGate(newItems, {
-        excludeKeywords: settings.excludeKeywords,
-        purposeRules: sourceRules
-      });
-      console.log(`[tracker] Source ${source.name}: ${gate.kept.length} items after keyword gate (${gate.excluded} excluded)`);
-
-      if (gate.kept.length === 0) {
-        successCount++;
-        db.prepare(
-          `UPDATE tracker_runs SET sources_success = ?, sources_failed = ?, insights_created = ?, message = ? WHERE id = ?`
-        ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
-        continue;
-      }
-
-      // Dedup
-      const deduped = deduplicateItems(gate.kept, {
-        threshold: settings.fuzzyDeduplicationThreshold,
-        lookbackDays: Math.max(1, Math.ceil(settings.lookbackHours / 24) + 1)
-      });
-      console.log(`[tracker] Source ${source.name}: ${deduped.length} items after dedup`);
-
-      const taggedItems = deduped.map(item => ({ ...item, sourceId: source.id }));
-      const candidates = applyPreFilter(taggedItems, settings);
-      console.log(`[tracker] Source ${source.name}: ${candidates.length} candidates after pre-filter`);
-
-      if (candidates.length > 0) {
-        // Let the LLM decide final purposes and categories in a single pass.
-        const filterContext = {
-          semanticPrompt: loadSemanticConfig(),
-          categories: loadActiveCategories(),
-          classificationEnabled: Boolean(process.env.LLM_API_KEY)
-        };
-        const allProcessed = await processBatch(candidates, LANGUAGE, filterContext);
-        for (const row of allProcessed) {
-          // Prefer LLM-decided purposes; fall back to keyword-gate purposes if LLM returned none
-          const llmPurposes = Array.isArray(row.purposes) ? row.purposes : [];
-          row.matchedPurposes = llmPurposes.length > 0 ? llmPurposes : (row.matchedPurposes || ["competitor"]);
-          const derived = deriveFields(row, source);
-          Object.assign(row, derived);
-        }
-
-        let kept = applyPostFilter(allProcessed, settings)
-          .filter(insight => insight.title && insight.title.trim() !== "")
-          .filter(insight => {
-            if (!classificationEnabled) return true;
-            if (insight.llmFailed) return false; // Filter out LLM-failed articles
-            if (!insight.matchedPurposes || insight.matchedPurposes.length === 0) return false; // LLM did not assign a purpose
-            if (insight.chinaRelevance === false) return false; // Drop non-China content
-            return matchesEnabledCategory(insight, activeCategories);
-          });
-        console.log(`[tracker] Source ${source.name}: ${kept.length} insights after post-filter`);
-
-        const semanticWeights = loadSemanticWeights();
-        const hasWeights = semanticWeights.boost.length > 0 || semanticWeights.suppress.length > 0;
-        if (hasWeights) {
-          const scored = applyUserFeedbackScore(kept, { weights: semanticWeights });
-          console.log(`[tracker] Source ${source.name}: ${scored.dropped.length} dropped by feedback weights, ${scored.kept.length} kept`);
-          kept = scored.kept;
-        }
-
-        if (kept.length > 0) {
-          const insert = db.prepare(
-            `INSERT INTO insights (
-              source_id, title, summary, url, publish_date, source_type, source_name,
-              business_domain, enterprise_type, entities, features, raw_content, categories, purpose, keywords
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          );
-          const insertMany = db.transaction((rows) => {
-            for (const row of rows) {
-              if (!row.title) continue;
-              insert.run(
-                source.id, row.title, row.summary, row.url, row.publishDate,
-                row.sourceType, row.source || null,
-                row.businessDomain, row.enterpriseType,
-                JSON.stringify(row.entities), JSON.stringify(row.features),
-                row.rawContent || row.summary || "",
-                row.categories ? JSON.stringify(row.categories) : null,
-                row.matchedPurposes ? JSON.stringify(row.matchedPurposes) : JSON.stringify(["competitor"]),
-                JSON.stringify(row.keywords || [])
-              );
-            }
-          });
-          insertMany(kept);
-          insightsCreated += kept.length;
-          console.log(`[tracker] Source ${source.name}: created ${kept.length} insights`);
-        }
-      }
-
+      console.log(`[tracker] Source ${source.name}: fetched ${items.length}, new ${newCount}`);
       successCount++;
-
-      // 每处理完一个来源就更新一次进度
-      db.prepare(
-        `UPDATE tracker_runs SET
-          sources_success = ?,
-          sources_failed = ?,
-          insights_created = ?,
-          message = ?
-         WHERE id = ?`
-      ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
     } catch (e) {
       failedCount++;
       errors.push(`${source.name}: ${e.message}`);
       console.error(`[tracker] Failed to fetch ${source.name}:`, e.message);
-
-      // 失败的来源也立即更新进度
-      db.prepare(
-        `UPDATE tracker_runs SET
-          sources_success = ?,
-          sources_failed = ?,
-          insights_created = ?,
-          message = ?
-         WHERE id = ?`
-      ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
     }
+
+    // Progress: 0% → 40% as sources complete
+    const progress = Math.round(((i + 1) / sources.length) * 40);
+    setPhase(runId, "fetching", progress);
+
+    db.prepare(
+      `UPDATE tracker_runs SET sources_success = ?, sources_failed = ?, insights_created = ?, message = ? WHERE id = ?`
+    ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
+  }
+
+  console.log(`[tracker] Phase 1 complete: ${allCollected.length} items collected`);
+
+  // Industry filter on combined pool
+  let candidates = allCollected;
+  const industryKeywords = settings.requiredIndustryKeywords;
+  if (industryKeywords && industryKeywords.length > 0) {
+    candidates = applyIndustryFilter(allCollected, industryKeywords);
+    console.log(`[tracker] After industry filter: ${candidates.length} items`);
+  }
+
+  // =====================================================================
+  // Phase 2: Filtering (40-60%)
+  // =====================================================================
+  if (candidates.length > 0) {
+    // Check stop flag before filtering phase
+    const stopReq = db.prepare("SELECT stop_requested FROM tracker_runs WHERE id = ?").get(runId);
+    if (stopReq && stopReq.stop_requested) {
+      console.log("[tracker] Stop requested before filtering phase");
+      candidates = [];
+    }
+  }
+
+  if (candidates.length > 0) {
+    setPhase(runId, "filtering", 50);
+
+    // Group items by source's purpose combination for per-source purpose rules
+    const purposeGroups = new Map();
+    for (const item of candidates) {
+      const src = item.source;
+      const purposes = (src.purpose || "").split(",").map(s => s.trim()).filter(Boolean);
+      const key = purposes.sort().join(",") || "__none__";
+      if (!purposeGroups.has(key)) {
+        purposeGroups.set(key, { purposes, items: [] });
+      }
+      purposeGroups.get(key).items.push(item);
+    }
+
+    const gated = [];
+    for (const [key, group] of purposeGroups) {
+      let groupRules;
+      if (group.purposes.length === 0) {
+        // Untagged source: gate with ALL rules (backward compatible)
+        groupRules = groupedRules;
+      } else {
+        groupRules = {};
+        for (const p of group.purposes) {
+          if (groupedRules[p]) groupRules[p] = groupedRules[p];
+        }
+        if (Object.keys(groupRules).length === 0) {
+          console.log(`[tracker] Skipping ${group.items.length} items from purpose(s) ${group.purposes.join(", ")}: no active rules`);
+          continue;
+        }
+      }
+
+      const gate = applyKeywordGate(group.items, {
+        excludeKeywords: settings.excludeKeywords,
+        purposeRules: groupRules
+      });
+      console.log(`[tracker] Purpose group "${key}": ${gate.kept.length} kept, ${gate.excluded} excluded`);
+      gated.push(...gate.kept);
+    }
+
+    console.log(`[tracker] After keyword gate: ${gated.length} items`);
+
+    // Dedup across all items
+    const deduped = deduplicateItems(gated, {
+      threshold: settings.fuzzyDeduplicationThreshold,
+      lookbackDays: Math.max(1, Math.ceil(settings.lookbackHours / 24) + 1)
+    });
+    console.log(`[tracker] After dedup: ${deduped.length} items`);
+
+    // Pre-filter
+    candidates = applyPreFilter(deduped, settings);
+    console.log(`[tracker] After pre-filter: ${candidates.length} candidates`);
+
+    setPhase(runId, "filtering", 60);
+  }
+
+  // =====================================================================
+  // Phase 3: Processing (60-90%)
+  // =====================================================================
+  if (candidates.length > 0) {
+    // Check stop flag before processing phase
+    const stopReq = db.prepare("SELECT stop_requested FROM tracker_runs WHERE id = ?").get(runId);
+    if (stopReq && stopReq.stop_requested) {
+      console.log("[tracker] Stop requested before processing phase");
+      candidates = [];
+    }
+  }
+
+  let allProcessed = [];
+
+  if (candidates.length > 0) {
+    const filterContext = {
+      semanticPrompt: loadSemanticConfig(),
+      categories: loadActiveCategories(),
+      classificationEnabled: Boolean(process.env.LLM_API_KEY)
+    };
+
+    setPhase(runId, "processing", 60);
+
+    // Process in batches with per-batch stop check and progress tracking
+    for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+      // Check stop flag between LLM batches
+      const stopReq = db.prepare("SELECT stop_requested FROM tracker_runs WHERE id = ?").get(runId);
+      if (stopReq && stopReq.stop_requested) {
+        console.log("[tracker] Stop requested during LLM processing");
+        break;
+      }
+
+      const batch = candidates.slice(i, i + BATCH_SIZE);
+      const settled = await Promise.allSettled(
+        batch.map(item => processInsight(item, LANGUAGE, filterContext))
+      );
+      for (let j = 0; j < settled.length; j++) {
+        const result = settled[j];
+        if (result.status === "fulfilled") {
+          allProcessed.push(result.value);
+        } else {
+          console.error(`[tracker] processInsight failed for batch item ${i + j}:`, result.reason?.message || result.reason);
+        }
+      }
+
+      if (allProcessed.length === 0 && batch.length > 0 && candidates.length > 0) {
+        throw new Error(`All ${batch.length} articles in first batch failed LLM processing`);
+      }
+
+      // Progress: 60 + (processed / total * 30)
+      const progress = Math.min(90, 60 + Math.round((allProcessed.length / candidates.length) * 30));
+      setPhase(runId, "processing", progress);
+
+      if (i + BATCH_SIZE < candidates.length) await sleep(2000);
+    }
+    console.log(`[tracker] LLM processing complete: ${allProcessed.length} items processed`);
+  }
+
+  // =====================================================================
+  // Phase 4: Storing (90-100%)
+  // =====================================================================
+  if (allProcessed.length > 0) {
+    setPhase(runId, "storing", 90);
+
+    // Derive fields for all processed items
+    for (const row of allProcessed) {
+      // Prefer LLM-decided purposes; fall back to keyword-gate purposes if LLM returned none
+      const llmPurposes = Array.isArray(row.purposes) ? row.purposes : [];
+      row.matchedPurposes = llmPurposes.length > 0 ? llmPurposes : (row.matchedPurposes || ["competitor"]);
+      const derived = deriveFields(row, row.source);
+      Object.assign(row, derived);
+    }
+
+    setPhase(runId, "storing", 95);
+
+    // Post-filter
+    let kept = applyPostFilter(allProcessed, settings)
+      .filter(insight => insight.title && insight.title.trim() !== "")
+      .filter(insight => {
+        if (!classificationEnabled) return true;
+        if (insight.llmFailed) return false; // Filter out LLM-failed articles
+        if (!insight.matchedPurposes || insight.matchedPurposes.length === 0) return false; // LLM did not assign a purpose
+        if (insight.chinaRelevance === false) return false; // Drop non-China content
+        return matchesEnabledCategory(insight, activeCategories);
+      });
+    console.log(`[tracker] After post-filter: ${kept.length} insights`);
+
+    // Semantic weights
+    const semanticWeights = loadSemanticWeights();
+    const hasWeights = semanticWeights.boost.length > 0 || semanticWeights.suppress.length > 0;
+    if (hasWeights) {
+      const scored = applyUserFeedbackScore(kept, { weights: semanticWeights });
+      console.log(`[tracker] ${scored.dropped.length} dropped by feedback weights, ${scored.kept.length} kept`);
+      kept = scored.kept;
+    }
+
+    // Insert all at once
+    if (kept.length > 0) {
+      const insert = db.prepare(
+        `INSERT INTO insights (
+          source_id, title, summary, url, publish_date, source_type, source_name,
+          business_domain, enterprise_type, entities, features, raw_content, categories, purpose, keywords
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      const insertMany = db.transaction((rows) => {
+        for (const row of rows) {
+          if (!row.title) continue;
+          insert.run(
+            row.sourceId, row.title, row.summary, row.url, row.publishDate,
+            row.sourceType, row.source?.name || null,
+            row.businessDomain, row.enterpriseType,
+            JSON.stringify(row.entities), JSON.stringify(row.features),
+            row.rawContent || row.summary || "",
+            row.categories ? JSON.stringify(row.categories) : null,
+            row.matchedPurposes ? JSON.stringify(row.matchedPurposes) : JSON.stringify(["competitor"]),
+            JSON.stringify(row.keywords || [])
+          );
+        }
+      });
+      insertMany(kept);
+      insightsCreated += kept.length;
+      console.log(`[tracker] Created ${kept.length} insights`);
+    }
+
+    setPhase(runId, "storing", 100);
+  }
+
+  // Final progress update
+  db.prepare(
+    `UPDATE tracker_runs SET
+      sources_success = ?,
+      sources_failed = ?,
+      insights_created = ?,
+      message = ?
+     WHERE id = ?`
+  ).run(successCount, failedCount, insightsCreated, errors.join("; ").slice(0, 2000), runId);
+
+  // Check if stopped
+  const stopReq = db.prepare("SELECT stop_requested FROM tracker_runs WHERE id = ?").get(runId);
+  const stopped = stopReq && stopReq.stop_requested;
+
+  setPhase(runId, "", 100);
+
+  let finalStatus;
+  let finalMessage;
+  if (stopped) {
+    finalStatus = "completed_with_errors";
+    finalMessage = "Stopped by user" + (errors.length > 0 ? "; " + errors.join("; ").slice(0, 1990) : "");
+  } else {
+    finalStatus = failedCount > 0 ? "completed_with_errors" : "completed";
+    finalMessage = errors.join("; ").slice(0, 2000);
   }
 
   db.prepare(
@@ -373,12 +505,12 @@ export async function runTracker(runId = null) {
     successCount,
     failedCount,
     insightsCreated,
-    failedCount > 0 ? "completed_with_errors" : "completed",
-    errors.join("; ").slice(0, 2000),
+    finalStatus,
+    finalMessage,
     runId
   );
 
-  console.log(`[tracker] Run ${runId} completed. Success: ${successCount}, Failed: ${failedCount}, Insights: ${insightsCreated}`);
+  console.log(`[tracker] Run ${runId} ${stopped ? "stopped" : "completed"}. Success: ${successCount}, Failed: ${failedCount}, Insights: ${insightsCreated}`);
   } finally {
     isTrackerRunning = false;
   }

@@ -81,25 +81,33 @@ export default function App() {
     addToast(newCart.length > cart.length ? t.toasts.addedToCart : t.toasts.removedFromCart, "info");
   };
 
-  const toggleBookmark = (item) => {
-    const newBookmarks = bookmarks.find(b => b.title === item.title)
-      ? bookmarks.filter(b => b.title !== item.title)
-      : [...bookmarks, item];
+  const toggleBookmark = async (item) => {
+    const adding = !bookmarks.find(b => b.title === item.title);
+    const newBookmarks = adding
+      ? [...bookmarks, item]
+      : bookmarks.filter(b => b.title !== item.title);
     setBookmarks(newBookmarks);
     storage.saveBookmarks(newBookmarks);
+    if (adding && item.id) {
+      try { await backendApi.recordFeedback(item.id, "bookmark"); } catch (e) { console.error("Bookmark feedback failed:", e); }
+    }
     addToast(newBookmarks.length > bookmarks.length ? t.toasts.addedToBookmarks : t.toasts.removedFromBookmarks, "success");
   };
 
-  const hideItem = async (item) => {
+  const hideItem = async (item, reason) => {
     try {
       if (item.id) {
         await backendApi.hideInsight(item.id);
+        if (reason) {
+          await backendApi.recordFeedback(item.id, "hide", reason);
+        }
       }
       const newHidden = [...hidden, item.title];
       setHidden(newHidden);
       addToast(language === "zh" ? "已隐藏该文章" : "Article hidden", "info");
     } catch (e) {
       console.error("Hide failed:", e);
+      addToast(language === "zh" ? "隐藏失败" : "Hide failed", "error");
     }
   };
 
@@ -224,7 +232,8 @@ export default function App() {
 
   return (
     <div style={{
-      minHeight: "100vh",
+      height: "100vh",
+      overflow: "hidden",
       background: bg,
       fontFamily: "'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif",
       transition: `background ${TRANSITIONS.normal}`,
@@ -305,8 +314,6 @@ export default function App() {
             <ConfigurationPage
               darkMode={darkMode}
               language={language}
-              apiConfig={apiConfig}
-              onApiConfigSave={handleApiConfigSave}
               onTrackerComplete={loadInsightsFromBackend}
             />
           )}

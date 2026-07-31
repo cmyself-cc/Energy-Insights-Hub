@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import CardActions from "./CardActions";
@@ -20,12 +21,14 @@ export default function InsightCard({
   darkMode,
   language,
   bookmarked,
+  inCart,
   onBookmark,
   onHide,
   onAiInterpret,
   onKeywordClick
 }) {
   const t = i18n[language];
+  const [copied, setCopied] = useState(false);
 
   const keywordChipStyle = {
     fontSize: FONT_SIZES.xs,
@@ -81,7 +84,7 @@ export default function InsightCard({
           bookmarked={bookmarked}
           onBookmark={onBookmark}
           onHide={onHide}
-          itemUrl={item.url}
+          onAiInterpret={() => onAiInterpret()}
         />
       </div>
 
@@ -153,8 +156,8 @@ export default function InsightCard({
         {item.summary}
       </div>
 
-      {/* Keywords + AI button */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto", gap: 8 }}>
+      {/* Keywords + Copy button */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto", gap: 8 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {keywords.map(kw => (
             <span
@@ -170,30 +173,52 @@ export default function InsightCard({
             </span>
           ))}
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (onAiInterpret) onAiInterpret(e);
-          }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 5,
-            padding: "6px 12px",
-            borderRadius: BORDER_RADIUS.md,
-            border: `1px solid ${COLORS.primary}`,
-            background: "transparent",
-            color: COLORS.primary,
-            fontSize: FONT_SIZES.sm,
-            fontWeight: 600,
-            cursor: "pointer",
-            transition: `all ${TRANSITIONS.fast}`,
-            flexShrink: 0
-          }}
-        >
-          <span>{t.competitiveIntelligence.aiInterpret}</span>
-        </button>
+        {inCart ? (
+          <div style={{
+            width: 28, height: 28, borderRadius: "50%",
+            background: COLORS.primary, color: "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 14, fontWeight: 700, flexShrink: 0, cursor: "pointer"
+          }}>✓</div>
+        ) : (
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          {copied && (
+            <div style={{
+              position: "absolute", bottom: "100%", right: 0,
+              marginBottom: 6, padding: "4px 10px", borderRadius: 6,
+              background: COLORS.primary, color: "#fff", fontSize: 11,
+              whiteSpace: "nowrap", fontWeight: 600,
+              animation: "fadeInOut 1.5s ease"
+            }}>
+              ✓ {language === "zh" ? "已复制" : "Copied"}
+            </div>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const text = `${item.title}\n\n${item.summary}`;
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed"; ta.style.left = "-9999px";
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              document.body.removeChild(ta);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            title={language === "zh" ? "复制到剪贴板" : "Copy to clipboard"}
+            style={{
+              cursor: "pointer", padding: "4px 8px", borderRadius: 6,
+              border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+              background: "transparent", color: darkMode ? "#aaa" : COLORS.text.light,
+              fontSize: FONT_SIZES.xs
+            }}
+          >📋</button>
+        </div>
+        )}
       </div>
+      <style>{`@keyframes fadeInOut { 0% { opacity:0; transform:translateY(5px) } 20% { opacity:1; transform:translateY(0) } 80% { opacity:1 } 100% { opacity:0 } }`}</style>
     </div>
   );
 }

@@ -58,8 +58,10 @@ export const backendApi = {
 
   // Tracker
   runTracker: () => request("/tracker/run", { method: "POST" }),
+  stopTracker: () => request("/tracker/stop", { method: "POST" }),
   getTrackerRuns: () => request("/tracker/runs"),
   getTrackerRun: (id) => request(`/tracker/runs/${id}`),
+  getTrackerStatus: () => request("/tracker/status"),
 
   // Tracker settings
   getTrackerSettings: () => request("/tracker-settings"),
@@ -75,10 +77,25 @@ export const backendApi = {
   deleteFilterRule: (id) => request(`/filters/rules/${id}`, { method: "DELETE" }),
   getBusinessCategories: () => request("/filters/categories"),
   updateBusinessCategory: (id, category) => request(`/filters/categories/${id}`, { method: "PUT", body: JSON.stringify(category) }),
-  getSemanticConfig: () => request("/filters/config"),
-  updateSemanticConfig: (config) => request("/filters/config", { method: "PUT", body: JSON.stringify(config) }),
+  getSemanticConfig: (purpose) => {
+    const query = purpose ? `?purpose=${encodeURIComponent(purpose)}` : "";
+    return request(`/filters/config${query}`);
+  },
+  updateSemanticConfig: (config, purpose) => {
+    const query = purpose ? `?purpose=${encodeURIComponent(purpose)}` : "";
+    return request(`/filters/config${query}`, { method: "PUT", body: JSON.stringify(config) });
+  },
+  getAiPresets: () => request("/filters/ai-presets"),
+  saveAiPresets: (presets) => request("/filters/ai-presets", { method: "PUT", body: JSON.stringify({ presets }) }),
   importConfig: (base64File, filename, mode = "append") => request("/tracker/import-config", {
     method: "POST",
     body: JSON.stringify({ file: base64File, filename, mode })
-  })
+  }),
+
+  // Industry categories
+  getIndustryCategories: () => request("/industries"),
+  createIndustryCategory: (data) => request("/industries", { method: "POST", body: JSON.stringify(data) }),
+  updateIndustryCategory: (id, data) => request(`/industries/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteIndustryCategory: (id) => request(`/industries/${id}`, { method: "DELETE" }),
+  suggestIndustryKeywords: (keyword) => request("/industries/suggest-keywords", { method: "POST", body: JSON.stringify({ keyword }) }),
 };

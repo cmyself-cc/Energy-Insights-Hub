@@ -8,24 +8,46 @@ const STORAGE_KEYS = {
 };
 
 export const storage = {
-  getApiConfig: () => {
+  getApiConfigs: () => {
     try {
-      const config = localStorage.getItem(STORAGE_KEYS.API_CONFIG);
-      return config ? JSON.parse(config) : null;
+      const raw = localStorage.getItem(STORAGE_KEYS.API_CONFIG);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [parsed];
     } catch (error) {
-      console.error("Failed to load API config:", error);
-      return null;
+      console.error("Failed to load API configs:", error);
+      return [];
     }
+  },
+
+  getApiConfig: () => {
+    const configs = storage.getApiConfigs();
+    return configs.length > 0 ? configs[0] : null;
   },
 
   saveApiConfig: (config) => {
     try {
-      localStorage.setItem(STORAGE_KEYS.API_CONFIG, JSON.stringify(config));
+      const configs = storage.getApiConfigs();
+      const id = `${config.providerName || "model"}-${Date.now()}`;
+      configs.unshift({ ...config, id });
+      localStorage.setItem(STORAGE_KEYS.API_CONFIG, JSON.stringify(configs));
       return true;
     } catch (error) {
       console.error("Failed to save API config:", error);
       return false;
     }
+  },
+
+  switchApiConfig: (id) => {
+    try {
+      const configs = storage.getApiConfigs();
+      const idx = configs.findIndex(c => c.id === id);
+      if (idx < 0) return null;
+      const config = configs.splice(idx, 1)[0];
+      configs.unshift(config);
+      localStorage.setItem(STORAGE_KEYS.API_CONFIG, JSON.stringify(configs));
+      return config;
+    } catch (e) { return null; }
   },
 
   getBookmarks: () => {

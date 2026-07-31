@@ -71,14 +71,22 @@ export async function processInsight(item, _language = "en", _filterContext = nu
     .filter(Boolean);
   const categoryList = categoryNames.length > 0 ? categoryNames.join("、") : "电力&氢能、储能、光伏、油气、CCS、化工、LNG/天然气、移动出行、润滑油、生物燃料、战略合作、收并购、项目";
 
+  // Inject purpose-specific semantic prompt if available
+  let semanticBlock = "";
+  const semanticPrompt = _filterContext?.semanticPrompt || "";
+  if (semanticPrompt) {
+    semanticBlock = `\n附加语义要求: ${semanticPrompt}\n`;
+  }
+
   const prompt = `你是一名能源行业分析师。请阅读以下文章并提取结构化洞察。
 
 Title: ${item.title}
-Content: ${item.rawContent || item.summary || ""}
+Content: ${item.rawContent.slice(0, 3000) || item.summary.slice(0, 3000) || ""}
 URL: ${item.url}
-
+${semanticBlock}
 CRITICAL RULES:
-1. title: 用最精简的中文（10-20字）概括核心事件。剔除来源名、日期、作者名、废话词，聚焦发生了什么、主体是谁、关键结果。
+0. SINGLE FOCUS: 如果原文包含多条独立新闻或事件，只提取最主要、篇幅最大的那一条。标题、摘要和关键字都只围绕这一条核心信息，忽略其他次要内容。
+1. title: 只概括一条核心事件，用最精简的中文（10-20字）概括核心事件。剔除来源名、日期、作者名、废话词，聚焦发生了什么、主体是谁、关键结果。
 2. summary: 清理所有噪音（作者名、来源署名、日期、填充短语、广告、无关上下文），用中文写一个信息密集的摘要，最多150字，每个字都要携带信息。
 3. keywords: 恰好3个字符串，必须是具体可搜索的关键词：公司名称、技术名称、事件名称或政策名称。不要宽泛概念。示例：宁德时代、钠离子电池、136号文、电价改革、中石化、CCUS。
 4. purposes: 根据内容判断该文章属于哪些监控类型（可多选）。必须严格符合以下定义：
