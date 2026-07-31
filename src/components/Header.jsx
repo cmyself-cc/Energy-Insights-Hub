@@ -58,9 +58,9 @@ export default function Header({ darkMode, language, onLanguageToggle, onOpenApi
             background: current ? COLORS.primaryLight : "transparent",
             color: current ? COLORS.primary : (darkMode ? "#888" : "#999"),
             fontSize: FONT_SIZES.sm, fontWeight: 500, cursor: "pointer",
-            display: "flex", alignItems: "center", gap: 6, maxWidth: 180
+            display: "flex", alignItems: "center", gap: 6, maxWidth: 300
           }}>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
               {current ? `${current.providerName} / ${current.modelId}` : (language === "zh" ? "未配置模型" : "No model")}
             </span>
             <span style={{ fontSize: 10 }}>▼</span>

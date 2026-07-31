@@ -46,7 +46,7 @@ export default function App() {
       setInsights(res.data || []);
       setFetched(true);
     } catch (e) {
-      setError(language === "zh" ? "无法连接到后端服务，请确认已运行 npm run dev:server" : "Cannot connect to backend. Please run npm run dev:server");
+      setError(storage.getLanguage() === "zh" ? "无法连接到后端服务，请确认已运行 npm run dev:server" : "Cannot connect to backend. Please run npm run dev:server");
       console.error("Backend load failed:", e);
     }
     setLoading(false);
@@ -163,10 +163,8 @@ export default function App() {
       setInsights(res.data || []);
       setFetched(true);
       const count = res.data?.length || 0;
-      const message = typeof t.toasts.insightsFetched === "function"
-        ? t.toasts.insightsFetched(count)
-        : t.toasts.insightsFetched;
-      addToast(message, "success");
+      const zh = storage.getLanguage() === "zh";
+      addToast(zh ? `成功获取 ${count} 条洞察` : `Fetched ${count} insights`, "success");
     } catch (e) {
       setError(t.errors.fetchFailed + e.message);
       addToast(t.toasts.insightsFailed, "error");

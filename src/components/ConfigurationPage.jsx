@@ -23,6 +23,8 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
   const [message, setMessage] = useState(null);
   const [presets, setPresets] = useState(["", "", ""]);
   const [loading, setLoading] = useState(true);
+  const [aiModelId, setAiModelId] = useState(() => localStorage.getItem("ai_model_id") || "");
+  const [savedModels, setSavedModels] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -39,6 +41,11 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
       } catch (e) { /* ignore */ }
       setLoading(false);
     })();
+    try {
+      const raw = localStorage.getItem("energy_insights_api_config");
+      const parsed = raw ? JSON.parse(raw) : [];
+      setSavedModels(Array.isArray(parsed) ? parsed : [parsed]);
+    } catch { setSavedModels([]); }
   }, []);
 
   const saveAiPresets = async () => {
@@ -84,6 +91,33 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
               {message.type === "success" ? "✓" : "✗"} {message.text}
             </div>
           )}
+
+          {/* Model selector */}
+          <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: darkMode ? "#aaa" : "#666", whiteSpace: "nowrap" }}>
+              {language === "zh" ? "解读模型" : "Model"}:
+            </span>
+            <select
+              value={aiModelId}
+              onChange={e => { setAiModelId(e.target.value); localStorage.setItem("ai_model_id", e.target.value); }}
+              style={{
+                padding: "6px 28px 6px 12px", borderRadius: BORDER_RADIUS.md, maxWidth: 320,
+                border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+                backgroundColor: aiModelId ? COLORS.primaryLight : (darkMode ? COLORS.background.cardDark : COLORS.background.card),
+                color: aiModelId ? COLORS.primary : (darkMode ? "#e8e8e8" : COLORS.text.primary),
+                fontSize: FONT_SIZES.sm, fontWeight: 500, outline: "none", cursor: "pointer",
+                appearance: "none", WebkitAppearance: "none",
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(darkMode ? "#aaa" : "#888")}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center"
+              }}
+            >
+              <option key="global" value="">{language === "zh" ? "使用全局模型" : "Use global"}</option>
+              {savedModels.map(c => (
+                <option key={c.id} value={c.id}>{c.providerName} / {c.modelId}</option>
+              ))}
+            </select>
+          </div>
+
           <h3 style={{ fontSize: FONT_SIZES.xl, fontWeight: 700, color: text, margin: "0 0 8px" }}>
             {language === "zh" ? "AI 解读预设提示词" : "AI Interpret Presets"}
           </h3>
@@ -114,12 +148,13 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
                     next[i] = e.target.value;
                     setPresets(next);
                   }}
-                  rows={8}
+                  rows={20}
                   style={{
-                    width: "100%", padding: "10px 14px", borderRadius: 8, resize: "vertical",
-                    border: `1px solid ${border}`, background: darkMode ? "#11131a" : "#fff",
+                    width: "100%", padding: "10px 14px", borderRadius: 8,
+                    border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff",
                     color: text, fontSize: FONT_SIZES.sm, outline: "none", fontFamily: "inherit",
-                    lineHeight: 1.5, boxSizing: "border-box", flex: 1
+                    lineHeight: 1.5, boxSizing: "border-box", flex: 1, resize: "none",
+                    overflowY: "auto", overflowX: "hidden"
                   }}
                 />
               </div>

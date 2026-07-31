@@ -75,7 +75,17 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
     abortRef.current = new AbortController();
 
     try {
-      const result = await api.interpretArticle(item, q, language, history, abortRef.current.signal);
+      const modelId = localStorage.getItem("ai_model_id") || "";
+      let modelOverride = null;
+      if (modelId) {
+        try {
+          const raw = localStorage.getItem("energy_insights_api_config");
+          const configs = raw ? JSON.parse(raw) : [];
+          const list = Array.isArray(configs) ? configs : [configs];
+          modelOverride = list.find(c => c.id === modelId) || null;
+        } catch { /* ignore */ }
+      }
+      const result = await api.interpretArticle(item, q, language, history, abortRef.current.signal, modelOverride);
       if (q) {
         setHistory(prev => [...prev, { question: q, answer: result }]);
       } else {
