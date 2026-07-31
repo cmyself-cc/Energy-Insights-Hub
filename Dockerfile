@@ -29,6 +29,7 @@ RUN npm ci --omit=dev --ignore-scripts && npm rebuild better-sqlite3
 
 COPY server/ ./server/
 COPY --from=build /build/dist ./dist
+COPY sources.md ./sources.md
 
 ENV NODE_ENV=production
 ENV PORT=3001
