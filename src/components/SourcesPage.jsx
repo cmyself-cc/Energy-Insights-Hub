@@ -510,6 +510,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                                 try {
                                   await backendApi.confirmSubPages(editingId, selected);
                                   setShowSubPageDialog(false);
+                                  loadSources();
                                   showMessage("success", language === "zh" ? "子列表页已保存" : "Sub pages saved");
                                 } catch (e) { showMessage("error", e.message); }
                               }} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: COLORS.primary, color: "#fff", fontSize: 12, cursor: "pointer" }}>{language === "zh" ? "确认添加" : "Confirm"}</button>
@@ -575,15 +576,13 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                           </span>
                         ))}
                         {(() => {
-                          try {
-                            const cfg = JSON.parse(source.config || "{}");
-                            const sps = cfg.subPages || [];
-                            return sps.length > 0 ? (
-                              <span style={{ marginLeft: 6, fontSize: FONT_SIZES.xs, color: "#7c5cbf", background: darkMode ? "#2a2240" : "#f0eafc", padding: "2px 6px", borderRadius: BORDER_RADIUS.sm }}>
-                                📄 +{sps.length} {language === "zh" ? "子页面" : "sub"}
-                              </span>
-                            ) : null;
-                          } catch { return null; }
+                          const cfg = typeof source.config === "string" ? JSON.parse(source.config) : (source.config || {});
+                          const sps = cfg?.subPages || [];
+                          return sps.length > 0 ? (
+                            <span style={{ marginLeft: 6, fontSize: FONT_SIZES.xs, color: "#7c5cbf", background: darkMode ? "#2a2240" : "#f0eafc", padding: "2px 6px", borderRadius: BORDER_RADIUS.sm }}>
+                              📄 +{sps.length} {language === "zh" ? "子页面" : "sub"}
+                            </span>
+                          ) : null;
                         })()}
                       </div>
                       <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.light, marginTop: 2 }}>

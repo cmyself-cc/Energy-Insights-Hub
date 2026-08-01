@@ -134,10 +134,16 @@ router.put("/:id", (req, res) => {
     if (!ALLOWED_TYPES.includes(type)) {
       return res.status(400).json({ error: `type must be one of ${ALLOWED_TYPES.join(", ")}` });
     }
-    const configStr = config ? JSON.stringify(config) : null;
-    db.prepare(
-      "UPDATE sources SET name = ?, url = ?, type = ?, active = ?, config = ?, purpose = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-    ).run(name, url, type, active ? 1 : 0, configStr, purpose || "", req.params.id);
+    const configStr = config !== undefined ? (config ? JSON.stringify(config) : null) : undefined;
+    if (configStr !== undefined) {
+      db.prepare(
+        "UPDATE sources SET name = ?, url = ?, type = ?, active = ?, config = ?, purpose = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      ).run(name, url, type, active ? 1 : 0, configStr, purpose || "", req.params.id);
+    } else {
+      db.prepare(
+        "UPDATE sources SET name = ?, url = ?, type = ?, active = ?, purpose = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      ).run(name, url, type, active ? 1 : 0, purpose || "", req.params.id);
+    }
     const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(req.params.id);
     if (!source) return res.status(404).json({ error: "Source not found" });
     res.json({ data: { ...source, config: parseConfig(source.config) } });
