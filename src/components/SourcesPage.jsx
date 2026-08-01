@@ -574,6 +574,17 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                             {purposeLabel(p)}
                           </span>
                         ))}
+                        {(() => {
+                          try {
+                            const cfg = JSON.parse(source.config || "{}");
+                            const sps = cfg.subPages || [];
+                            return sps.length > 0 ? (
+                              <span style={{ marginLeft: 6, fontSize: FONT_SIZES.xs, color: "#7c5cbf", background: darkMode ? "#2a2240" : "#f0eafc", padding: "2px 6px", borderRadius: BORDER_RADIUS.sm }}>
+                                📄 +{sps.length} {language === "zh" ? "子页面" : "sub"}
+                              </span>
+                            ) : null;
+                          } catch { return null; }
+                        })()}
                       </div>
                       <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.light, marginTop: 2 }}>
                         {source.url ? `${source.url} · ` : ""}{source.type}
