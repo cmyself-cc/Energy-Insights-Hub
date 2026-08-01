@@ -61,7 +61,8 @@ function parseConfig(source) {
     listSelectors: rawList
       ? (Array.isArray(rawList) ? rawList : [rawList])
       : undefined,
-    detailSelectors: typeof rawDetail === "object" && rawDetail ? rawDetail : {}
+    detailSelectors: typeof rawDetail === "object" && rawDetail ? rawDetail : {},
+    subPages: config.subPages || []
   };
 }
 
@@ -450,11 +451,31 @@ export async function fetchArticles(source) {
     }
   }
 
-  // 3) HTML article list
+  // 3) HTML article list - include sub-pages
   if ((strategy === "auto" || strategy === "html") && homeHtml) {
-    const links = extractArticleLinks(homeHtml, source.url, config.articleLimit * 3, config.listSelectors);
-    const scored = scoreAndLimit(links, config);
-    console.log(`[website] HTML list found ${scored.length} candidate links`);
+    const mainLinks = extractArticleLinks(homeHtml, source.url, config.articleLimit * 3, config.listSelectors);
+    const allLinks = [...mainLinks];
+
+    // Also crawl discovered sub-pages
+    const subPages = (config.subPages || []).filter(sp => sp.active !== false);
+    for (const sp of subPages) {
+      try {
+        const spHtml = await (await fetchWithTimeout(sp.url, {
+          headers: { "User-Agent": randomUserAgent(), "Accept": "text/html" }
+        }, 20000)).text();
+        const selector = sp.listSelectors?.length ? sp.listSelectors : (config.listSelectors || undefined);
+        const spLinks = extractArticleLinks(spHtml, sp.url, config.articleLimit * 2, selector);
+        for (const link of spLinks) {
+          if (!allLinks.find(l => l.url === link.url)) allLinks.push(link);
+        }
+      } catch (e) {
+        console.error(`[website] Failed to fetch sub-page ${sp.url}:`, e.message);
+      }
+      await sleep(500);
+    }
+
+    const scored = scoreAndLimit(allLinks, config);
+    console.log(`[website] HTML list found ${scored.length} candidate links (incl. sub-pages)`);
 
     const articles = [];
     for (const link of scored) {
