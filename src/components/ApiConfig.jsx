@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { COLORS, BORDER_RADIUS } from "../constants/theme";
 import { storage } from "../utils/storage";
+import { backendApi } from "../utils/backendApi";
 
 const emptyLlm = () => ({ providerName: "", baseUrl: "", modelId: "", apiKey: "" });
 const emptySearch = () => ({ providerName: "", baseUrl: "", apiKey: "" });
@@ -71,6 +72,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
       } else {
         onSave(config);
       }
+      backendApi.saveLlmEnv(config).catch(() => {});
     } else {
       storage.saveSearchConfig({
         providerName: form.providerName.trim() || "Search",

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import fs from "fs";
+import path from "path";
 import db from "../db.js";
 import { loadSettings, toArray } from "../lib/trackerSettings.js";
 
@@ -47,6 +49,42 @@ router.put("/", (req, res) => {
     });
     tx(values);
 
+    res.json({ data: { success: true } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/save-llm-env", (req, res) => {
+  try {
+    const { baseUrl, apiKey, modelId } = req.body;
+    const envPath = path.join(process.cwd(), ".env");
+
+    let envContent = "";
+    try { envContent = fs.readFileSync(envPath, "utf-8"); } catch (e) {}
+
+    const lines = envContent.split("\n");
+    const keys = { LLM_BASE_URL: baseUrl, LLM_API_KEY: apiKey, LLM_MODEL: modelId };
+    const newLines = [];
+    const found = new Set();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      let replaced = false;
+      for (const [key, value] of Object.entries(keys)) {
+        if (trimmed.startsWith(`${key}=`) && value) {
+          newLines.push(`${key}=${value}`);
+          found.add(key);
+          replaced = true;
+          break;
+        }
+      }
+      if (!replaced && trimmed) newLines.push(line);
+    }
+    for (const [key, value] of Object.entries(keys)) {
+      if (!found.has(key) && value) newLines.push(`${key}=${value}`);
+    }
+
+    fs.writeFileSync(envPath, newLines.join("\n") + "\n", "utf-8");
     res.json({ data: { success: true } });
   } catch (e) {
     res.status(500).json({ error: e.message });

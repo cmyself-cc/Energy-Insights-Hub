@@ -95,6 +95,9 @@ export const backendApi = {
     body: JSON.stringify({ file: base64File, filename, mode })
   }),
 
+  // LLM env
+  saveLlmEnv: (config) => request("/tracker-settings/save-llm-env", { method: "POST", body: JSON.stringify(config) }),
+
   // Industry categories
   getIndustryCategories: () => request("/industries"),
   createIndustryCategory: (data) => request("/industries", { method: "POST", body: JSON.stringify(data) }),

@@ -146,7 +146,7 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
     <div>
       {/* 2x2 Action Button Grid */}
       <div style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20
+        display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20
       }}>
         <button onClick={handleExportConfig} style={{
           padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
