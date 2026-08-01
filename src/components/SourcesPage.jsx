@@ -102,6 +102,10 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
       feedId: source.config?.feedId || "",
       purpose: (source.purpose || "").split(",").map(s => s.trim()).filter(Boolean)
     });
+    // Load existing sub-pages
+    const cfg = typeof source.config === "string" ? JSON.parse(source.config) : (source.config || {});
+    const existing = (cfg.subPages || []).map(sp => ({ ...sp, selected: true, existing: true }));
+    setSubPageCandidates(existing);
   };
 
   const saveEdit = async (id) => {
@@ -480,6 +484,31 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                         disabled={discoveringSubPages}
                         style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${COLORS.primary}`, background: "transparent", color: COLORS.primary, fontSize: 12, cursor: "pointer" }}
                       >🔍 {discoveringSubPages ? (language === "zh" ? "检测中..." : "Detecting...") : (language === "zh" ? "自动检测子列表页" : "Auto-detect sub pages")}</button>
+
+                      {/* Show existing sub-pages */}
+                      {subPageCandidates.filter(sp => sp.existing).length > 0 && (
+                        <div style={{ marginTop: 10 }}>
+                          {subPageCandidates.filter(sp => sp.existing).map((sp, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", marginBottom: 4, background: darkMode ? "#222" : "#f0f0f0", borderRadius: 6, fontSize: 12 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ color: text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sp.title}</div>
+                                <div style={{ color: darkMode ? "#888" : "#999", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sp.url}</div>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  const remaining = subPageCandidates.filter(s => s !== sp);
+                                  setSubPageCandidates(remaining);
+                                  // Update DB
+                                  const payload = remaining.filter(s => s.existing).map(({ url, title }) => ({ url, title }));
+                                  await backendApi.confirmSubPages(editingId, payload);
+                                  loadSources();
+                                }}
+                                style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid #c00", background: "transparent", color: "#c00", fontSize: 11, cursor: "pointer", flexShrink: 0, marginLeft: 8 }}
+                              >✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       {showSubPageDialog && (
                         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
