@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
-import { parseTrackerSettingsCsv, buildTrackerSettingsCsv, downloadCsv } from "../utils/csvConfig";
 
 function toCsv(arr) {
   if (!Array.isArray(arr)) return "";
@@ -45,9 +44,7 @@ export default function TrackerSettingsPage({ darkMode, language }) {
   const [togglingPurpose, setTogglingPurpose] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState(null);
-  const fileInputRef = useRef(null);
 
   const t = i18n[language]?.trackerSettings || i18n.zh.trackerSettings;
   const purposeLabels = i18n[language]?.purposeLabels || i18n.zh.purposeLabels;
@@ -147,12 +144,7 @@ export default function TrackerSettingsPage({ darkMode, language }) {
       await backendApi.updateTrackerSettings({
         lookbackHours: Number(settings.lookbackHours),
         maxPerSource: Number(settings.maxPerSource),
-        includeBusinessDomains: fromCsv(settings.includeBusinessDomains),
-        includeEnterpriseTypes: fromCsv(settings.includeEnterpriseTypes),
-        includeCategories: fromCsv(settings.includeCategories),
-        excludeKeywords: fromCsv(settings.excludeKeywords),
         requiredIndustryKeywords: fromCsv(settings.requiredIndustryKeywords),
-        requiredCompanyKeywords: fromCsv(settings.requiredCompanyKeywords),
         fuzzyDeduplicationThreshold: Number(settings.fuzzyDeduplicationThreshold)
       });
       setMessage({ type: "success", text: t.saved });
@@ -160,57 +152,6 @@ export default function TrackerSettingsPage({ darkMode, language }) {
       setMessage({ type: "error", text: `${t.saveFailed}: ${err.message}` });
     }
     setSaving(false);
-  };
-
-  const normalizeSettings = (raw) => ({
-    lookbackHours: raw.lookbackHours ?? 24,
-    maxPerSource: raw.maxPerSource ?? 3,
-    includeBusinessDomains: toCsv(raw.includeBusinessDomains || []),
-    includeEnterpriseTypes: toCsv(raw.includeEnterpriseTypes || []),
-    includeCategories: toCsv(raw.includeCategories || []),
-    excludeKeywords: toCsv(raw.excludeKeywords || []),
-    requiredIndustryKeywords: toCsv(raw.requiredIndustryKeywords || []),
-    requiredCompanyKeywords: toCsv(raw.requiredCompanyKeywords || []),
-    fuzzyDeduplicationThreshold: Number.isFinite(raw.fuzzyDeduplicationThreshold)
-      ? raw.fuzzyDeduplicationThreshold
-      : 0.85
-  });
-
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImporting(true);
-    try {
-      const text = await file.text();
-      const parsed = parseTrackerSettingsCsv(text);
-      await backendApi.updateTrackerSettings(parsed);
-      setSettings(normalizeSettings(parsed));
-      setMessage({ type: "success", text: language === "zh" ? "设置已导入并保存" : "Settings imported and saved" });
-    } catch (err) {
-      setMessage({ type: "error", text: `${language === "zh" ? "导入失败" : "Import failed"}: ${err.message}` });
-    } finally {
-      setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const exportCsv = async () => {
-    try {
-      const res = await backendApi.getTrackerSettings();
-      const csv = buildTrackerSettingsCsv(res.data);
-      downloadCsv(`tracker-settings-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-    } catch (err) {
-      setMessage({ type: "error", text: `${language === "zh" ? "导出失败" : "Export failed"}: ${err.message}` });
-    }
-  };
-
-  const downloadTemplate = () => {
-    const a = document.createElement("a");
-    a.href = "/tracker-settings-template.csv";
-    a.download = "tracker-settings-template.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   };
 
   const inputStyle = {
@@ -256,57 +197,6 @@ export default function TrackerSettingsPage({ darkMode, language }) {
           marginBottom: 16
         }}>{message.text}</div>
       )}
-
-      <div style={{
-        background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
-        borderRadius: BORDER_RADIUS.lg,
-        border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-        padding: "16px 20px",
-        marginBottom: 20
-      }}>
-        <h3 style={{ margin: "0 0 12px", color: darkMode ? "#fff" : COLORS.text.primary }}>
-          {language === "zh" ? "导入 / 导出 (CSV)" : "Import / Export (CSV)"}
-        </h3>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          onChange={handleFileChange}
-          disabled={importing}
-          style={{ color: darkMode ? "#e8e8e8" : COLORS.text.primary, marginBottom: 12 }}
-        />
-        {importing && <div style={{ marginBottom: 12, color: darkMode ? "#888" : "#aaa", fontSize: FONT_SIZES.sm }}>{language === "zh" ? "导入中..." : "Importing..."}</div>}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={exportCsv}
-            style={{
-              padding: "8px 16px",
-              borderRadius: BORDER_RADIUS.md,
-              border: `1px solid ${COLORS.primary}`,
-              background: "transparent",
-              color: COLORS.primary,
-              fontSize: FONT_SIZES.sm,
-              fontWeight: 600,
-              cursor: "pointer"
-            }}
-          >{language === "zh" ? "导出 CSV" : "Export CSV"}</button>
-          <button
-            type="button"
-            onClick={downloadTemplate}
-            style={{
-              padding: "8px 16px",
-              borderRadius: BORDER_RADIUS.md,
-              border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-              background: darkMode ? "#1c1f2b" : "#fff",
-              color: darkMode ? "#e8e8e8" : COLORS.text.primary,
-              fontSize: FONT_SIZES.sm,
-              fontWeight: 600,
-              cursor: "pointer"
-            }}
-          >{language === "zh" ? "下载模板" : "Download Template"}</button>
-        </div>
-      </div>
 
       <div style={{
         background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
@@ -403,63 +293,16 @@ export default function TrackerSettingsPage({ darkMode, language }) {
         </div>
 
         <div>
-          <label style={labelStyle}>{t.includeDomains}</label>
-          <input
-            type="text"
-            value={settings.includeBusinessDomains}
-            onChange={e => handleChange("includeBusinessDomains", e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-
-        <div>
-          <label style={labelStyle}>{t.includeEnterprises}</label>
-          <input
-            type="text"
-            value={settings.includeEnterpriseTypes}
-            onChange={e => handleChange("includeEnterpriseTypes", e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-
-        <div>
-          <label style={labelStyle}>{t.includeCategories}</label>
-          <input
-            type="text"
-            value={settings.includeCategories}
-            onChange={e => handleChange("includeCategories", e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-
-        <div>
-          <label style={labelStyle}>{t.excludeKeywords}</label>
-          <input
-            type="text"
-            value={settings.excludeKeywords}
-            onChange={e => handleChange("excludeKeywords", e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-
-        <div>
           <label style={labelStyle}>{t.requiredIndustryKeywords}</label>
           <input
             type="text"
             value={settings.requiredIndustryKeywords}
-            onChange={e => handleChange("requiredIndustryKeywords", e.target.value)}
-            style={inputStyle}
+            style={{ ...inputStyle, background: darkMode ? "#222" : "#f0f0f0", cursor: "not-allowed" }}
+            readOnly
           />
-        </div>
-
-        <div>
-          <label style={labelStyle}>{t.requiredCompanyKeywords}</label>
-          <input
-            type="text"
-            value={settings.requiredCompanyKeywords}
-            onChange={e => handleChange("requiredCompanyKeywords", e.target.value)}
-            style={inputStyle}
-          />
+          <div style={{ fontSize: 11, color: darkMode ? "#777" : "#999", marginTop: 4 }}>
+            {language === "zh" ? "由内容过滤页的行业初筛管理" : "Managed by industry filter in Content Filters"}
+          </div>
         </div>
 
         <div>

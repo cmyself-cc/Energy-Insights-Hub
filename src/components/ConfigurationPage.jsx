@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import SourcesPage from "./SourcesPage";
 import ContentFiltersPage from "./ContentFiltersPage";
 import TrackerSettingsPage from "./TrackerSettingsPage";
+import FeedbackPage from "./FeedbackPage";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
@@ -10,6 +11,7 @@ const TABS = [
   { key: "sources", icon: "◎", labelKey: "sources" },
   { key: "filters", icon: "▣", labelKey: "contentFiltersTab" },
   { key: "ai", icon: "◇", labelKey: "aiConfig" },
+  { key: "feedback", icon: "✦", labelKey: "feedback" },
   { key: "tracker", icon: "⚙", labelKey: "trackerSettingsTab" },
 ];
 
@@ -25,6 +27,8 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
   const [loading, setLoading] = useState(true);
   const [aiModelId, setAiModelId] = useState(() => localStorage.getItem("ai_model_id") || "");
   const [savedModels, setSavedModels] = useState([]);
+  const [configMessage, setConfigMessage] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -61,26 +65,114 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
     }
   };
 
+  const handleExportConfig = async () => {
+    try {
+      const res = await backendApi.exportConfig();
+      const json = JSON.stringify(res.data, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `config-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setConfigMessage({ type: "success", text: language === "zh" ? "配置已导出" : "Config exported" });
+    } catch (e) {
+      setConfigMessage({ type: "error", text: e.message });
+    }
+    setTimeout(() => setConfigMessage(null), 3000);
+  };
+
+  const handleImportConfig = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.sources && !data.filterRules) {
+        throw new Error("Invalid config format");
+      }
+      const dataToSend = data.sources ? data : data;
+      if (!confirm(language === "zh"
+        ? "这将覆盖所有现有配置（信源、过滤规则、分类、AI预设、跟踪设置），不可撤销。确定继续吗？"
+        : "This will overwrite all existing config (sources, filters, categories, AI presets, tracker settings). This cannot be undone. Continue?")) {
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      await backendApi.importConfigFull(dataToSend);
+      setConfigMessage({ type: "success", text: language === "zh" ? "配置已导入，即将刷新" : "Config imported, reloading..." });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (e) {
+      setConfigMessage({ type: "error", text: `${language === "zh" ? "导入失败" : "Import failed"}: ${e.message}` });
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setTimeout(() => setConfigMessage(null), 5000);
+  };
+
   return (
     <div>
       <div style={{
-        display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap"
+        display: "flex", alignItems: "flex-start", gap: 12,
+        justifyContent: "space-between"
       }}>
-        {TABS.map(item => (
-          <button key={item.key} onClick={() => setTab(item.key)} style={{
-            flex: "1 1 140px", maxWidth: 200,
-            padding: "16px 20px", borderRadius: BORDER_RADIUS.lg,
-            border: `1px solid ${border}`,
-            background: tab === item.key ? COLORS.primary : darkMode ? COLORS.background.cardDark : COLORS.background.card,
-            color: tab === item.key ? "#fff" : text,
-            fontSize: FONT_SIZES.md, fontWeight: tab === item.key ? 700 : 500,
-            cursor: "pointer", textAlign: "left"
+        <div style={{
+          display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap", flex: 1
+        }}>
+          {TABS.map(item => (
+            <button key={item.key} onClick={() => setTab(item.key)} style={{
+              flex: "1 1 140px", maxWidth: 200,
+              padding: "16px 20px", borderRadius: BORDER_RADIUS.lg,
+              border: `1px solid ${border}`,
+              background: tab === item.key ? COLORS.primary : darkMode ? COLORS.background.cardDark : COLORS.background.card,
+              color: tab === item.key ? "#fff" : text,
+              fontSize: FONT_SIZES.md, fontWeight: tab === item.key ? 700 : 500,
+              cursor: "pointer", textAlign: "left"
+            }}>
+              <div style={{ fontSize: 24, marginBottom: 6 }}>{item.icon}</div>
+              <div>{t.competitiveIntelligence[item.labelKey] || item.labelKey}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexShrink: 0 }}>
+          <button onClick={handleExportConfig} style={{
+            padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
+            border: `1px solid ${COLORS.primary}`, background: "transparent",
+            color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
+            cursor: "pointer", whiteSpace: "nowrap"
           }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>{item.icon}</div>
-            <div>{t.competitiveIntelligence[item.labelKey] || item.labelKey}</div>
+            📥 {language === "zh" ? "导出配置" : "Export Config"}
           </button>
-        ))}
+          <button onClick={() => fileInputRef.current?.click()} style={{
+            padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
+            border: `1px solid ${COLORS.primary}`, background: "transparent",
+            color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
+            cursor: "pointer", whiteSpace: "nowrap"
+          }}>
+            📤 {language === "zh" ? "导入配置" : "Import Config"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImportConfig}
+            style={{ display: "none" }}
+          />
+        </div>
       </div>
+
+      {configMessage && (
+        <div style={{
+          padding: "10px 16px", borderRadius: 8, marginBottom: 16,
+          background: configMessage.type === "success" ? "#e8f5ee" : "#fff0f0",
+          border: configMessage.type === "success" ? "1px solid #1a6b3c" : "1px solid #fcc",
+          color: configMessage.type === "success" ? "#1a6b3c" : "#c00",
+          fontSize: FONT_SIZES.sm, fontWeight: 500
+        }}>
+          {configMessage.type === "success" ? "✓" : "✗"} {configMessage.text}
+        </div>
+      )}
 
       {tab === "sources" && <SourcesPage darkMode={darkMode} language={language} onTrackerComplete={onTrackerComplete} />}
       {tab === "filters" && <ContentFiltersPage darkMode={darkMode} language={language} />}
@@ -166,6 +258,7 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
           }}>{language === "zh" ? "保存" : "Save"}</button>
         </div>
       )}
+      {tab === "feedback" && <FeedbackPage darkMode={darkMode} language={language} />}
       {tab === "tracker" && <TrackerSettingsPage darkMode={darkMode} language={language} />}
     </div>
   );

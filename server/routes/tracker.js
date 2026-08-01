@@ -192,4 +192,83 @@ router.get("/status", (_req, res) => {
   }
 });
 
+router.get("/export-config", (_req, res) => {
+  try {
+    const sources = db.prepare("SELECT * FROM sources").all();
+    const filterRules = db.prepare("SELECT * FROM filter_rules").all();
+    const businessCategories = db.prepare("SELECT * FROM business_categories").all();
+    const filterConfig = db.prepare("SELECT * FROM filter_config").all();
+    const industryCategories = db.prepare("SELECT * FROM industry_categories").all();
+    const trackerSettings = db.prepare("SELECT key, value FROM tracker_settings").all();
+
+    res.json({
+      data: {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        sources,
+        filterRules,
+        businessCategories,
+        filterConfig,
+        industryCategories,
+        trackerSettings
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/import-config-full", (req, res) => {
+  try {
+    const data = req.body;
+    if (!data.sources || !data.filterRules) {
+      return res.status(400).json({ error: "Invalid config format" });
+    }
+
+    const tx = db.transaction(() => {
+      db.prepare("DELETE FROM sources").run();
+      db.prepare("DELETE FROM filter_rules").run();
+      db.prepare("DELETE FROM business_categories").run();
+      db.prepare("DELETE FROM filter_config").run();
+      db.prepare("DELETE FROM industry_categories").run();
+      db.prepare("DELETE FROM tracker_settings").run();
+
+      const insertSource = db.prepare("INSERT INTO sources (name, url, type, active, config, purpose) VALUES (?,?,?,?,?,?)");
+      for (const s of data.sources) {
+        insertSource.run(s.name, s.url, s.type, s.active ?? 1, s.config || null, s.purpose || '');
+      }
+
+      const insertRule = db.prepare("INSERT INTO filter_rules (type, name, must_include, must_exclude, active, priority, purpose) VALUES (?,?,?,?,?,?,?)");
+      for (const r of data.filterRules) {
+        insertRule.run(r.type, r.name, r.must_include || '[]', r.must_exclude || '[]', r.active ?? 1, r.priority ?? 0, r.purpose || '');
+      }
+
+      const insertCat = db.prepare("INSERT INTO business_categories (name, description, inclusion_prompt, active) VALUES (?,?,?,?)");
+      for (const c of data.businessCategories) {
+        insertCat.run(c.name, c.description, c.inclusion_prompt, c.active ?? 1);
+      }
+
+      const insertFc = db.prepare("INSERT INTO filter_config (type, content, active, purpose) VALUES (?,?,?,?)");
+      for (const fc of data.filterConfig) {
+        insertFc.run(fc.type, fc.content, fc.active ?? 1, fc.purpose || '');
+      }
+
+      const insertIc = db.prepare("INSERT INTO industry_categories (name, keywords, active) VALUES (?,?,?)");
+      for (const ic of data.industryCategories || []) {
+        insertIc.run(ic.name, ic.keywords || '[]', ic.active ?? 1);
+      }
+
+      const insertTs = db.prepare("INSERT INTO tracker_settings (key, value) VALUES (?,?)");
+      for (const ts of data.trackerSettings || []) {
+        insertTs.run(ts.key, ts.value);
+      }
+    });
+    tx();
+
+    res.json({ data: { success: true, message: "Config imported" } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;

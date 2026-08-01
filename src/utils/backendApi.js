@@ -62,6 +62,8 @@ export const backendApi = {
   getTrackerRuns: () => request("/tracker/runs"),
   getTrackerRun: (id) => request(`/tracker/runs/${id}`),
   getTrackerStatus: () => request("/tracker/status"),
+  exportConfig: () => request("/tracker/export-config"),
+  importConfigFull: (data) => request("/tracker/import-config-full", { method: "POST", body: JSON.stringify(data) }),
 
   // Tracker settings
   getTrackerSettings: () => request("/tracker-settings"),

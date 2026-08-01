@@ -107,14 +107,14 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
     if (!text) return "";
     let html = text
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/^### (.+)$/gm, "<h4 style='margin:10px 0 2px;font-size:16px;font-weight:700'>$1</h4>")
-      .replace(/^## (.+)$/gm, "<h3 style='margin:12px 0 4px;font-size:18px;font-weight:700'>$1</h3>")
-      .replace(/^# (.+)$/gm, "<h2 style='margin:14px 0 6px;font-size:18px;font-weight:700'>$1</h2>")
+      .replace(/^### (.+)$/gm, "<h4 style='margin:6px 0 2px;font-size:16px;font-weight:700'>$1</h4>")
+      .replace(/^## (.+)$/gm, "<h3 style='margin:8px 0 2px;font-size:18px;font-weight:700'>$1</h3>")
+      .replace(/^# (.+)$/gm, "<h2 style='margin:10px 0 4px;font-size:18px;font-weight:700'>$1</h2>")
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/^- (.+)$/gm, "<li style='margin:2px 0 2px 16px'>$1</li>")
-      .replace(/(<li.*<\/li>\n?)+/g, "<ul style='margin:4px 0;padding:0'>$&</ul>")
+      .replace(/^- (.+)$/gm, "<li style='margin:1px 0 1px 16px'>$1</li>")
+      .replace(/(<li.*<\/li>\n?)+/g, "<ul style='margin:2px 0;padding:0'>$&</ul>")
       .replace(/`([^`]+)`/g, "<code style='background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-size:13px'>$1</code>")
-      .replace(/\n\n/g, "</p><p style='margin:6px 0'>")
+      .replace(/\n\n/g, "</p><p style='margin:0 0 2px'>")
       .replace(/\n/g, "<br/>");
     return html;
   };

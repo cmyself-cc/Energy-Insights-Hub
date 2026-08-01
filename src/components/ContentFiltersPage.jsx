@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
-import { parseContentFiltersCsv, buildContentFiltersCsv, downloadCsv } from "../utils/csvConfig";
 
 const PURPOSES = [
   { value: "competitor", zh: "竞争对手", en: "Competitor" },
@@ -42,9 +41,6 @@ export default function ContentFiltersPage({ darkMode, language }) {
   const [editingCategoryKeywords, setEditingCategoryKeywords] = useState([]);
 
   // Keyword filter state
-  const [uploadMode, setUploadMode] = useState("append");
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
 
   const [editingKeyword, setEditingKeyword] = useState(null);
   const [editKeywordValue, setEditKeywordValue] = useState("");
@@ -270,61 +266,6 @@ export default function ContentFiltersPage({ darkMode, language }) {
     } catch (err) {
       showMessage("error", `删除失败: ${err.message}`);
     }
-  };
-
-  // --- CSV import/export ---
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const text = await file.text();
-      const parsed = parseContentFiltersCsv(text);
-
-      const payload = {
-        excludeKeywords: parsed.excludeKeywords,
-        enterpriseKeywords: parsed.enterpriseKeywords || [],
-        includeKeywords: parsed.includeKeywords || [],
-        semanticPrompt: parsed.semanticPrompt,
-        categories: parsed.categories,
-        sources: []
-      };
-
-      const jsonStr = JSON.stringify(payload);
-      const base64Payload = btoa(unescape(encodeURIComponent(jsonStr)));
-
-      const res = await backendApi.importConfig(base64Payload, "filters.csv", uploadMode);
-      showMessage("success", `${t.importSuccess}: ${res.data.rulesImported} ${t.rules}, ${res.data.categoriesImported} ${t.categories}`);
-      loadAll();
-    } catch (err) {
-      showMessage("error", `${t.importFailed}: ${err.message}`);
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const exportCsv = async () => {
-    try {
-      const [rulesRes, categoriesRes, configRes] = await Promise.all([
-        backendApi.getFilterRules(),
-        backendApi.getBusinessCategories(),
-        backendApi.getSemanticConfig()
-      ]);
-      const csv = buildContentFiltersCsv(rulesRes.data || [], categoriesRes.data || [], configRes.data || { content: "" });
-      downloadCsv(`content-filters-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-    } catch (err) {
-      showMessage("error", `${t.exportFailed}: ${err.message}`);
-    }
-  };
-
-  const downloadTemplate = () => {
-    const a = document.createElement("a");
-    a.href = "/content-filters-template.csv";
-    a.download = "content-filters-template.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   };
 
   // --- Keyword filter handlers ---
@@ -822,52 +763,6 @@ export default function ContentFiltersPage({ darkMode, language }) {
           );
         })}
 
-        {/* CSV Import/Export */}
-        <div style={{
-          marginTop: 16, paddingTop: 16,
-          borderTop: `1px solid ${border}`,
-          display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap"
-        }}>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input
-                type="radio"
-                value="append"
-                checked={uploadMode === "append"}
-                onChange={() => setUploadMode("append")}
-              />
-              <span style={{ color: text, fontSize: FONT_SIZES.sm }}>{t.modeAppend}</span>
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input
-                type="radio"
-                value="replace"
-                checked={uploadMode === "replace"}
-                onChange={() => setUploadMode("replace")}
-              />
-              <span style={{ color: text, fontSize: FONT_SIZES.sm }}>{t.modeReplace}</span>
-            </label>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleFileChange}
-            disabled={uploading}
-            style={{ color: text }}
-          />
-          {uploading && <span style={{ color: secondaryText, fontSize: FONT_SIZES.sm }}>{t.uploading}</span>}
-          <button type="button" onClick={exportCsv} style={{
-            padding: "8px 16px", borderRadius: BORDER_RADIUS.md,
-            border: `1px solid ${COLORS.primary}`, background: "transparent",
-            color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600, cursor: "pointer"
-          }}>{t.exportCsv}</button>
-          <button type="button" onClick={downloadTemplate} style={{
-            padding: "8px 16px", borderRadius: BORDER_RADIUS.md,
-            border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff",
-            color: text, fontSize: FONT_SIZES.sm, fontWeight: 600, cursor: "pointer"
-          }}>{t.downloadTemplate}</button>
-        </div>
       </div>
 
       {/* ========== Section 3: Semantic Prompts ========== */}

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { backendApi } from "../utils/backendApi";
-import { parseSourcesCsv, buildSourcesCsv, downloadCsv } from "../utils/csvConfig";
 
 const PURPOSES = [
   { value: "competitor", zh: "竞争对手", en: "Competitor" },
@@ -17,11 +16,8 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const [message, setMessage] = useState(null);
   const [activeRun, setActiveRun] = useState(null);
   const [runProgress, setRunProgress] = useState(0);
-  const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: [] });
-  const fileInputRef = useRef(null);
-
   const languageRef = useRef(language);
   const onTrackerCompleteRef = useRef(onTrackerComplete);
   const activeRunRef = useRef(activeRun);
@@ -90,47 +86,6 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
     } catch (err) {
       console.error("Delete source failed:", err);
     }
-  };
-
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImporting(true);
-    try {
-      const text = await file.text();
-      const items = parseSourcesCsv(text);
-      let count = 0;
-      for (const item of items) {
-        await backendApi.createSource(item);
-        count++;
-      }
-      loadSources();
-      setMessage({ type: "success", text: `${language === "zh" ? "已导入" : "Imported"} ${count} ${language === "zh" ? "条来源" : "sources"}` });
-    } catch (err) {
-      setMessage({ type: "error", text: `${language === "zh" ? "导入失败" : "Import failed"}: ${err.message}` });
-    } finally {
-      setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const exportCsv = async () => {
-    try {
-      const res = await backendApi.getSources();
-      const csv = buildSourcesCsv(res.data || []);
-      downloadCsv(`sources-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-    } catch (err) {
-      setMessage({ type: "error", text: `${language === "zh" ? "导出失败" : "Export failed"}: ${err.message}` });
-    }
-  };
-
-  const downloadTemplate = () => {
-    const a = document.createElement("a");
-    a.href = "/sources-template.csv";
-    a.download = "sources-template.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   };
 
   const startEdit = (source) => {
@@ -210,6 +165,9 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   };
 
   const importFromMd = async () => {
+    if (!confirm(language === "zh"
+      ? "这将用 sources.md 中的默认配置覆盖当前信源。确定继续吗？"
+      : "This will overwrite current sources with defaults from sources.md. Continue?")) return;
     setLoading(true);
     try {
       const res = await backendApi.importSourcesMd();
@@ -369,7 +327,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
             cursor: loading ? "not-allowed" : "pointer"
           }}
         >
-          {language === "zh" ? "从 sources.md 导入" : "Import from sources.md"}
+          {language === "zh" ? "🔄 恢复默认配置" : "🔄 Restore Defaults"}
         </button>
       </div>
 
@@ -385,57 +343,6 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           {message.text}
         </div>
       )}
-
-      <div style={{
-        background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
-        borderRadius: BORDER_RADIUS.lg,
-        border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-        padding: "16px 20px",
-        marginBottom: 20
-      }}>
-        <h3 style={{ margin: "0 0 12px", color: darkMode ? "#fff" : COLORS.text.primary }}>
-          {language === "zh" ? "导入 / 导出 (CSV)" : "Import / Export (CSV)"}
-        </h3>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          onChange={handleFileChange}
-          disabled={importing}
-          style={{ color: darkMode ? "#e8e8e8" : COLORS.text.primary, marginBottom: 12 }}
-        />
-        {importing && <div style={{ marginBottom: 12, color: darkMode ? "#888" : "#aaa", fontSize: FONT_SIZES.sm }}>{language === "zh" ? "导入中..." : "Importing..."}</div>}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={exportCsv}
-            style={{
-              padding: "8px 16px",
-              borderRadius: BORDER_RADIUS.md,
-              border: `1px solid ${COLORS.primary}`,
-              background: "transparent",
-              color: COLORS.primary,
-              fontSize: FONT_SIZES.sm,
-              fontWeight: 600,
-              cursor: "pointer"
-            }}
-          >{language === "zh" ? "导出 CSV" : "Export CSV"}</button>
-          <button
-            type="button"
-            onClick={downloadTemplate}
-            style={{
-              padding: "8px 16px",
-              borderRadius: BORDER_RADIUS.md,
-              border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-              background: darkMode ? "#1c1f2b" : "#fff",
-              color: darkMode ? "#e8e8e8" : COLORS.text.primary,
-              fontSize: FONT_SIZES.sm,
-              fontWeight: 600,
-              cursor: "pointer"
-            }}
-          >{language === "zh" ? "下载模板" : "Download Template"}</button>
-        </div>
-      </div>
 
       <div style={{
         background: darkMode ? COLORS.background.cardDark : COLORS.background.card,

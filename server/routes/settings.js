@@ -17,12 +17,7 @@ router.put("/", (req, res) => {
     const {
       lookbackHours,
       maxPerSource,
-      includeBusinessDomains,
-      includeEnterpriseTypes,
-      includeCategories,
-      excludeKeywords,
       requiredIndustryKeywords,
-      requiredCompanyKeywords,
       fuzzyDeduplicationThreshold
     } = req.body;
 
@@ -40,12 +35,7 @@ router.put("/", (req, res) => {
     const values = {
       lookback_hours: String(lookbackHours),
       max_per_source: String(maxPerSource),
-      include_business_domains: toArray(includeBusinessDomains).join(","),
-      include_enterprise_types: toArray(includeEnterpriseTypes).join(","),
-      include_categories: toArray(includeCategories).join(","),
-      exclude_keywords: toArray(excludeKeywords).join(","),
       required_industry_keywords: toArray(requiredIndustryKeywords).join(","),
-      required_company_keywords: toArray(requiredCompanyKeywords).join(","),
       fuzzy_deduplication_threshold: String(threshold)
     };
 
