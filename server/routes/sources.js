@@ -3,6 +3,8 @@ import db from "../db.js";
 import { loadSourcesFromMd } from "../lib/sourcesMdLoader.js";
 import { parseConfigFile } from "../lib/configParser.js";
 import { importSources, normalizeImportType } from "../services/sourceImporter.js";
+import { discoverSubPages, discoverListSelectors } from "../crawlers/websiteCrawler.js";
+import { fetchWithTimeout, randomUserAgent } from "../crawlers/utils.js";
 
 const router = Router();
 
@@ -151,6 +153,63 @@ router.delete("/:id", (req, res) => {
     db.prepare("DELETE FROM insights WHERE source_id = ?").run(sourceId);
     const result = db.prepare("DELETE FROM sources WHERE id = ?").run(sourceId);
     res.json({ success: true, deleted: result.changes });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/:id/discover-subpages", async (req, res) => {
+  try {
+    const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(req.params.id);
+    if (!source) return res.status(404).json({ error: "Source not found" });
+
+    const html = await (await fetchWithTimeout(source.url, {
+      headers: { "User-Agent": randomUserAgent(), "Accept": "text/html" }
+    }, 20000)).text();
+
+    const subPages = discoverSubPages(html, source.url);
+    res.json({ data: subPages });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/:id/confirm-subpages", async (req, res) => {
+  try {
+    const { subPages } = req.body;
+    if (!Array.isArray(subPages)) return res.status(400).json({ error: "subPages must be an array" });
+
+    const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(req.params.id);
+    if (!source) return res.status(404).json({ error: "Source not found" });
+
+    let config = {};
+    try { config = JSON.parse(source.config || "{}"); } catch {}
+
+    // For each confirmed sub-page, detect list selectors
+    for (const sp of subPages) {
+      if (!sp.listSelectors) {
+        try {
+          const html = await (await fetchWithTimeout(sp.url, {
+            headers: { "User-Agent": randomUserAgent(), "Accept": "text/html" }
+          }, 20000)).text();
+          sp.listSelectors = discoverListSelectors(html);
+        } catch { sp.listSelectors = []; }
+      }
+    }
+
+    config.subPages = subPages;
+    config.discoveredAt = new Date().toISOString();
+    config.listSelectors = config.listSelectors || [];
+    for (const sp of subPages) {
+      for (const sel of (sp.listSelectors || [])) {
+        if (!config.listSelectors.includes(sel)) config.listSelectors.push(sel);
+      }
+    }
+
+    db.prepare("UPDATE sources SET config = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(JSON.stringify(config), req.params.id);
+
+    res.json({ data: { success: true, subPages: config.subPages.length, selectors: config.listSelectors.length } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
