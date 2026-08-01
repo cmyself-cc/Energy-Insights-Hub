@@ -121,6 +121,54 @@ export function discoverSubPages(html, baseUrl) {
     .map(({ url, title }) => ({ url, title }));
 }
 
+export function discoverListSelectors(html) {
+  const $ = cheerio.load(html);
+  const groupScores = new Map();
+
+  $("a[href]").each((_i, el) => {
+    const $el = $(el);
+    const href = $el.attr("href");
+    const text = $el.text().trim();
+    if (!href || !text || text.length < 5 || text.length > 200) return;
+
+    // Find closest list-like parent
+    let parent = $el.parent();
+    for (let depth = 0; depth < 5 && parent.length; depth++) {
+      const tag = parent.prop("tagName").toLowerCase();
+      if (["li", "article", "div"].includes(tag)) {
+        // Build selector for this <a> within the parent
+        const parentTag = parent.prop("tagName").toLowerCase();
+        let parentClass = parent.attr("class")?.split(/\s+/)[0] || "";
+        const aTag = $el.prop("tagName").toLowerCase();
+        let aClass = $el.attr("class")?.split(/\s+/)[0] || "";
+
+        let selector;
+        if (parentClass) {
+          selector = `${parentTag}.${parentClass} ${aTag}` + (aClass ? `.${aClass}` : "");
+        } else {
+          selector = `${parentTag} ${aTag}`;
+        }
+
+        const score = groupScores.get(selector) || 0;
+        let newScore = score + 1;
+        const parentHtml = parent.html() || "";
+        if (parentHtml.includes("time") || parentHtml.includes("date") || parentHtml.includes("span")) newScore += 2;
+        if (isNewsUrl(href)) newScore += 3;
+        if (isNewsTitle(text)) newScore += 2;
+        groupScores.set(selector, newScore);
+        break;
+      }
+      parent = parent.parent();
+    }
+  });
+
+  return Array.from(groupScores.entries())
+    .filter(([, score]) => score >= 5)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([sel]) => sel);
+}
+
 async function fetchHtml(url, timeoutMs = 20000) {
   const res = await fetchWithTimeout(
     url,
