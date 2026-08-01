@@ -179,6 +179,22 @@ export async function runTracker(runId = null) {
     const activeCategories = loadActiveCategories();
 
     const sources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
+
+  // Check LLM API key before processing
+  if (!process.env.LLM_API_KEY) {
+    console.log("[tracker] LLM API key not configured. Skipping.");
+    if (runId) {
+      db.prepare(
+        `UPDATE tracker_runs SET
+          status = 'completed',
+          finished_at = CURRENT_TIMESTAMP,
+          message = ?
+         WHERE id = ?`
+      ).run("LLM API key not configured. Please set LLM_API_KEY in .env file.", runId);
+    }
+    return;
+  }
+
   if (sources.length === 0) {
     console.log("[tracker] No active sources to track.");
     if (runId) {

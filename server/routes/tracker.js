@@ -17,6 +17,10 @@ router.post("/stop", (_req, res) => {
 
 router.post("/run", async (_req, res) => {
   try {
+    if (!process.env.LLM_API_KEY) {
+      return res.status(400).json({ error: "LLM_API_KEY not configured. Please set it in .env file." });
+    }
+
     // 在后台运行，立即返回运行 ID
     const insert = db.prepare(
       "INSERT INTO tracker_runs (status, started_at) VALUES ('running', CURRENT_TIMESTAMP)"
@@ -187,6 +191,15 @@ router.get("/status", (_req, res) => {
       return res.json({ data: { active: false, lastRun: last || null } });
     }
     res.json({ data: { active: true, ...running } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/clear-insights", (_req, res) => {
+  try {
+    const result = db.prepare("DELETE FROM insights").run();
+    res.json({ data: { success: true, deleted: result.changes } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

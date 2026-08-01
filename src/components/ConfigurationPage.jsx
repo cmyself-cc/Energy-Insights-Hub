@@ -111,55 +111,101 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
     setTimeout(() => setConfigMessage(null), 5000);
   };
 
+  const handleClearInsights = async () => {
+    if (!confirm(language === "zh"
+      ? "确定要清空所有洞察卡片吗？此操作不可撤销。"
+      : "Are you sure you want to clear all insights? This cannot be undone.")) return;
+    try {
+      const res = await backendApi.clearInsights();
+      setConfigMessage({ type: "success", text: language === "zh"
+        ? `已清空 ${res.data.deleted} 条洞察`
+        : `Cleared ${res.data.deleted} insights` });
+    } catch (e) {
+      setConfigMessage({ type: "error", text: e.message });
+    }
+    setTimeout(() => setConfigMessage(null), 3000);
+  };
+
+  const handleRestoreDefaults = async () => {
+    if (!confirm(language === "zh"
+      ? "这将用 sources.md 覆盖当前信源。确定继续吗？"
+      : "This will overwrite current sources with defaults from sources.md. Continue?")) return;
+    try {
+      const res = await backendApi.importSourcesMd();
+      setConfigMessage({ type: "success", text: language === "zh"
+        ? `导入完成：新增 ${res.data.inserted} 条，已存在 ${res.data.existed} 条`
+        : `Imported: ${res.data.inserted} new, ${res.data.existed} existed` });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (e) {
+      setConfigMessage({ type: "error", text: e.message });
+    }
+    setTimeout(() => setConfigMessage(null), 5000);
+  };
+
   return (
     <div>
+      {/* 2x2 Action Button Grid */}
       <div style={{
-        display: "flex", alignItems: "flex-start", gap: 12,
-        justifyContent: "space-between"
+        display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20
       }}>
-        <div style={{
-          display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap", flex: 1
+        <button onClick={handleExportConfig} style={{
+          padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
+          border: `1px solid ${COLORS.primary}`, background: "transparent",
+          color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
+          cursor: "pointer"
         }}>
-          {TABS.map(item => (
-            <button key={item.key} onClick={() => setTab(item.key)} style={{
-              flex: "1 1 140px", maxWidth: 200,
-              padding: "16px 20px", borderRadius: BORDER_RADIUS.lg,
-              border: `1px solid ${border}`,
-              background: tab === item.key ? COLORS.primary : darkMode ? COLORS.background.cardDark : COLORS.background.card,
-              color: tab === item.key ? "#fff" : text,
-              fontSize: FONT_SIZES.md, fontWeight: tab === item.key ? 700 : 500,
-              cursor: "pointer", textAlign: "left"
-            }}>
-              <div style={{ fontSize: 24, marginBottom: 6 }}>{item.icon}</div>
-              <div>{t.competitiveIntelligence[item.labelKey] || item.labelKey}</div>
-            </button>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexShrink: 0 }}>
-          <button onClick={handleExportConfig} style={{
-            padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
-            border: `1px solid ${COLORS.primary}`, background: "transparent",
-            color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
-            cursor: "pointer", whiteSpace: "nowrap"
+          📥 {language === "zh" ? "导出配置" : "Export Config"}
+        </button>
+        <button onClick={() => fileInputRef.current?.click()} style={{
+          padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
+          border: `1px solid ${COLORS.primary}`, background: "transparent",
+          color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
+          cursor: "pointer"
+        }}>
+          📤 {language === "zh" ? "导入配置" : "Import Config"}
+        </button>
+        <button onClick={handleClearInsights} style={{
+          padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
+          border: `1px solid ${COLORS.primary}`, background: "transparent",
+          color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
+          cursor: "pointer"
+        }}>
+          🗑 {language === "zh" ? "清空 Insights" : "Clear Insights"}
+        </button>
+        <button onClick={handleRestoreDefaults} style={{
+          padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
+          border: `1px solid ${COLORS.primary}`, background: "transparent",
+          color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
+          cursor: "pointer"
+        }}>
+          🔄 {language === "zh" ? "恢复默认配置" : "Restore Defaults"}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          onChange={handleImportConfig}
+          style={{ display: "none" }}
+        />
+      </div>
+
+      <div style={{
+        display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap"
+      }}>
+        {TABS.map(item => (
+          <button key={item.key} onClick={() => setTab(item.key)} style={{
+            flex: "1 1 140px", maxWidth: 200,
+            padding: "16px 20px", borderRadius: BORDER_RADIUS.lg,
+            border: `1px solid ${border}`,
+            background: tab === item.key ? COLORS.primary : darkMode ? COLORS.background.cardDark : COLORS.background.card,
+            color: tab === item.key ? "#fff" : text,
+            fontSize: FONT_SIZES.md, fontWeight: tab === item.key ? 700 : 500,
+            cursor: "pointer", textAlign: "left"
           }}>
-            📥 {language === "zh" ? "导出配置" : "Export Config"}
+            <div style={{ fontSize: 24, marginBottom: 6 }}>{item.icon}</div>
+            <div>{t.competitiveIntelligence[item.labelKey] || item.labelKey}</div>
           </button>
-          <button onClick={() => fileInputRef.current?.click()} style={{
-            padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
-            border: `1px solid ${COLORS.primary}`, background: "transparent",
-            color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
-            cursor: "pointer", whiteSpace: "nowrap"
-          }}>
-            📤 {language === "zh" ? "导入配置" : "Import Config"}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            onChange={handleImportConfig}
-            style={{ display: "none" }}
-          />
-        </div>
+        ))}
       </div>
 
       {configMessage && (

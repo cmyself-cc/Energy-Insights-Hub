@@ -164,27 +164,6 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
     }
   };
 
-  const importFromMd = async () => {
-    if (!confirm(language === "zh"
-      ? "这将用 sources.md 中的默认配置覆盖当前信源。确定继续吗？"
-      : "This will overwrite current sources with defaults from sources.md. Continue?")) return;
-    setLoading(true);
-    try {
-      const res = await backendApi.importSourcesMd();
-      const { inserted, existed, failed } = res.data;
-      loadSources();
-      setMessage({
-        type: failed.length ? "warning" : "success",
-        text: language === "zh"
-          ? `导入完成：新增 ${inserted} 条，已存在 ${existed} 条，失败 ${failed.length} 条`
-          : `Imported: ${inserted} new, ${existed} existed, ${failed.length} failed`
-      });
-    } catch (err) {
-      setMessage({ type: "error", text: err.message });
-    }
-    setLoading(false);
-  };
-
   useEffect(() => {
     const run = activeRunRef.current;
     if (!run?.id || run?.status !== "running") return;
@@ -313,22 +292,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
             ? `⏹ ${language === "zh" ? "终止跟踪" : "Stop Tracker"}`
             : (language === "zh" ? "立即运行跟踪" : "Run Tracker Now")}
         </button>
-        <button
-          onClick={importFromMd}
-          disabled={loading}
-          style={{
-            padding: "8px 16px",
-            borderRadius: BORDER_RADIUS.md,
-            border: `1px solid ${COLORS.primary}`,
-            background: "transparent",
-            color: COLORS.primary,
-            fontSize: FONT_SIZES.md,
-            fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer"
-          }}
-        >
-          {language === "zh" ? "🔄 恢复默认配置" : "🔄 Restore Defaults"}
-        </button>
+
       </div>
 
       {message && (

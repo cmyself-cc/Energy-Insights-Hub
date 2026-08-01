@@ -59,6 +59,7 @@ export const backendApi = {
   // Tracker
   runTracker: () => request("/tracker/run", { method: "POST" }),
   stopTracker: () => request("/tracker/stop", { method: "POST" }),
+  clearInsights: () => request("/tracker/clear-insights", { method: "POST" }),
   getTrackerRuns: () => request("/tracker/runs"),
   getTrackerRun: (id) => request(`/tracker/runs/${id}`),
   getTrackerStatus: () => request("/tracker/status"),
