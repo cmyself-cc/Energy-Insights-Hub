@@ -3,8 +3,8 @@ import { COLORS, BORDER_RADIUS } from "../constants/theme";
 import { storage } from "../utils/storage";
 import { backendApi } from "../utils/backendApi";
 
-const emptyLlm = () => ({ providerName: "", baseUrl: "", modelId: "", apiKey: "" });
-const emptySearch = () => ({ providerName: "", baseUrl: "", apiKey: "" });
+const emptyLlm = () => ({ providerName: "", baseUrl: "", modelId: "" });
+const emptySearch = () => ({ providerName: "", baseUrl: "" });
 
 export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = false, inline = false }) {
   const [activeTab, setActiveTab] = useState("llm");
@@ -18,13 +18,11 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
 
   // LLM form
   const [llm, setLlm] = useState(currentConfig?.providerName ? currentConfig : emptyLlm());
-  const [showApiKey, setShowApiKey] = useState(false);
   const [llmTestResult, setLlmTestResult] = useState(null);
   const [llmTesting, setLlmTesting] = useState(false);
 
   // Search form
   const [search, setSearch] = useState(emptySearch());
-  const [showSearchKey, setShowSearchKey] = useState(false);
   const [searchTestResult, setSearchTestResult] = useState(null);
   const [searchTesting, setSearchTesting] = useState(false);
 
@@ -45,14 +43,12 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
     return saved.some(c =>
       c.providerName === (form.providerName || "") &&
       c.baseUrl === (form.baseUrl || "") &&
-      c.modelId === (form.modelId || "") &&
-      c.apiKey === form.apiKey
+      c.modelId === (form.modelId || "")
     );
   };
 
   const handleSave = () => {
     const form = activeTab === "llm" ? llm : search;
-    if (!form.apiKey.trim()) { alert("请输入API Key"); return; }
     if (!editingId && isDuplicate()) { alert("该配置已存在，不允许重复添加"); return; }
 
     if (activeTab === "llm") {
@@ -60,8 +56,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
         id: editingId || `${form.providerName || "custom"}-${Date.now()}`,
         providerName: form.providerName.trim() || "Custom",
         baseUrl: form.baseUrl.trim() || "https://api.openai.com/v1",
-        modelId: form.modelId.trim() || "gpt-4o-mini",
-        apiKey: form.apiKey.trim()
+        modelId: form.modelId.trim() || "gpt-4o-mini"
       };
       if (editingId) {
         const configs = storage.getApiConfigs();
@@ -72,12 +67,11 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
       } else {
         onSave(config);
       }
-      backendApi.saveLlmEnv(config).catch(() => {});
+      backendApi.saveLlmEnv(config.baseUrl, config.modelId).catch(() => {});
     } else {
       storage.saveSearchConfig({
         providerName: form.providerName.trim() || "Search",
-        baseUrl: form.baseUrl.trim(),
-        apiKey: form.apiKey.trim()
+        baseUrl: form.baseUrl.trim()
       });
       setSearchSaved(storage.getSearchConfig());
     }
@@ -105,31 +99,29 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
 
   const handleEdit = (config) => {
     setEditingId(config.id);
-    setLlm({ providerName: config.providerName, baseUrl: config.baseUrl, modelId: config.modelId, apiKey: config.apiKey });
+    setLlm({ providerName: config.providerName, baseUrl: config.baseUrl, modelId: config.modelId });
     setActiveTab("llm");
   };
 
   const testLlm = async () => {
-    if (!llm.apiKey.trim() || !llm.baseUrl.trim()) { alert("请填写URL和Key"); return; }
+    if (!llm.modelId.trim()) { alert("请填写模型 ID"); return; }
     setLlmTesting(true); setLlmTestResult(null);
     try {
-      const resp = await fetch(`${llm.baseUrl.trim()}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.apiKey.trim()}` },
-        body: JSON.stringify({ model: llm.modelId.trim() || "gpt-4o-mini", messages: [{ role: "user", content: "hi" }], max_tokens: 5 })
-      });
-      setLlmTestResult(resp.ok ? { success: true, message: "连接成功" } : { success: false, message: `HTTP ${resp.status}` });
+      const result = await backendApi.testLlm(llm.modelId.trim());
+      setLlmTestResult(result.data?.success
+        ? { success: true, message: "连接成功" }
+        : { success: false, message: `HTTP ${result.data?.status || "error"}` });
     } catch (e) { setLlmTestResult({ success: false, message: e.message }); }
     setLlmTesting(false);
   };
 
   const testSearch = async () => {
-    if (!search.apiKey.trim() || !search.baseUrl.trim()) { alert("请填写搜索URL和Key"); return; }
+    if (!search.baseUrl.trim()) { alert("请填写搜索API URL"); return; }
     setSearchTesting(true); setSearchTestResult(null);
     try {
       const resp = await fetch(search.baseUrl.trim(), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: search.apiKey.trim() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: "test", max_results: 1 })
       });
       setSearchTestResult(resp.ok ? { success: true, message: "连接成功" } : { success: false, message: `HTTP ${resp.status}` });
@@ -210,26 +202,18 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
             <div style={{ marginBottom: 16 }}><label style={labelStyle}>提供商名称</label><input style={inputStyle} value={llm.providerName} onChange={e => setLlm({ ...llm, providerName: e.target.value })} placeholder="硅基流动 / OpenAI / Anthropic" /></div>
             <div style={{ marginBottom: 16 }}><label style={labelStyle}>Base URL</label><input style={inputStyle} value={llm.baseUrl} onChange={e => setLlm({ ...llm, baseUrl: e.target.value })} placeholder="https://api.siliconflow.cn/v1" /></div>
             <div style={{ marginBottom: 16 }}><label style={labelStyle}>模型 ID</label><input style={inputStyle} value={llm.modelId} onChange={e => setLlm({ ...llm, modelId: e.target.value })} placeholder="deepseek-ai/DeepSeek-R1" /></div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>API Key</label>
-              <div style={{ display: "flex", gap: 8 }}><input style={inputStyle} type={showApiKey ? "text" : "password"} value={llm.apiKey} onChange={e => setLlm({ ...llm, apiKey: e.target.value })} placeholder="sk-..." /><button onClick={() => setShowApiKey(!showApiKey)} style={{ padding: "10px 14px", borderRadius: 8, border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`, background: darkMode ? COLORS.background.cardDark : "#fff", color: darkMode ? "#e8e8e8" : "#555", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>{showApiKey ? "隐藏" : "显示"}</button></div>
-              <div style={hintStyle}>保存到浏览器和服务器 .env 文件</div>
-            </div>
             {llmTestResult && (<div style={{ padding: "8px 12px", borderRadius: 8, background: llmTestResult.success ? "#e8f5ee" : "#fff0f0", border: llmTestResult.success ? "1px solid #1a6b3c" : "1px solid #fcc", color: llmTestResult.success ? "#1a6b3c" : "#c00", fontSize: 13, marginBottom: 16 }}>{llmTestResult.success ? "✓" : "✗"} {llmTestResult.message}</div>)}
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={testLlm} disabled={llmTesting} style={{ flex: 1, padding: "12px", borderRadius: 8, border: `1.5px solid ${COLORS.primary}`, background: "transparent", color: COLORS.primary, fontSize: 14, fontWeight: 600, cursor: llmTesting ? "not-allowed" : "pointer" }}>{llmTesting ? "测试中..." : "测试连接"}</button>
               <button onClick={handleSave} style={{ flex: 1, padding: "12px", borderRadius: 8, border: "none", background: COLORS.primary, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{editingId ? "更新配置" : "保存配置"}</button>
             </div>
+            <div style={hintStyle}>使用服务器配置的 API Key 进行测试</div>
             {editingId && <button onClick={() => { setEditingId(null); setLlm(emptyLlm()); }} style={{ width: "100%", marginTop: 10, padding: "10px", borderRadius: 8, border: `1px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`, background: "transparent", color: darkMode ? "#aaa" : "#888", fontSize: 13, cursor: "pointer" }}>取消编辑</button>}
           </>
         ) : (
           <>
             <div style={{ marginBottom: 16 }}><label style={labelStyle}>服务名称</label><input style={inputStyle} value={search.providerName} onChange={e => setSearch({ ...search, providerName: e.target.value })} placeholder="Tavily / Serper" /></div>
             <div style={{ marginBottom: 16 }}><label style={labelStyle}>API URL</label><input style={inputStyle} value={search.baseUrl} onChange={e => setSearch({ ...search, baseUrl: e.target.value })} placeholder="https://api.tavily.com/search" /></div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>API Key</label>
-              <div style={{ display: "flex", gap: 8 }}><input style={inputStyle} type={showSearchKey ? "text" : "password"} value={search.apiKey} onChange={e => setSearch({ ...search, apiKey: e.target.value })} placeholder="tvly-..." /><button onClick={() => setShowSearchKey(!showSearchKey)} style={{ padding: "10px 14px", borderRadius: 8, border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`, background: darkMode ? COLORS.background.cardDark : "#fff", color: darkMode ? "#e8e8e8" : "#555", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>{showSearchKey ? "隐藏" : "显示"}</button></div>
-            </div>
             {searchTestResult && (<div style={{ padding: "8px 12px", borderRadius: 8, background: searchTestResult.success ? "#e8f5ee" : "#fff0f0", border: searchTestResult.success ? "1px solid #1a6b3c" : "1px solid #fcc", color: searchTestResult.success ? "#1a6b3c" : "#c00", fontSize: 13, marginBottom: 16 }}>{searchTestResult.success ? "✓" : "✗"} {searchTestResult.message}</div>)}
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={testSearch} disabled={searchTesting} style={{ flex: 1, padding: "12px", borderRadius: 8, border: `1.5px solid ${COLORS.primary}`, background: "transparent", color: COLORS.primary, fontSize: 14, fontWeight: 600, cursor: searchTesting ? "not-allowed" : "pointer" }}>{searchTesting ? "测试中..." : "测试连接"}</button>

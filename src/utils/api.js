@@ -57,7 +57,7 @@ function extractContent(data, config) {
 export const api = {
   fetchInsights: async (filters, language = "en") => {
     const config = storage.getApiConfig();
-    if (!config || !config.apiKey) {
+    if (!config) {
       throw new Error("API_KEY_REQUIRED");
     }
 
@@ -200,7 +200,7 @@ Requirements:
 
   generateNewsletter: async (cart, language = "en") => {
     const config = storage.getApiConfig();
-    if (!config || !config.apiKey) {
+    if (!config) {
       throw new Error("API_KEY_REQUIRED");
     }
 
@@ -333,7 +333,7 @@ Formatting Requirements:
 
   interpretArticle: async (item, question = "", language = "en", history = [], signal = null, modelOverride = null) => {
     const config = modelOverride || storage.getApiConfig();
-    if (!config || !config.apiKey) {
+    if (!config) {
       throw new Error("API_KEY_REQUIRED");
     }
 
@@ -395,7 +395,7 @@ URL: ${item.url || ""}`;
 
   search: async (query, _language = "en", signal = null) => {
     const config = storage.getSearchConfig();
-    if (!config || !config.apiKey) {
+    if (!config) {
       return "";
     }
 

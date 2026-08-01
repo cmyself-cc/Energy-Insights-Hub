@@ -96,7 +96,8 @@ export const backendApi = {
   }),
 
   // LLM env
-  saveLlmEnv: (config) => request("/tracker-settings/save-llm-env", { method: "POST", body: JSON.stringify(config) }),
+  saveLlmEnv: (baseUrl, modelId) => request("/tracker-settings/save-llm-env", { method: "POST", body: JSON.stringify({ baseUrl, modelId }) }),
+  testLlm: (modelId) => request("/tracker-settings/test-llm", { method: "POST", body: JSON.stringify({ modelId }) }),
 
   // Industry categories
   getIndustryCategories: () => request("/industries"),

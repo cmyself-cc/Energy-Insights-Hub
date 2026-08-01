@@ -182,7 +182,7 @@ export default function App() {
 
   const generateNewsletter = useCallback(async (overrideLang) => {
     if (!cart.length) return;
-    if (!apiConfig || !apiConfig.apiKey) {
+    if (!apiConfig) {
       setShowApiConfig(true);
       addToast(t.toasts.apiKeyRequired, "error");
       return;

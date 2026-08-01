@@ -64,7 +64,8 @@ router.post("/save-llm-env", (req, res) => {
     try { envContent = fs.readFileSync(envPath, "utf-8"); } catch (e) {}
 
     const lines = envContent.split("\n");
-    const keys = { LLM_BASE_URL: baseUrl, LLM_API_KEY: apiKey, LLM_MODEL: modelId };
+    const keys = { LLM_BASE_URL: baseUrl, LLM_MODEL: modelId };
+    if (apiKey) keys.LLM_API_KEY = apiKey;
     const newLines = [];
     const found = new Set();
     for (const line of lines) {
@@ -88,6 +89,28 @@ router.post("/save-llm-env", (req, res) => {
     res.json({ data: { success: true } });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/test-llm", async (req, res) => {
+  try {
+    const { modelId } = req.body;
+    const config = {
+      providerId: process.env.LLM_PROVIDER || "openai",
+      baseUrl: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
+      modelId: modelId || process.env.LLM_MODEL || "gpt-4o-mini",
+      apiKey: process.env.LLM_API_KEY
+    };
+    if (!config.apiKey) return res.status(400).json({ error: "Server API key not configured" });
+
+    const resp = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
+      body: JSON.stringify({ model: config.modelId, messages: [{ role: "user", content: "hi" }], max_tokens: 5 })
+    });
+    res.json({ data: { success: resp.ok, status: resp.status } });
+  } catch (e) {
+    res.json({ data: { success: false, error: e.message } });
   }
 });
 
