@@ -88,6 +88,39 @@ export function discoverRssFeeds(html, baseUrl) {
   return feeds;
 }
 
+export function discoverSubPages(html, baseUrl) {
+  const $ = cheerio.load(html);
+  const seen = new Set();
+  const candidates = [];
+  const pathPatterns = [/\/news/, /\/xwzx/, /\/article/, /\/post/, /\/blog/, /\/info/, /\/category/, /\/list/, /\/column/, /\/channel/];
+  const textPatterns = /新闻|资讯|动态|全部|更多|列表|目录|要闻/;
+
+  $("a[href]").each((_i, el) => {
+    const href = $(el).attr("href");
+    const text = $(el).text().trim();
+    if (!href || href === "#" || href === "/" || href.startsWith("javascript:") || href.startsWith("mailto:")) return;
+    const url = resolveUrl(baseUrl, href);
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+
+    let score = 0;
+    const urlLower = url.toLowerCase();
+    for (const pattern of pathPatterns) {
+      if (pattern.test(urlLower)) { score += 5; break; }
+    }
+    if (textPatterns.test(text)) score += 3;
+
+    if (score > 0) {
+      candidates.push({ url, title: text || url, score });
+    }
+  });
+
+  return candidates
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10)
+    .map(({ url, title }) => ({ url, title }));
+}
+
 async function fetchHtml(url, timeoutMs = 20000) {
   const res = await fetchWithTimeout(
     url,
