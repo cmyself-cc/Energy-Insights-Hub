@@ -213,7 +213,7 @@ export default function ApiConfig({ onClose, onSave, currentConfig, darkMode = f
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>API Key</label>
               <div style={{ display: "flex", gap: 8 }}><input style={inputStyle} type={showApiKey ? "text" : "password"} value={llm.apiKey} onChange={e => setLlm({ ...llm, apiKey: e.target.value })} placeholder="sk-..." /><button onClick={() => setShowApiKey(!showApiKey)} style={{ padding: "10px 14px", borderRadius: 8, border: `1.5px solid ${darkMode ? COLORS.border.dark : "#e0e0e0"}`, background: darkMode ? COLORS.background.cardDark : "#fff", color: darkMode ? "#e8e8e8" : "#555", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>{showApiKey ? "隐藏" : "显示"}</button></div>
-              <div style={hintStyle}>保存在浏览器本地</div>
+              <div style={hintStyle}>保存到浏览器和服务器 .env 文件</div>
             </div>
             {llmTestResult && (<div style={{ padding: "8px 12px", borderRadius: 8, background: llmTestResult.success ? "#e8f5ee" : "#fff0f0", border: llmTestResult.success ? "1px solid #1a6b3c" : "1px solid #fcc", color: llmTestResult.success ? "#1a6b3c" : "#c00", fontSize: 13, marginBottom: 16 }}>{llmTestResult.success ? "✓" : "✗"} {llmTestResult.message}</div>)}
             <div style={{ display: "flex", gap: 12 }}>

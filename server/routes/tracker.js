@@ -17,10 +17,6 @@ router.post("/stop", (_req, res) => {
 
 router.post("/run", async (_req, res) => {
   try {
-    if (!process.env.LLM_API_KEY) {
-      return res.status(400).json({ error: "LLM_API_KEY not configured. Please set it in .env file." });
-    }
-
     // 在后台运行，立即返回运行 ID
     const insert = db.prepare(
       "INSERT INTO tracker_runs (status, started_at) VALUES ('running', CURRENT_TIMESTAMP)"
