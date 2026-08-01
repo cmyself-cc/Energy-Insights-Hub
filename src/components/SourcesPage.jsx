@@ -18,6 +18,9 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const [runProgress, setRunProgress] = useState(0);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: [] });
+  const [discoveringSubPages, setDiscoveringSubPages] = useState(false);
+  const [subPageCandidates, setSubPageCandidates] = useState([]);
+  const [showSubPageDialog, setShowSubPageDialog] = useState(false);
   const languageRef = useRef(language);
   const onTrackerCompleteRef = useRef(onTrackerComplete);
   const activeRunRef = useRef(activeRun);
@@ -216,6 +219,8 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
     return () => clearInterval(interval);
   }, [activeRun?.id]);
 
+  const showMessage = (type, text) => setMessage({ type, text });
+
   const inputStyle = {
     padding: "8px 12px",
     borderRadius: BORDER_RADIUS.md,
@@ -225,6 +230,10 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
     fontSize: FONT_SIZES.base,
     outline: "none"
   };
+
+  const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
+  const border = darkMode ? COLORS.border.dark : COLORS.border.light;
+  const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
 
   const togglePurpose = (formObj, setFormObj, value) => {
     const next = formObj.purpose.includes(value)
@@ -449,6 +458,67 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                       {language === "zh" ? "启用" : "Active"}
                     </label>
                     {renderPurposeCheckboxes(editForm, setEditForm)}
+
+                    {/* Sub-page discovery */}
+                    <div style={{ marginTop: 12, padding: "12px", background: darkMode ? "#1c1f2b" : "#f9f9f9", borderRadius: BORDER_RADIUS.md, width: "100%" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: text, marginBottom: 6 }}>
+                        {language === "zh" ? "子列表页" : "Sub Pages"}
+                      </div>
+                      <div style={{ fontSize: 11, color: darkMode ? "#888" : "#999", marginBottom: 8 }}>
+                        {language === "zh" ? "检测网站的全部新闻/资讯列表页，抓取更多文章" : "Detect news list sub-pages for more articles"}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          setDiscoveringSubPages(true);
+                          try {
+                            const res = await backendApi.discoverSubPages(editingId);
+                            setSubPageCandidates(res.data || []);
+                            setShowSubPageDialog(true);
+                          } catch (e) { showMessage("error", e.message); }
+                          setDiscoveringSubPages(false);
+                        }}
+                        disabled={discoveringSubPages}
+                        style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${COLORS.primary}`, background: "transparent", color: COLORS.primary, fontSize: 12, cursor: "pointer" }}
+                      >🔍 {discoveringSubPages ? (language === "zh" ? "检测中..." : "Detecting...") : (language === "zh" ? "自动检测子列表页" : "Auto-detect sub pages")}</button>
+
+                      {showSubPageDialog && (
+                        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <div style={{ background: cardBg, borderRadius: BORDER_RADIUS.lg, padding: 24, maxWidth: 500, width: "90%", maxHeight: "80vh", overflow: "auto" }}>
+                            <h3 style={{ margin: "0 0 12px", color: text }}>{language === "zh" ? "发现子列表页" : "Discovered Sub Pages"}</h3>
+                            {subPageCandidates.length === 0 ? (
+                              <div style={{ color: darkMode ? "#888" : "#999" }}>{language === "zh" ? "未发现子列表页" : "No sub pages found"}</div>
+                            ) : (
+                              subPageCandidates.map((sp, i) => (
+                                <label key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 0", borderBottom: `1px solid ${border}`, cursor: "pointer" }}>
+                                  <input type="checkbox" defaultChecked onChange={e => {
+                                    const next = [...subPageCandidates];
+                                    next[i] = { ...sp, selected: e.target.checked };
+                                    setSubPageCandidates(next);
+                                  }} />
+                                  <div>
+                                    <div style={{ fontSize: 13, color: text }}>{sp.title}</div>
+                                    <div style={{ fontSize: 11, color: darkMode ? "#888" : "#999" }}>{sp.url}</div>
+                                  </div>
+                                </label>
+                              ))
+                            )}
+                            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+                              <button onClick={() => setShowSubPageDialog(false)} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${border}`, background: "transparent", color: text, fontSize: 12, cursor: "pointer" }}>{language === "zh" ? "取消" : "Cancel"}</button>
+                              <button onClick={async () => {
+                                const selected = subPageCandidates.filter(s => s.selected !== false);
+                                if (selected.length === 0) { setShowSubPageDialog(false); return; }
+                                try {
+                                  await backendApi.confirmSubPages(editingId, selected);
+                                  setShowSubPageDialog(false);
+                                  showMessage("success", language === "zh" ? "子列表页已保存" : "Sub pages saved");
+                                } catch (e) { showMessage("error", e.message); }
+                              }} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: COLORS.primary, color: "#fff", fontSize: 12, cursor: "pointer" }}>{language === "zh" ? "确认添加" : "Confirm"}</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
                       <button
                         onClick={() => saveEdit(source.id)}

@@ -49,6 +49,8 @@ export const backendApi = {
   createSource: (source) => request("/sources", { method: "POST", body: JSON.stringify(source) }),
   updateSource: (id, source) => request(`/sources/${id}`, { method: "PUT", body: JSON.stringify(source) }),
   deleteSource: (id) => request(`/sources/${id}`, { method: "DELETE" }),
+  discoverSubPages: (id) => request(`/sources/${id}/discover-subpages`, { method: "POST" }),
+  confirmSubPages: (id, subPages) => request(`/sources/${id}/confirm-subpages`, { method: "POST", body: JSON.stringify({ subPages }) }),
 
   // Reports
   getReports: () => request("/reports"),
