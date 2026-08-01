@@ -130,64 +130,64 @@ export function decompressIfNeeded(buffer, contentType = "", url = "") {
   return buffer.toString("utf-8");
 }
 
-function parseIsoLike(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? null : d.toISOString();
-}
-
 export function extractPublishedDate($) {
-  const selectors = [
-    'meta[property="article:published_time"]',
-    'meta[name="article:published_time"]',
-    'meta[property="og:article:published_time"]',
-    'meta[name="publishdate"]',
-    'meta[name="date"]',
-    'meta[itemprop="datePublished"]'
-  ];
+  const now = Date.now();
 
-  for (const sel of selectors) {
+  // 1) <time> tag
+  const timeEl = $("time[datetime]").first();
+  if (timeEl.length) {
+    const d = new Date(timeEl.attr("datetime"));
+    if (!isNaN(d.getTime()) && (now - d.getTime()) < 30 * 24 * 60 * 60 * 1000) return d.toISOString();
+  }
+
+  // 2) meta tags
+  const metaSelectors = [
+    'meta[property="article:published_time"]',
+    'meta[name="pubdate"]',
+    'meta[name="publishdate"]',
+    'meta[name="DC.date"]',
+    'meta[name="date"]'
+  ];
+  for (const sel of metaSelectors) {
     const content = $(sel).attr("content");
     if (content) {
-      const parsed = parseIsoLike(content);
-      if (parsed) return parsed;
+      const d = new Date(content);
+      if (!isNaN(d.getTime()) && (now - d.getTime()) < 30 * 24 * 60 * 60 * 1000) return d.toISOString();
     }
   }
 
-  let jsonLdDate = null;
-  $("script[type='application/ld+json']").each((_i, el) => {
-    if (jsonLdDate) return false;
-    try {
-      const data = JSON.parse($(el).text() || "{}");
-      const graphs = Array.isArray(data["@graph"]) ? data["@graph"] : [data];
-      for (const item of graphs) {
-        const types = [].concat(item["@type"] || []);
-        if (types.some(t => /NewsArticle|Article|BlogPosting/i.test(t))) {
-          const d = item.datePublished || item.dateModified;
-          if (d) {
-            jsonLdDate = parseIsoLike(d);
-            if (jsonLdDate) return false;
-          }
-        }
-      }
-    } catch {
-      // ignore malformed JSON-LD
+  // 3) Common CSS class patterns
+  const classSelectors = [
+    ".date", ".publish-date", ".article-date", ".post-date", ".pub-date",
+    ".time", ".publish-time", ".article-time", ".post-time",
+    "[class*='date']", "[class*='time']", "[class*='publish']"
+  ];
+  const datePattern = /(\d{4}[-/]\d{1,2}[-/]\d{1,2})/;
+  for (const sel of classSelectors) {
+    const text = $(sel).first().text().trim();
+    const match = text.match(datePattern);
+    if (match) {
+      const d = new Date(match[1]);
+      if (!isNaN(d.getTime()) && (now - d.getTime()) < 30 * 24 * 60 * 60 * 1000) return d.toISOString();
     }
-  });
-  if (jsonLdDate) return jsonLdDate;
+  }
 
-  let timeDate = null;
-  $("time[datetime]").each((_i, el) => {
-    if (timeDate) return false;
-    const d = parseIsoLike($(el).attr("datetime"));
-    if (d) {
-      timeDate = d;
-      return false;
+  // 4) Text pattern matching in body
+  const bodyText = $("body").text().slice(0, 2000);
+  const patterns = [
+    /发布时间[：:]\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2})/,
+    /发布日期[：:]\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2})/,
+    /(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2})/
+  ];
+  for (const pattern of patterns) {
+    const match = bodyText.match(pattern);
+    if (match) {
+      const d = new Date(match[1]);
+      if (!isNaN(d.getTime()) && (now - d.getTime()) < 30 * 24 * 60 * 60 * 1000) return d.toISOString();
     }
-  });
-  if (timeDate) return timeDate;
+  }
 
-  return null;
+  return new Date().toISOString();
 }
 
 export function cleanText(text) {
