@@ -43,4 +43,11 @@ describe("resolvePerFeedLimit", () => {
       3 // ceil(30/10)
     );
   });
+
+  it("每源上限 × 源数量作为总返回上限（不被 articleLimit 固定截断）", () => {
+    // 15/源 × 25 源 = 375，而不是 articleLimit=20
+    const perFeed = resolvePerFeedLimit({ articleLimit: 20, feedCount: 25, globalPerFeedLimit: 15 });
+    assert.strictEqual(perFeed, 15);
+    assert.strictEqual(perFeed * 25, 375);
+  });
 });

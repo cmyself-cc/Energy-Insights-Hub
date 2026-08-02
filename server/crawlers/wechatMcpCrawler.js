@@ -323,7 +323,9 @@ export async function fetchArticles(source) {
       }
     }
 
-    return articles.slice(0, articleLimit);
+    // 返回上限 = 每源上限 × 源数量（例如 15 篇/源 × 25 源 = 375 篇），
+    // 而非固定 articleLimit——后者会把排在后面的源（常含最新文章）全部截掉
+    return articles.slice(0, perFeedLimit * feedIds.length);
   } finally {
     try {
       await session.reader.cancel();
