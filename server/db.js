@@ -7,7 +7,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
-const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "energy_insights.db");
+// Test isolation: when running under vitest (NODE_ENV=test), use a dedicated
+// test database so test cleanup statements (DELETE FROM ...) can NEVER touch
+// the real production database at data/energy_insights.db.
+const IS_TEST = process.env.NODE_ENV === "test";
+const DB_PATH = process.env.DB_PATH || (
+  IS_TEST
+    ? path.join(DATA_DIR, "test-energy_insights.db")
+    : path.join(DATA_DIR, "energy_insights.db")
+);
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });

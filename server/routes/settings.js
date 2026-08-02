@@ -86,6 +86,12 @@ router.post("/save-llm-env", (req, res) => {
     }
 
     fs.writeFileSync(envPath, newLines.join("\n") + "\n", "utf-8");
+
+    // 同时更新运行中进程的环境变量，使服务端 LLM 调用立即生效（无需重启）
+    if (baseUrl) process.env.LLM_BASE_URL = baseUrl;
+    if (modelId) process.env.LLM_MODEL = modelId;
+    if (apiKey) process.env.LLM_API_KEY = apiKey;
+
     res.json({ data: { success: true } });
   } catch (e) {
     res.status(500).json({ error: e.message });

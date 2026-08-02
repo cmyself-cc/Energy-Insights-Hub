@@ -11,7 +11,7 @@ const PURPOSES = [
 export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: ["competitor"] });
+  const [form, setForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: [] });
   const [trackerRunning, setTrackerRunning] = useState(false);
   const [message, setMessage] = useState(null);
   const [activeRun, setActiveRun] = useState(null);
@@ -73,7 +73,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
 
     try {
       await backendApi.createSource(payload);
-      setForm({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: ["competitor"] });
+      setForm({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: [] });
       loadSources();
       setMessage({ type: "success", text: language === "zh" ? "来源已添加" : "Source added" });
     } catch (err) {
@@ -261,6 +261,11 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
           {language === "zh" ? p.zh : p.en}
         </label>
       ))}
+      {formObj.purpose.length === 0 && (
+        <span style={{ fontSize: FONT_SIZES.xs, color: darkMode ? "#888" : "#999", fontStyle: "italic" }}>
+          {language === "zh" ? "（未选 = 全部适用）" : "(unselected = all)"}
+        </span>
+      )}
     </div>
   );
 
@@ -592,18 +597,25 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
                         }}>
                           {source.active ? (language === "zh" ? "启用" : "Active") : (language === "zh" ? "禁用" : "Inactive")}
                         </span>
-                        {(source.purpose || "").split(",").map(s => s.trim()).filter(Boolean).map(p => (
-                          <span key={p} style={{
-                            marginLeft: 6,
-                            fontSize: FONT_SIZES.xs,
-                            color: darkMode ? "#9ec3ff" : "#3a6ea5",
-                            background: darkMode ? "#26324a" : "#e8f0fa",
-                            padding: "2px 6px",
-                            borderRadius: BORDER_RADIUS.sm
-                          }}>
-                            {purposeLabel(p)}
-                          </span>
-                        ))}
+                        {(() => {
+                          const purposes = (source.purpose || "").split(",").map(s => s.trim()).filter(Boolean);
+                          // If no purpose selected, display all three as "default all"
+                          const displayPurposes = purposes.length > 0 ? purposes : PURPOSES.map(p => p.value);
+                          const isDefault = purposes.length === 0;
+                          return displayPurposes.map(p => (
+                            <span key={p} title={isDefault ? (language === "zh" ? "未指定，默认全部" : "Default: all purposes") : ""} style={{
+                              marginLeft: 6,
+                              fontSize: FONT_SIZES.xs,
+                              color: isDefault ? (darkMode ? "#b0b0b0" : "#888") : (darkMode ? "#9ec3ff" : "#3a6ea5"),
+                              background: isDefault ? (darkMode ? "#2a2a2a" : "#eee") : (darkMode ? "#26324a" : "#e8f0fa"),
+                              padding: "2px 6px",
+                              borderRadius: BORDER_RADIUS.sm,
+                              border: isDefault ? `1px dashed ${darkMode ? "#555" : "#ccc"}` : "none"
+                            }}>
+                              {purposeLabel(p)}
+                            </span>
+                          ));
+                        })()}
                         {(() => {
                           const cfg = typeof source.config === "string" ? JSON.parse(source.config) : (source.config || {});
                           const sps = cfg?.subPages || [];

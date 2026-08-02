@@ -1,4 +1,5 @@
-import { matchesAnyKeyword } from "./filterRules.js";
+import { matchesAnyKeyword, findMatchedKeyword } from "./filterRules.js";
+import db from "../db.js";
 
 const DEFAULT_INDUSTRY_KEYWORDS = [
   "电力", "氢能", "储能", "光伏", "油气", "CCS", "LNG", "天然气",
@@ -6,12 +7,38 @@ const DEFAULT_INDUSTRY_KEYWORDS = [
   "生物燃料", "润滑油", "化工", "炼化"
 ];
 
+const TRACE_KEYWORD_GATE = process.env.TRACE_KEYWORD_GATE === "1";
+
+/**
+ * Load active industry keywords WITH their aliases from industry_categories.
+ * Only includes categories that are referenced by required_industry_keywords
+ * in tracker_settings (or all active categories if that setting is empty).
+ * Returns [{name, aliases}] so the industry filter can expand synonyms.
+ */
+export function loadIndustryKeywordsWithAliases() {
+  const cats = db.prepare("SELECT name, keywords, aliases FROM industry_categories").all();
+  const result = [];
+  for (const cat of cats) {
+    let keywords = [];
+    try { keywords = JSON.parse(cat.keywords || "[]"); } catch {}
+    let aliases = [];
+    try { aliases = JSON.parse(cat.aliases || "[]"); } catch {}
+    for (const kw of keywords.filter(k => k && String(k).trim())) {
+      result.push({ name: String(kw).trim(), aliases });
+    }
+  }
+  return result;
+}
+
 export function applyIndustryFilter(items, industryKeywords) {
   const keywords = industryKeywords && industryKeywords.length > 0 ? industryKeywords : DEFAULT_INDUSTRY_KEYWORDS;
   if (!keywords || keywords.length === 0) return items;
   return items.filter(item => {
-    const text = `${item.title || ""} ${item.summary || ""}`.toLowerCase();
-    return keywords.some(k => text.includes(String(k).toLowerCase()));
+    const ok = findMatchedKeyword(item, keywords) !== null;
+    if (TRACE_KEYWORD_GATE && !ok) {
+      console.log(`[industry-filter] EXCLUDED: "${(item.title||'').slice(0,50)}" — no industry keyword in: ${(item.title||'').slice(0,40)} ${(item.summary||'').slice(0,60)}`);
+    }
+    return ok;
   });
 }
 
@@ -54,11 +81,26 @@ export function applyKeywordGate(items, context) {
       const excludeMatch = rules.exclude_keyword?.length > 0 && matchesAnyKeyword(item, rules.exclude_keyword);
 
       // Exclude keyword blocks the match for this purpose
-      if (excludeMatch) continue;
+      if (excludeMatch) {
+        if (TRACE_KEYWORD_GATE) {
+          const exKw = findMatchedKeyword(item, rules.exclude_keyword);
+          console.log(`[keyword-gate] ${purpose}: EXCLUDED by "${exKw}" — "${(item.title||'').slice(0,50)}"`);
+        }
+        continue;
+      }
 
       // All purposes require BOTH enterprise AND include_keyword (AND logic)
       if (subjectMatch && includeMatch) {
         matchedPurposes.push(purpose);
+        if (TRACE_KEYWORD_GATE) {
+          const entKw = findMatchedKeyword(item, rules.enterprise);
+          const incKw = findMatchedKeyword(item, rules.include_keyword);
+          console.log(`[keyword-gate] ${purpose}: MATCHED ent="${entKw}" + inc="${incKw}" — "${(item.title||'').slice(0,50)}"`);
+        }
+      } else if (TRACE_KEYWORD_GATE) {
+        const entKw = findMatchedKeyword(item, rules.enterprise);
+        const incKw = findMatchedKeyword(item, rules.include_keyword);
+        console.log(`[keyword-gate] ${purpose}: FAIL ent=${entKw||"none"} inc=${incKw||"none"} — "${(item.title||'').slice(0,50)}"`);
       }
     }
 

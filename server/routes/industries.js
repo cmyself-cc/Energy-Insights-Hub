@@ -1,8 +1,19 @@
 import { Router } from "express";
 import db from "../db.js";
 import { fetchWithTimeout } from "../crawlers/utils.js";
+import { generateAliases } from "../lib/llmAlias.js";
 
 const router = Router();
+
+function parseAliasesJson(raw) {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
 
 // List all industry categories
 router.get("/", (_req, res) => {
@@ -11,7 +22,8 @@ router.get("/", (_req, res) => {
     // Parse keywords JSON for each row
     const data = rows.map(row => ({
       ...row,
-      keywords: JSON.parse(row.keywords || "[]")
+      keywords: JSON.parse(row.keywords || "[]"),
+      aliases: parseAliasesJson(row.aliases)
     }));
     res.json({ data });
   } catch (e) {
@@ -20,17 +32,20 @@ router.get("/", (_req, res) => {
 });
 
 // Create new category
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const { name, keywords } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Name is required" });
     }
-    const keywordArray = Array.isArray(keywords) ? keywords : [];
+    const keywordArray = (Array.isArray(keywords) ? keywords : []).filter(k => k && String(k).trim());
+    // Generate aliases for each keyword (best-effort, combined & deduped)
+    const aliasArrays = await Promise.all(keywordArray.map(k => generateAliases(k)));
+    const aliases = [...new Set(aliasArrays.flat())].slice(0, 30);
     const result = db.prepare(
-      "INSERT INTO industry_categories (name, keywords, active) VALUES (?, ?, 1)"
-    ).run(name.trim(), JSON.stringify(keywordArray));
-    res.json({ data: { id: result.lastInsertRowid, name: name.trim(), keywords: keywordArray } });
+      "INSERT INTO industry_categories (name, keywords, active, aliases) VALUES (?, ?, 1, ?)"
+    ).run(name.trim(), JSON.stringify(keywordArray), JSON.stringify(aliases));
+    res.json({ data: { id: result.lastInsertRowid, name: name.trim(), keywords: keywordArray, aliases } });
   } catch (e) {
     if (e.message.includes("UNIQUE")) {
       return res.status(409).json({ error: "Category name already exists" });
@@ -40,7 +55,7 @@ router.post("/", (req, res) => {
 });
 
 // Update category
-router.put("/:id", (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const { name, keywords, active } = req.body;
     const existing = db.prepare("SELECT * FROM industry_categories WHERE id = ?").get(req.params.id);
@@ -56,8 +71,14 @@ router.put("/:id", (req, res) => {
       values.push(name.trim());
     }
     if (keywords !== undefined) {
+      const keywordArray = (Array.isArray(keywords) ? keywords : []).filter(k => k && String(k).trim());
       updates.push("keywords = ?");
-      values.push(JSON.stringify(Array.isArray(keywords) ? keywords : []));
+      values.push(JSON.stringify(keywordArray));
+      // Regenerate aliases for the new keyword set
+      const aliasArrays = await Promise.all(keywordArray.map(k => generateAliases(k)));
+      const aliases = [...new Set(aliasArrays.flat())].slice(0, 30);
+      updates.push("aliases = ?");
+      values.push(JSON.stringify(aliases));
     }
     if (active !== undefined) {
       updates.push("active = ?");

@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
-import { i18n } from "../constants/i18n";
 import { storage } from "../utils/storage";
+import { backendApi } from "../utils/backendApi";
 import TrackerProgress from "./TrackerProgress";
 
 export default function Header({ darkMode, language, onLanguageToggle, onOpenApiConfig }) {
-  const t = i18n[language];
   const [configs, setConfigs] = useState([]);
   const [current, setCurrent] = useState(null);
   const [open, setOpen] = useState(false);
@@ -35,7 +34,14 @@ export default function Header({ darkMode, language, onLanguageToggle, onOpenApi
 
   const switchConfig = (id) => {
     const cfg = storage.switchApiConfig(id);
-    if (cfg) { setConfigs(storage.getApiConfigs()); setCurrent(cfg); setOpen(false); }
+    if (cfg) {
+      setConfigs(storage.getApiConfigs());
+      setCurrent(cfg);
+      setOpen(false);
+      // 同步到服务器 .env，使服务端 LLM 调用（tracker、同义词生成、行业建议等）
+      // 跟随全局模型选择（apiKey 保留在服务器 .env，不传）
+      backendApi.saveLlmEnv(cfg.baseUrl, cfg.modelId).catch(() => {});
+    }
   };
 
   return (

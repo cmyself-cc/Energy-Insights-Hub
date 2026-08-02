@@ -1,55 +1,64 @@
 # AGENTS.md — Energy Insights Hub
 
-This file is a quick reference for AI coding agents working on this project. It describes the project's purpose, technology stack, layout, conventions, and how to build/test/deploy it.
+This file is a quick reference for AI coding agents working on this project. It describes the project's purpose, architecture, layout, conventions, and how to build/test/deploy it.
 
 ## Project overview
 
-**Energy Insights Hub** is a single-page React application that helps users discover energy-industry news and generate a newsletter-style executive summary.
+**Energy Insights Hub** (混沌能源智库) is a full-stack intelligence platform that monitors energy-industry news from configured sources, filters them through a multi-stage pipeline (industry pre-filter → keyword gate → LLM semantic processing), and presents the results as insight cards on a Market Intelligence dashboard.
+
+The platform serves three monitoring purposes:
+
+- **Competitor monitoring** — business moves of tracked companies (investments, cooperation, M&A, contracts).
+- **Policy monitoring** — energy/policy news from government agencies.
+- **Tech monitoring** — breakthroughs in tracked technology areas (storage, PV, hydrogen, oil & gas, CCUS, etc.).
 
 Key features:
 
-- Filterable insight feed (focus areas, regions, time ranges, free-text search).
-- "Cart" for selecting insights and generating a synthesized newsletter via an LLM.
-- Bookmarking, dark mode, and English/Chinese language switching.
-- Client-side persistence of settings, bookmarks, cart, and API keys in `localStorage`.
-- Direct browser calls to LLM providers (OpenAI-compatible, Anthropic, SiliconFlow) and optional search providers (Tavily, Serper).
-- PDF export of the generated newsletter, rendered with `html2canvas` + `jsPDF` loaded from a CDN at runtime.
-
-There is **no backend server** in this repo; the app runs entirely in the browser and calls third-party APIs directly.
+- Source management: RSS / website / WeChat MCP / API sources; website crawler supports sub-page discovery, Playwright headless rendering for JS-heavy sites, and JSON API interception.
+- Content filtering: industry pre-filter (business-domain keywords with LLM-generated synonyms/aliases), keyword gate (enterprise + include keywords AND logic, exclude keywords), semantic prompts per monitoring purpose.
+- Insight cards with LLM-generated titles/summaries/keywords, bookmark/hide feedback that feeds back into filtering weights.
+- Config UI: data sources, content filters (3 purpose tabs), AI interpretation presets, feedback page, tracker settings, unified config import/export.
+- Bilingual (中文 / English), dark mode.
 
 ## Technology stack
 
-- **Framework / UI library:** React 18 (`react`, `react-dom`)
-- **Build tool:** Vite 5 with the `@vitejs/plugin-react` plugin
-- **Language:** JavaScript (ES modules), JSX
-- **Styling:** Inline styles + a small global CSS file (`src/index.css`, `src/styles/responsive.css`)
-- **State management:** React hooks (`useState`, `useEffect`, `useCallback`, `useRef`)
-- **Persistence:** Browser `localStorage` via `src/utils/storage.js`
-- **External runtime dependencies:** `html2canvas` and `jspdf` are fetched from CDN when PDF export is used
-- **Linting:** ESLint 8 with `eslint:recommended`, `plugin:react/recommended`, `plugin:react/jsx-runtime`, `plugin:react-hooks/recommended`, and `plugin:react-refresh`
+- **Frontend:** React 18 + Vite 5 (`src/`), plain JS/JSX, inline styles referencing `src/constants/theme.js`.
+- **Backend:** Express + better-sqlite3 (`server/`), port `3001`. Vite dev server proxies `/api` to `localhost:3001`.
+- **Crawlers:** `rss-parser`, `cheerio`, `playwright` (headless Chromium for JS-heavy sites).
+- **LLM:** OpenAI-compatible API (base URL/model/API key from server env: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_PROVIDER`).
+- **Database:** SQLite via `better-sqlite3`; schema managed by numbered SQL migrations in `server/migrations/`.
+- **Testing:** Vitest (`*.test.js` next to source files in `server/`).
+- **Deployment:** Docker (`Dockerfile`), CI workflow under `.github/workflows/`, deployed to `eih.cmyself.cc` via a Mac Mini runner.
 
 ## Build and run commands
-
-Commands are defined in `package.json`:
 
 ```bash
 # Install dependencies
 npm install
 
-# Start the Vite dev server (defaults to port 5176, strictPort: true)
+# Dev: run backend + frontend together
 npm run dev
+
+# Backend only (Express, port 3001)
+npm run dev:server
+
+# Frontend only (Vite, port 5177, strictPort)
+npm run dev:client
 
 # Production build; output goes to ./dist
 npm run build
 
-# Preview the production build locally
-npm run preview
-
-# Lint all .js and .jsx files
+# Lint
 npm run lint
+
+# Run tests (Vitest; no `test` script — invoke directly)
+npx vitest run
+
+# Run the production server (serves dist + API when NODE_ENV=production)
+npm run server
 ```
 
-The dev server is configured in `vite.config.js` to run on port `5176`.
+`vite.config.js`: port `5177`, `/api` proxied to `http://localhost:3001`.
 
 ## Project structure
 
@@ -57,119 +66,69 @@ The dev server is configured in `vite.config.js` to run on port `5176`.
 .
 ├── index.html                 # SPA entry point
 ├── package.json               # Dependencies and scripts
-├── vite.config.js             # Vite configuration (React plugin, port 5176)
-├── .eslintrc.cjs              # ESLint rules
-├── dist/                      # Production build output (pre-built)
+├── vite.config.js             # Vite config (React plugin, port 5177, /api proxy)
+├── Dockerfile                 # Production container image
+├── .github/workflows/         # CI / auto-deploy workflow
+├── data/                      # SQLite database file (runtime data)
+├── dist/                      # Production build output
+├── server/
+│   ├── index.js               # Express app entry; serves API + static dist in production
+│   ├── db.js                  # SQLite connection + migration runner
+│   ├── migrations/            # Numbered SQL migration files
+│   ├── routes/                # Express routers: sources, insights, tracker, filters, industries, feedback, settings, reports
+│   ├── crawlers/              # fetchArticles dispatch + rss/website/wechat_mcp/wechatAlbum/api crawlers, utils
+│   ├── services/              # tracker pipeline, keywordGate, filterRules, llmProcessor, dedup, feedbackWeights, businessCategories, trackerRules
+│   ├── lib/                   # configParser, sourcesMdLoader, trackerSettings, llmAlias
+│   └── seeds/                 # seed sources, industry categories, default rules/prompts
 └── src/
-    ├── App.jsx                # Main application shell, state, and feed UI
-    ├── main.jsx               # Mounts <App /> inside <ErrorBoundary> with StrictMode
-    ├── index.css              # Global CSS / reset
-    ├── styles/
-    │   └── responsive.css     # Breakpoints, touch/print/reduced-motion styles
-    ├── components/
-    │   ├── ApiConfig.jsx      # Modal for configuring LLM + search API keys
-    │   ├── InsightsGenerator.jsx   # Newsletter viewer, language switcher, PDF export
-    │   ├── ErrorBoundary.jsx  # Class component error boundary
-    │   ├── Toast.jsx          # Toast notifications and ToastContainer
-    │   ├── SearchConfig.jsx   # Standalone search config modal (currently unused by App.jsx)
-    │   ├── InsightCard.jsx    # Reusable insight card (currently unused; App.jsx defines its own)
-    │   └── Chip.jsx           # Reusable filter chip (currently unused; App.jsx defines its own)
-    ├── constants/
-    │   ├── theme.js           # Colors, spacing, font sizes, border radius, transitions
-    │   └── i18n.js            # English/Chinese copy, focus areas, regions, time ranges
-    └── utils/
-        ├── api.js             # LLM and search API calls, prompt construction
-        └── storage.js         # localStorage helpers for config/bookmarks/cart/preferences
+    ├── App.jsx                # Shell: sidebar, header, page routing, toasts
+    ├── main.jsx               # Mounts <App /> in <ErrorBoundary> + StrictMode
+    ├── components/            # IntelligencePage, ReportsPage, ConfigurationPage, SourcesPage,
+    │                          #   ContentFiltersPage, TrackerSettingsPage, FeedbackPage, InsightCard,
+    │                          #   CardActions, FilterBar, Header, Sidebar, AiDrawer, TrackerProgress, ...
+    ├── constants/             # theme.js, i18n.js, taxonomy.js
+    └── utils/                 # backendApi.js, api.js, csvConfig.js, storage.js
 ```
-
-Notes on current organization:
-
-- `App.jsx` currently defines its own inline `Chip` and `InsightCard` components rather than importing the standalone files in `src/components/`.
-- `SearchConfig.jsx` is present but not imported by `App.jsx`; the search UI lives inside `ApiConfig.jsx`.
-- `InsightsGenerator.jsx` renders newsletter markdown as HTML using `dangerouslySetInnerHTML` after escaping; it also dynamically injects CDN scripts for PDF export.
 
 ## Runtime architecture
 
-1. `index.html` loads `src/main.jsx` as an ES module.
-2. `main.jsx` creates a React root, wraps `<App />` in `<ErrorBoundary>` and `<React.StrictMode>`.
-3. `App.jsx` holds most global state (filters, feed results, cart, bookmarks, UI preferences, toasts).
-4. On mount, preferences and saved data are loaded from `localStorage` via `src/utils/storage.js`.
-5. Fetching insights (`src/utils/api.js#fetchInsights`) builds a prompt and calls the configured LLM endpoint directly from the browser.
-6. If a search API key is configured and a free-text query is present, the app calls Tavily or Serper and includes the results in the LLM prompt.
-7. The LLM is expected to return a JSON array of insight objects; the app parses, validates, and assigns IDs.
-8. Generating a newsletter (`api.js#generateNewsletter`) sends the cart items to the LLM and appends a reliable source list derived from the cart data.
-9. `InsightsGenerator.jsx` renders the markdown response, allows language switching, and can generate a multi-page PDF.
+1. **Fetch layer** (`server/services/tracker.js` Phase 1): `fetchArticles(source)` dispatches by source type to the appropriate crawler (`rssCrawler`, `websiteCrawler`, `wechatMcpCrawler`, `apiCrawler`). The website crawler tries RSS → sitemap → HTML list → Playwright (headless browser, incl. JSON API interception) in that order.
+2. **Filter layer** (Phases 2): industry pre-filter (`applyIndustryFilter`, uses business-domain keywords + LLM aliases) → date lookback filter → keyword gate (`applyKeywordGate`: per-purpose `enterprise` AND `include_keyword` must both match; `exclude_keyword` blocks) → dedup.
+3. **Semantic layer** (Phase 3): LLM reads each surviving article's content, generating `title`, `summary` (≤150 chars), `keywords`, `categories`, `purposes`, and `china_relevance`. The system prompt per purpose lives in `filter_config` (`type='semantic'`).
+4. **Storage layer**: processed items are saved to the `insights` table (the "insights pool"); feedback weights (`feedbackWeights.js`) may drop low-scoring items.
+5. **Frontend** queries `/api/insights` with filters (monitoring type, business, event, source, date, keyword) and renders insight cards.
+
+## Key data model
+
+- `sources` — name, url, type (`rss`/`website`/`wechat_mcp`/`api`), active, purpose (comma-separated monitoring types; empty = all), config JSON (list selectors, sub-pages, etc.).
+- `filter_rules` — type (`enterprise`/`include_keyword`/`exclude_keyword`), name, purpose, active, `aliases` (JSON array of synonyms generated by LLM at add time).
+- `industry_categories` — business-domain categories with keywords + aliases, used by the industry pre-filter.
+- `insights` — processed cards: title, summary, url, publish_date, purposes, categories, keywords, source info.
+- `tracker_settings` — key/value: lookback_hours, max_per_source, dedup threshold, required industry keywords, monitoring toggles.
+- `filter_config` — semantic prompts (`type='semantic'`, per purpose) and AI interpretation presets (`type='ai_presets'`).
 
 ## Code style and conventions
 
-- **File extensions:** React components use `.jsx`; utilities/constants use `.js`.
-- **Modules:** ES modules (`import`/`export`) throughout; `package.json` sets `"type": "module"`.
-- **Component style:** Functional components with hooks. One class component (`ErrorBoundary`) for error catching.
-- **Naming:**
-  - Components: `PascalCase` (e.g., `InsightsGenerator`)
-  - Utilities/constants: `camelCase` or `UPPER_SNAKE_CASE` for constant collections (e.g., `COLORS`, `TIME_RANGE_KEYS`)
-  - Prefix unused variables with `_` to satisfy ESLint's `no-unused-vars` rule
-- **Styling pattern:** Inline `style` objects referencing `src/constants/theme.js` (`COLORS`, `FONT_SIZES`, `BORDER_RADIUS`, `TRANSITIONS`). Global responsive/print/accessibility rules live in `src/styles/responsive.css`.
-- **i18n pattern:** All user-facing strings live in `src/constants/i18n.js` under `i18n.en` and `i18n.zh`. Component code accesses them through `const t = i18n[language]`.
-- **Comments:** Mixed English and Chinese; many UI labels and user messages are in Chinese for the Chinese locale.
+- **File extensions:** React components `.jsx`; server/utilities `.js`. ES modules everywhere (`"type": "module"`).
+- **Components:** functional + hooks; inline styles from `src/constants/theme.js` (`COLORS`, `FONT_SIZES`, `BORDER_RADIUS`, `TRANSITIONS`).
+- **i18n:** user-facing strings in `src/constants/i18n.js` (`i18n.en` / `i18n.zh`), accessed via `const t = i18n[language]`.
+- **Backend:** Express routers in `server/routes/`; business logic in `server/services/`; DB access via `better-sqlite3` prepared statements; JSON responses wrapped as `{ data: ... }` or `{ error: ... }`.
+- **Keyword matching:** `matchesAnyKeyword` in `server/services/filterRules.js` expands each rule's `name` + `aliases` for substring matching. When adding/editing a keyword, aliases are generated via `server/lib/llmAlias.js` (best-effort; failure degrades to base keyword only).
+- **Comments:** Mixed English and Chinese; UI labels/messages in Chinese for the zh locale.
 
-## ESLint configuration
+## Testing
 
-`.eslintrc.cjs` key settings:
-
-- Extends recommended React, React Hooks, and React Refresh rules.
-- `react/prop-types` is turned off (the project does not use PropTypes).
-- `react-refresh/only-export-components` warns, with `allowConstantExport: true`.
-- `no-unused-vars` is a warning and ignores identifiers prefixed with `_`.
-- `dist` and `.eslintrc.cjs` are ignored.
-
-## Testing instructions
-
-There is **no test framework** installed in this project (no Jest, Vitest, Cypress, etc.).
-
-Recommended verification steps:
-
-1. `npm run lint` — checks JavaScript/JSX style and React hook dependencies.
-2. `npm run build` — confirms the Vite production bundle compiles.
-3. Manual browser testing:
-   - Configure an LLM API key via the "API Config" button.
-   - Optionally configure a search API key.
-   - Select filters, click "Get Energy Insights", select cards, and generate a newsletter.
-   - Test dark mode, language toggle, bookmarking, and PDF export.
-
-> As of the latest check, `npm run lint` reports one ESLint error (`no-useless-escape` in `src/components/InsightsGenerator.jsx`) and one React Hooks dependency warning (`react-hooks/exhaustive-deps` in `src/App.jsx`). `npm run build` succeeds.
-
-## Backend runtime requirements
-
-The project includes an Express/SQLite backend under `server/`. For Excel configuration uploads (`Key Config.xlsx` via `/api/tracker/import-config` or `/api/sources/import`), `server/lib/configParser.js` shells out to `python3` with the `pandas` package. Ensure both are available in the deployment environment. JSON config uploads do not require Python.
+- Vitest: tests are `*.test.js` files colocated in `server/`. Run `npx vitest run`.
+- The tracker is a multi-stage pipeline; a good smoke test is running a tracker run (`POST /api/tracker/run`) and checking the log/`tracker_runs` table.
 
 ## Deployment
 
-This is a static SPA.
-
-1. Run `npm run build`.
-2. Serve the contents of the generated `./dist` folder from any static host (e.g., Nginx, Vercel, Netlify, GitHub Pages, S3).
-3. Configure the host to serve `index.html` for all unmatched routes (SPA fallback).
-
-`dist/` is already present in the repo as a pre-built artifact, but it should be regenerated after source changes.
+- Production image: `Dockerfile` (builds frontend, runs `node server/index.js` with `NODE_ENV=production`).
+- CI: `.github/workflows/` auto-deploys on push to `main` (Mac Mini runner pulls and does `docker compose up -d --force-recreate energy-insights-hub`).
+- Live site: `eih.cmyself.cc`.
 
 ## Security considerations
 
-Because this app has no backend, several security points are worth keeping in mind:
-
-- **API keys are stored in `localStorage`.** Any XSS vulnerability could leak LLM and search API keys. Avoid adding untrusted scripts or rendering unsanitized user input.
-- **Direct browser API calls.** Keys are sent directly from the browser to third-party providers. This exposes keys to users and relies on the providers' CORS policies.
-- **Anthropic direct-browser header.** `src/utils/api.js` sends `anthropic-dangerous-direct-browser-access: true` so Anthropic can be called from the browser.
-- **Dynamic CDN script injection.** `InsightsGenerator.jsx` loads `html2canvas` and `jspdf` from `cdnjs.cloudflare.com` at runtime. A CSP or CDN compromise could affect PDF generation.
-- **`dangerouslySetInnerHTML`.** Newsletter content is escaped via `escapeHtml()` before rendering, but any change to that path risks XSS.
-- **URL validation.** `api.js` strips non-HTTP URLs from parsed LLM responses, but the LLM may still produce inaccurate or fabricated URLs.
-
-Do not commit real API keys to the repository.
-
-## External service endpoints
-
-Configured in code:
-
-- LLM providers: OpenAI (`https://api.openai.com/v1`), Anthropic (`https://api.anthropic.com/v1`), SiliconFlow (`https://api.siliconflow.cn/v1`)
-- Search providers: Tavily (`https://api.tavily.com/search`), Serper (`https://google.serper.dev/search`)
-- PDF libraries: `https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js` and `https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js`
+- **LLM API keys live on the server** (env vars / Docker environment: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`), NOT in the browser. The frontend selects among configured model records; keys are never sent to the client.
+- `.env` is gitignored; do not commit real API keys.
+- The user has explicitly stated: **do not delete any data from the database (especially config) without their approval.**

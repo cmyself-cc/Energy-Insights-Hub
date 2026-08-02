@@ -41,8 +41,9 @@ const NON_NEWS_SEGMENTS = [
   "/assets/", "/static/", "/images/", "/wp-json"
 ];
 
-const NEWS_PATH_RE = /\/(20\d{2}|19\d{2})[/-][01]\d([/-][0123]\d)?\//;
-const NEWS_TYPE_RE = /\/(news|article|articles|post|posts|story|stories|blog|press-release|press|release|updates|latest)\//;
+// Supports: /2026/07/24/, /2026-07-24/, /20260724/ (no separators — common on Chinese news sites)
+const NEWS_PATH_RE = /\/(20\d{2}|19\d{2})[/-]?[01]\d([/-]?[0123]\d)?\//;
+const NEWS_TYPE_RE = /\/(news|news-releases|article|articles|post|posts|story|stories|blog|press-release|press|release|updates|latest|xw|gsdt|yaowen)\//;
 const NON_FILE_EXT = new Set(["jpg", "jpeg", "png", "gif", "pdf", "zip", "mp4", "mp3", "css", "js", "xml", "json"]);
 
 export function normalizeUrl(url) {
@@ -130,14 +131,62 @@ export function decompressIfNeeded(buffer, contentType = "", url = "") {
   return buffer.toString("utf-8");
 }
 
+/**
+ * Parse a date string that may be in DD/MM/YYYY, MM/DD/YYYY, or YYYY-MM-DD format.
+ * Returns a valid Date or null.
+ */
+function parseFlexibleDate(str) {
+  if (!str) return null;
+  const s = str.trim();
+  // Try standard ISO / JS parse first (handles YYYY-MM-DD, YYYY/MM/DD, ISO 8601)
+  let d = new Date(s);
+  if (!isNaN(d.getTime())) return d;
+
+  // Try DD/MM/YYYY or DD-MM-YYYY (European / Chinese common format)
+  const dmyMatch = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (dmyMatch) {
+    const [, day, month, year] = dmyMatch;
+    d = new Date(Number(year), Number(month) - 1, Number(day));
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Try additional formats
+  // "01/07/2024" could be DD/MM/YYYY
+  const slashMatch = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    // Assume DD/MM/YYYY — this is the most common format on Chinese/European sites
+    d = new Date(Number(slashMatch[3]), Number(slashMatch[2]) - 1, Number(slashMatch[1]));
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  return null;
+}
+
 export function extractPublishedDate($) {
-  const now = Date.now();
+  // --- Helper: try to extract a date string, return ISO or null ---
+  const tryExtract = (text) => {
+    if (!text) return null;
+    const t = text.trim().replace(/\s+/g, " ");
+    // YYYY-MM-DD or YYYY/MM/DD
+    const ymd = t.match(/(\d{4}[-/]\d{1,2}[-/]\d{1,2})/);
+    if (ymd) {
+      const d = parseFlexibleDate(ymd[1]);
+      if (d) return d.toISOString();
+    }
+    // DD/MM/YYYY or DD-MM-YYYY
+    const dmy = t.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{4})\b/);
+    if (dmy) {
+      const d = parseFlexibleDate(dmy[1]);
+      if (d) return d.toISOString();
+    }
+    return null;
+  };
 
   // 1) <time> tag
   const timeEl = $("time[datetime]").first();
   if (timeEl.length) {
-    const d = new Date(timeEl.attr("datetime"));
-    if (!isNaN(d.getTime()) && (now - d.getTime()) < 30 * 24 * 60 * 60 * 1000) return d.toISOString();
+    const result = tryExtract(timeEl.attr("datetime"));
+    if (result) return result;
   }
 
   // 2) meta tags
@@ -146,48 +195,54 @@ export function extractPublishedDate($) {
     'meta[name="pubdate"]',
     'meta[name="publishdate"]',
     'meta[name="DC.date"]',
-    'meta[name="date"]'
+    'meta[name="date"]',
+    'meta[property="article:modified_time"]'
   ];
   for (const sel of metaSelectors) {
     const content = $(sel).attr("content");
     if (content) {
-      const d = new Date(content);
-      if (!isNaN(d.getTime()) && (now - d.getTime()) < 30 * 24 * 60 * 60 * 1000) return d.toISOString();
+      const result = tryExtract(content);
+      if (result) return result;
     }
   }
 
-  // 3) Common CSS class patterns
+  // 3) Common CSS class patterns — check DD/MM/YYYY first (more specific), then YYYY-MM-DD
   const classSelectors = [
     ".date", ".publish-date", ".article-date", ".post-date", ".pub-date",
     ".time", ".publish-time", ".article-time", ".post-time",
     "[class*='date']", "[class*='time']", "[class*='publish']"
   ];
-  const datePattern = /(\d{4}[-/]\d{1,2}[-/]\d{1,2})/;
   for (const sel of classSelectors) {
     const text = $(sel).first().text().trim();
-    const match = text.match(datePattern);
-    if (match) {
-      const d = new Date(match[1]);
-      if (!isNaN(d.getTime()) && (now - d.getTime()) < 30 * 24 * 60 * 60 * 1000) return d.toISOString();
-    }
+    const result = tryExtract(text);
+    if (result) return result;
   }
 
-  // 4) Text pattern matching in body
-  const bodyText = $("body").text().slice(0, 2000);
+  // 4) Text pattern matching in body (first 3000 chars)
+  const bodyText = $("body").text().slice(0, 3000);
   const patterns = [
-    /发布时间[：:]\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2})/,
-    /发布日期[：:]\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2})/,
+    // Chinese date labels with DD/MM/YYYY
+    /发布时间[：:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{4})/,
+    /发布日期[：:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{4})/,
+    /日期[：:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{4})/,
+    // Chinese date labels with YYYY-MM-DD
+    /发布时间[：:\s]*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2})/,
+    /发布日期[：:\s]*(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2})/,
+    // Generic: DD/MM/YYYY near a date label word
+    /(?:date|pub|publish|time|发布|日期)[^\n]{0,30}?(\d{1,2}[/-]\d{1,2}[/-]\d{4})/i,
+    // Generic: YYYY-MM-DD HH:MM
     /(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2})/
   ];
   for (const pattern of patterns) {
     const match = bodyText.match(pattern);
     if (match) {
-      const d = new Date(match[1]);
-      if (!isNaN(d.getTime()) && (now - d.getTime()) < 30 * 24 * 60 * 60 * 1000) return d.toISOString();
+      const result = tryExtract(match[1]);
+      if (result) return result;
     }
   }
 
-  return new Date().toISOString();
+  // No date found — return null so caller can decide fallback
+  return null;
 }
 
 export function cleanText(text) {

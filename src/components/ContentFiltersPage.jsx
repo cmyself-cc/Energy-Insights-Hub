@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
+import KeywordList from "./KeywordList";
 
 const PURPOSES = [
   { value: "competitor", zh: "竞争对手", en: "Competitor" },
@@ -9,16 +10,9 @@ const PURPOSES = [
   { value: "tech", zh: "技术突破", en: "Tech" }
 ];
 
-const SEMANTIC_TABS = [
-  { value: "competitor", labelKey: "competitorPrompt" },
-  { value: "policy", labelKey: "policyPrompt" },
-  { value: "tech", labelKey: "techPrompt" },
-];
-
 export default function ContentFiltersPage({ darkMode, language }) {
   const t = i18n[language]?.contentFilters || i18n.en.contentFilters;
   const [rules, setRules] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState(null);
 
@@ -41,19 +35,20 @@ export default function ContentFiltersPage({ darkMode, language }) {
   const [editingCategoryKeywords, setEditingCategoryKeywords] = useState([]);
 
   // Keyword filter state
-
-  const [editingKeyword, setEditingKeyword] = useState(null);
-  const [editKeywordValue, setEditKeywordValue] = useState("");
-  const [newKeywordForType, setNewKeywordForType] = useState({});
-  const [collapsedPurposes, setCollapsedPurposes] = useState({});
+  const [activePurposeTab, setActivePurposeTab] = useState("competitor");
 
   // Semantic prompts state
-  const [semanticTab, setSemanticTab] = useState("competitor");
   const [semanticPrompts, setSemanticPrompts] = useState({
     competitor: { content: "", active: 1 },
     policy: { content: "", active: 1 },
     tech: { content: "", active: 1 },
   });
+
+  const PURPOSE_DOTS = {
+    competitor: "#e74c3c",
+    policy: "#3498db",
+    tech: "#27ae60"
+  };
 
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
   const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
@@ -73,9 +68,8 @@ export default function ContentFiltersPage({ darkMode, language }) {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [rulesRes, categoriesRes, settingsRes, compPrompt, policyPrompt, techPrompt, industriesRes] = await Promise.all([
+      const [rulesRes, settingsRes, compPrompt, policyPrompt, techPrompt, industriesRes] = await Promise.all([
         backendApi.getFilterRules(),
-        backendApi.getBusinessCategories(),
         backendApi.getTrackerSettings(),
         backendApi.getSemanticConfig("competitor"),
         backendApi.getSemanticConfig("policy"),
@@ -83,9 +77,11 @@ export default function ContentFiltersPage({ darkMode, language }) {
         backendApi.getIndustryCategories(),
       ]);
       setRules(rulesRes.data || []);
-      setCategories(categoriesRes.data || []);
       setTrackerSettings(settingsRes.data || {});
-      setIndustryCategories(industriesRes.data || []);
+      setIndustryCategories((industriesRes.data || []).map(cat => ({
+        ...cat,
+        keywords: (cat.keywords || []).filter(k => k && k.trim())
+      })));
       setSemanticPrompts({
         competitor: compPrompt.data || { content: "", active: 1 },
         policy: policyPrompt.data || { content: "", active: 1 },
@@ -199,9 +195,13 @@ export default function ContentFiltersPage({ darkMode, language }) {
   };
 
   const addSuggestedKeywordInput = (e) => {
-    if (e.key === "Enter" && e.target.value.trim()) {
-      setSuggestedKeywords(prev => [...prev, e.target.value.trim()]);
-      e.target.value = "";
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const val = e.target.value.trim();
+      if (val) {
+        setSuggestedKeywords(prev => [...prev, val]);
+        e.target.value = "";
+      }
     }
   };
 
@@ -247,9 +247,13 @@ export default function ContentFiltersPage({ darkMode, language }) {
   };
 
   const addEditKeyword = (e) => {
-    if (e.key === "Enter" && e.target.value.trim()) {
-      setEditingCategoryKeywords(prev => [...prev, e.target.value.trim()]);
-      e.target.value = "";
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const val = e.target.value.trim();
+      if (val) {
+        setEditingCategoryKeywords(prev => [...prev, val]);
+        e.target.value = "";
+      }
     }
   };
 
@@ -268,23 +272,41 @@ export default function ContentFiltersPage({ darkMode, language }) {
     }
   };
 
-  // --- Keyword filter handlers ---
-  const addTypedKeyword = async (type, purpose) => {
-    const key = `${purpose}:${type}`;
-    const value = (newKeywordForType[key] || "").trim();
+  // --- Keyword filter handlers (local-save: no global refresh) ---
+  const addTypedKeyword = async (type, purpose, name = "", aliases = []) => {
+    const value = String(name || "").trim();
     if (!value) return;
+    // Duplicate check (base name only)
+    const duplicate = rules.some(r => r.type === type && (r.purpose || "competitor") === purpose && r.name === value);
+    if (duplicate) {
+      showMessage("error", `${t.keywordExists || "关键词已存在"}: "${value}"`);
+      return;
+    }
     try {
-      await backendApi.createFilterRule({
+      const res = await backendApi.createFilterRule({
         type,
         name: value,
         mustInclude: [],
         mustExclude: type === "exclude_keyword" ? [value] : [],
         active: true,
         priority: 0,
-        purpose
+        purpose,
+        aliases
       });
-      setNewKeywordForType(prev => ({ ...prev, [key]: "" }));
-      loadAll();
+      const id = res.data?.id;
+      if (id) {
+        setRules(prev => [...prev, {
+          id,
+          type,
+          name: value,
+          must_include: "[]",
+          must_exclude: type === "exclude_keyword" ? JSON.stringify([value]) : "[]",
+          active: 1,
+          priority: 0,
+          purpose,
+          aliases: (res.data?.aliases || []).filter(Boolean)
+        }]);
+      }
       showMessage("success", t.keywordAdded);
     } catch (err) {
       showMessage("error", `${t.saveFailed}: ${err.message}`);
@@ -295,22 +317,44 @@ export default function ContentFiltersPage({ darkMode, language }) {
     if (!confirm(t.confirmDelete)) return;
     try {
       await backendApi.deleteFilterRule(id);
-      loadAll();
+      setRules(prev => prev.filter(r => r.id !== id));
     } catch (err) {
       showMessage("error", err.message);
     }
   };
 
-  const startEditTypedKeyword = (rule) => {
-    setEditingKeyword(rule.id);
-    setEditKeywordValue(rule.name || "");
+  // id = ruleId → regenerate (persist=true 默认存库; persist=false 仅预览);
+  // id = null, name given → generate preview only (add dialog)
+  const regenerateAliases = async (id, name = null, opts = {}) => {
+    if (id === null) {
+      const preview = await backendApi.generateAliasesPreview(name);
+      return preview.data?.keywords || preview.data?.aliases || [];
+    }
+    try {
+      const res = await backendApi.regenerateAliases(id, { persist: opts.persist !== false, keyword: opts.keyword });
+      const aliases = (res.data?.aliases || []).filter(Boolean);
+      if (opts.persist === false) return aliases; // 编辑态预览：只返回，不更新列表
+      // Dedup: drop aliases that are already another rule's name (same type+purpose)
+      const rule = rules.find(r => r.id === id);
+      const others = rules.filter(r => r.id !== id && r.type === rule?.type && (r.purpose || "competitor") === rule?.purpose);
+      const deduped = aliases.filter(a => !others.some(o => o.name === a));
+      if (deduped.length !== aliases.length) {
+        await backendApi.updateFilterRule(id, { name: rule.name, aliases: deduped });
+      }
+      setRules(prev => prev.map(r => r.id === id ? { ...r, aliases: deduped } : r));
+      showMessage("success", t.keywordUpdated || "同义词已更新");
+    } catch (err) {
+      showMessage("error", `${t.saveFailed}: ${err.message}`);
+    }
   };
 
-  const saveTypedKeyword = async (id) => {
+  // Save edited keyword name + aliases together (local save, comma-separated aliases)
+  const saveEditKeyword = async (id, name, aliasString) => {
     const rule = rules.find(r => r.id === id);
     if (!rule) return;
-    const value = editKeywordValue.trim();
+    const value = String(name || "").trim();
     if (!value) return;
+    const aliases = String(aliasString || "").split(",").map(s => s.trim()).filter(Boolean);
     try {
       await backendApi.updateFilterRule(id, {
         name: value,
@@ -318,10 +362,10 @@ export default function ContentFiltersPage({ darkMode, language }) {
         mustExclude: rule.type === "exclude_keyword" ? [value] : [],
         active: true,
         priority: rule.priority || 0,
-        purpose: rule.purpose || ""
+        purpose: rule.purpose || "",
+        aliases
       });
-      setEditingKeyword(null);
-      loadAll();
+      setRules(prev => prev.map(r => r.id === id ? { ...r, name: value, aliases } : r));
       showMessage("success", t.keywordUpdated);
     } catch (err) {
       showMessage("error", err.message);
@@ -340,10 +384,6 @@ export default function ContentFiltersPage({ darkMode, language }) {
     } catch (err) {
       showMessage("error", `${t.saveFailed}: ${err.message}`);
     }
-  };
-
-  const togglePurposeSection = (value) => {
-    setCollapsedPurposes(prev => ({ ...prev, [value]: !prev[value] }));
   };
 
   // --- Derived data ---
@@ -455,7 +495,7 @@ export default function ContentFiltersPage({ darkMode, language }) {
                   </div>
                   <input
                     placeholder="输入关键词后按回车添加..."
-                    onKeyDown={addEditKeyword}
+                    onKeyUp={addEditKeyword}
                     style={{ ...inputStyle, width: "100%", fontSize: FONT_SIZES.xs, padding: "4px 8px" }}
                   />
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -511,7 +551,7 @@ export default function ContentFiltersPage({ darkMode, language }) {
           })}
           {industryCategories.length === 0 && (
             <div style={{ color: secondaryText, fontSize: FONT_SIZES.sm }}>
-              暂无业务方向，点击"＋ 添加业务方向"创建
+              暂无业务方向，点击&ldquo;＋ 添加业务方向&rdquo;创建
             </div>
           )}
         </div>
@@ -540,32 +580,33 @@ export default function ContentFiltersPage({ darkMode, language }) {
 
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: "block", marginBottom: 4, color: text, fontSize: FONT_SIZES.sm, fontWeight: 600 }}>
-                业务方向名称
+                业务方向名称 <span style={{ color: "#c00" }}>*</span>
               </label>
               <input
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="例如：氢能"
+                placeholder="方向名称，例如：氢能产业"
                 style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
               />
             </div>
 
-            <div style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 12 }}>
               <label style={{ display: "block", marginBottom: 4, color: text, fontSize: FONT_SIZES.sm, fontWeight: 600 }}>
-                核心关键词
+                核心关键词 <span style={{ color: "#c00" }}>*</span>
               </label>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   value={newCategoryMainKeyword}
                   onChange={(e) => setNewCategoryMainKeyword(e.target.value)}
-                  placeholder="例如：氢能"
+                  placeholder="输入核心关键词，例如：氢能"
                   style={{ ...inputStyle, flex: 1 }}
                 />
                 <button onClick={handleSuggestKeywords} disabled={suggesting || !newCategoryMainKeyword.trim()} style={{
                   padding: "8px 14px", borderRadius: BORDER_RADIUS.md,
-                  border: "none", background: suggesting ? "#aaa" : COLORS.primary,
+                  border: "none",
+                  background: (suggesting || !newCategoryMainKeyword.trim()) ? "#aaa" : COLORS.primary,
                   color: "#fff", fontSize: FONT_SIZES.sm, fontWeight: 600,
-                  cursor: suggesting ? "not-allowed" : "pointer",
+                  cursor: (suggesting || !newCategoryMainKeyword.trim()) ? "not-allowed" : "pointer",
                   whiteSpace: "nowrap"
                 }}>
                   {suggesting ? "建议中..." : "🤖 智能建议关键词"}
@@ -618,234 +659,136 @@ export default function ContentFiltersPage({ darkMode, language }) {
         </div>
       )}
 
-      {/* ========== Section 2: Keyword Filter ========== */}
-      <div style={{
-        background: cardBg,
-        borderRadius: BORDER_RADIUS.lg,
-        border: `1px solid ${border}`,
-        padding: "16px 20px",
-        marginBottom: 20
-      }}>
-        <h3 style={{ margin: "0 0 16px", color: darkMode ? "#fff" : COLORS.text.primary, fontSize: FONT_SIZES.xl, fontWeight: 700 }}>
-          {t.keywordFilter}
-        </h3>
-
-        {PURPOSES.map(p => {
-          const purposeRules = rulesByPurpose[p.value];
-          const collapsed = !!collapsedPurposes[p.value];
-          const totalCount = purposeRules.enterprise.length + purposeRules.include_keyword.length + purposeRules.exclude_keyword.length;
-          return (
-            <div key={p.value} style={{ marginBottom: 16 }}>
-              <div
-                onClick={() => togglePurposeSection(p.value)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  cursor: "pointer",
-                  userSelect: "none",
-                  marginBottom: collapsed ? 0 : 12,
-                  color: darkMode ? "#fff" : COLORS.text.primary
-                }}
-              >
-                <span style={{ fontSize: FONT_SIZES.sm, color: secondaryText }}>{collapsed ? "▶" : "▼"}</span>
-                <h4 style={{ margin: 0, fontSize: FONT_SIZES.lg, fontWeight: 700 }}>
-                  {language === "zh" ? p.zh : p.en}
-                </h4>
-                <span style={{ fontSize: FONT_SIZES.sm, color: secondaryText }}>({totalCount})</span>
-              </div>
-              {!collapsed && [{
-                type: "enterprise",
-                label: t.enterpriseLabel || (language === "zh" ? "🏢 企业/主体关键词" : "🏢 Enterprise/Entity Keywords"),
-                items: purposeRules.enterprise,
-                placeholder: t.enterpriseKeywordPlaceholder
-              }, {
-                type: "include_keyword",
-                label: t.includeLabel || (language === "zh" ? "➕ 包含关键词" : "➕ Include Keywords"),
-                items: purposeRules.include_keyword,
-                placeholder: t.includeKeywordPlaceholder
-              }, {
-                type: "exclude_keyword",
-                label: t.excludeLabel || (language === "zh" ? "➖ 排除关键词" : "➖ Exclude Keywords"),
-                items: purposeRules.exclude_keyword,
-                placeholder: t.keywordPlaceholder
-              }].map(({ type, label, items, placeholder }) => {
-                const inputKey = `${p.value}:${type}`;
-                return (
-          <div key={type} style={{ marginBottom: 20, paddingLeft: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <h4 style={{ margin: 0, color: darkMode ? "#ccc" : COLORS.text.secondary, fontSize: FONT_SIZES.md, fontWeight: 600 }}>{label}</h4>
-              <span style={{
-                background: COLORS.primaryLight,
-                color: COLORS.primary,
-                fontSize: FONT_SIZES.xs,
-                fontWeight: 700,
-                padding: "2px 8px",
-                borderRadius: 10
-              }}>{items.length}</span>
-            </div>
-            <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-              <input
-                type="text"
-                value={newKeywordForType[inputKey] || ""}
-                onChange={(e) => setNewKeywordForType(prev => ({ ...prev, [inputKey]: e.target.value }))}
-                placeholder={placeholder}
-                style={{ ...inputStyle, flex: 1, minWidth: 180 }}
-                onKeyDown={(e) => { if (e.key === "Enter") addTypedKeyword(type, p.value); }}
-              />
-              <button type="button" onClick={() => addTypedKeyword(type, p.value)} style={{
-                padding: "8px 16px",
-                borderRadius: BORDER_RADIUS.md,
-                border: "none",
-                background: COLORS.primary,
-                color: "#fff",
-                fontSize: FONT_SIZES.md,
-                fontWeight: 600,
-                cursor: "pointer"
-              }}>{t.add}</button>
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {items.map(rule => {
-                const isEditing = editingKeyword === rule.id;
-                return (
-                  <div key={rule.id} style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    borderRadius: BORDER_RADIUS.md,
-                    background: COLORS.primaryLight,
-                    border: `1px solid ${COLORS.primary}`,
-                    transition: `all ${TRANSITIONS.fast}`
-                  }}>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={editKeywordValue}
-                        onChange={(e) => setEditKeywordValue(e.target.value)}
-                        onBlur={() => saveTypedKeyword(rule.id)}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveTypedKeyword(rule.id); if (e.key === "Escape") setEditingKeyword(null); }}
-                        autoFocus
-                        style={{ ...inputStyle, width: 120, padding: "4px 8px", fontSize: FONT_SIZES.sm }}
-                      />
-                    ) : (
-                      <span style={{
-                        color: COLORS.primary,
-                        fontSize: FONT_SIZES.sm,
-                        fontWeight: 500,
-                        cursor: "pointer"
-                      }} onClick={() => startEditTypedKeyword(rule)}>{rule.name}</span>
-                    )}
-                    <button
-                      onClick={() => deleteTypedKeyword(rule.id)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "#c00",
-                        cursor: "pointer",
-                        fontSize: FONT_SIZES.md,
-                        lineHeight: 1,
-                        padding: 0
-                      }}
-                      title={t.delete}
-                    >×</button>
-                  </div>
-                );
-              })}
-              {items.length === 0 && (
-                <div style={{ color: secondaryText, fontSize: FONT_SIZES.sm }}>{t.noKeywords}</div>
-              )}
-            </div>
-          </div>
-                );
-              })}
-            </div>
-          );
-        })}
-
-      </div>
-
-      {/* ========== Section 3: Semantic Prompts ========== */}
-      <div style={{
-        background: cardBg,
-        borderRadius: BORDER_RADIUS.lg,
-        border: `1px solid ${border}`,
-        padding: "16px 20px",
-        marginBottom: 20
-      }}>
-        <h3 style={{ margin: "0 0 8px", color: darkMode ? "#fff" : COLORS.text.primary, fontSize: FONT_SIZES.xl, fontWeight: 700 }}>
-          {t.semanticPrompts}
-        </h3>
-        <p style={{ margin: "0 0 16px", color: secondaryText, fontSize: FONT_SIZES.sm }}>
-          LLM 将根据此提示词判断文章是否属于该监控类型
-        </p>
-
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 0, marginBottom: 16 }}>
-          {SEMANTIC_TABS.map((tab, idx) => {
-            const isActive = semanticTab === tab.value;
+      {/* ========== Section 2: Purpose Cards (keywords + semantic prompt) ========== */}
+      <div style={{ marginBottom: 16 }}>
+        {/* Purpose tab switcher */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          {PURPOSES.map(p => {
+            const totalCount = rulesByPurpose[p.value].enterprise.length + rulesByPurpose[p.value].include_keyword.length + rulesByPurpose[p.value].exclude_keyword.length;
+            const isActive = activePurposeTab === p.value;
             return (
               <button
-                key={tab.value}
-                onClick={() => setSemanticTab(tab.value)}
+                key={p.value}
+                onClick={() => setActivePurposeTab(p.value)}
                 style={{
+                  display: "flex", alignItems: "center", gap: 8,
                   padding: "10px 20px",
-                  border: `1px solid ${border}`,
-                  borderBottom: isActive ? `2px solid ${COLORS.primary}` : `1px solid ${border}`,
-                  borderTopLeftRadius: idx === 0 ? BORDER_RADIUS.md : 0,
-                  borderTopRightRadius: idx === SEMANTIC_TABS.length - 1 ? BORDER_RADIUS.md : 0,
+                  borderRadius: BORDER_RADIUS.md,
+                  border: `1px solid ${isActive ? PURPOSE_DOTS[p.value] : border}`,
                   background: isActive ? (darkMode ? "#1c1f2b" : "#f5f5f5") : "transparent",
-                  color: isActive ? COLORS.primary : text,
+                  color: isActive ? PURPOSE_DOTS[p.value] : text,
                   fontSize: FONT_SIZES.md,
                   fontWeight: isActive ? 700 : 500,
                   cursor: "pointer",
-                  borderBottomColor: isActive ? COLORS.primary : border,
-                  marginRight: -1,
+                  transition: `all ${TRANSITIONS.fast}`
                 }}
               >
-                {t[tab.labelKey] || (language === "zh" ? PURPOSES.find(p => p.value === tab.value)?.zh : PURPOSES.find(p => p.value === tab.value)?.en)}
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: PURPOSE_DOTS[p.value] }} />
+                {language === "zh" ? p.zh : p.en}
+                <span style={{ fontSize: FONT_SIZES.xs, opacity: 0.7 }}>({totalCount})</span>
               </button>
             );
           })}
         </div>
 
-        {/* Active tab content */}
-        {SEMANTIC_TABS.map(tab => {
-          if (semanticTab !== tab.value) return null;
-          const cfg = semanticPrompts[tab.value] || { content: "", active: 1 };
+        {PURPOSES.filter(p => p.value === activePurposeTab).map(p => {
+          const purposeRules = rulesByPurpose[p.value];
+          const totalCount = purposeRules.enterprise.length + purposeRules.include_keyword.length + purposeRules.exclude_keyword.length;
+          const cfg = semanticPrompts[p.value] || { content: "", active: 1 };
+
+          const keywordGroups = [{
+            type: "enterprise",
+            label: t.enterpriseLabel || (language === "zh" ? "🏢 企业/主体关键词" : "🏢 Enterprise Keywords"),
+            items: purposeRules.enterprise,
+            placeholder: t.enterpriseKeywordPlaceholder || (language === "zh" ? "输入企业名，如：宁德时代" : "Enter company name...")
+          }, {
+            type: "include_keyword",
+            label: t.includeLabel || (language === "zh" ? "➕ 包含关键词" : "➕ Include Keywords"),
+            items: purposeRules.include_keyword,
+            placeholder: t.includeKeywordPlaceholder || (language === "zh" ? "输入动作词，如：合作、投资" : "Enter action word...")
+          }, {
+            type: "exclude_keyword",
+            label: t.excludeLabel || (language === "zh" ? "➖ 排除关键词" : "➖ Exclude Keywords"),
+            items: purposeRules.exclude_keyword,
+            placeholder: t.keywordPlaceholder || (language === "zh" ? "输入排除词，如：股价、涨停" : "Enter exclude word...")
+          }];
+
           return (
-            <div key={tab.value} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: text, fontSize: FONT_SIZES.sm }}>
-                <input
-                  type="checkbox"
-                  checked={!!cfg.active}
+            <div key={p.value} style={{
+              background: cardBg,
+              borderRadius: BORDER_RADIUS.lg,
+              border: `1px solid ${border}`,
+              padding: "16px 20px",
+              alignSelf: "start"
+            }}>
+              {/* Card header: name + count（默认样式，不加彩色） */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                <h3 style={{ margin: 0, fontSize: FONT_SIZES.xl, fontWeight: 700, color: darkMode ? "#fff" : COLORS.text.primary }}>
+                  {language === "zh" ? p.zh : p.en}
+                </h3>
+                <span style={{
+                  background: COLORS.primaryLight, color: COLORS.primary,
+                  fontSize: FONT_SIZES.xs, fontWeight: 700,
+                  padding: "2px 8px", borderRadius: 10
+                }}>{totalCount}</span>
+              </div>
+
+              {/* Keyword groups — KeywordList browser */}
+              {keywordGroups.map(({ type, label, items, placeholder }) => (
+                <KeywordList
+                  key={type}
+                  items={items}
+                  label={label}
+                  placeholder={placeholder}
+                  language={language}
+                  darkMode={darkMode}
+                  onAdd={(name, aliases) => addTypedKeyword(type, p.value, name, aliases)}
+                  onSaveEdit={(id, name, aliasString) => saveEditKeyword(id, name, aliasString)}
+                  onDelete={deleteTypedKeyword}
+                  onRegenerateAliases={regenerateAliases}
+                />
+              ))}
+
+              {/* Semantic prompt inside the card */}
+              <div style={{
+                borderTop: `1px dashed ${border}`,
+                paddingTop: 14,
+                marginTop: 4
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <h4 style={{ margin: 0, color: darkMode ? "#ccc" : COLORS.text.secondary, fontSize: FONT_SIZES.md, fontWeight: 600 }}>
+                    ⚙️ {t.semanticPromptShort || (language === "zh" ? "语义处理提示词" : "Semantic Prompt")}
+                  </h4>
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", color: text, fontSize: FONT_SIZES.xs }}>
+                    <input
+                      type="checkbox"
+                      checked={!!cfg.active}
+                      onChange={(e) => setSemanticPrompts(prev => ({
+                        ...prev,
+                        [p.value]: { ...prev[p.value], active: e.target.checked ? 1 : 0 }
+                      }))}
+                    />
+                    {t.enableSemantic}
+                  </label>
+                </div>
+                <textarea
+                  value={cfg.content || ""}
                   onChange={(e) => setSemanticPrompts(prev => ({
                     ...prev,
-                    [tab.value]: { ...prev[tab.value], active: e.target.checked ? 1 : 0 }
+                    [p.value]: { ...prev[p.value], content: e.target.value }
                   }))}
+                  rows={5}
+                  placeholder={language === "zh" ? "输入该监控类型的语义判断提示词..." : "Semantic prompt for this monitoring type..."}
+                  style={{ ...inputStyle, width: "100%", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", fontSize: FONT_SIZES.xs }}
                 />
-                {t.enableSemantic}
-              </label>
-              <textarea
-                value={cfg.content || ""}
-                onChange={(e) => setSemanticPrompts(prev => ({
-                  ...prev,
-                  [tab.value]: { ...prev[tab.value], content: e.target.value }
-                }))}
-                rows={8}
-                style={{ ...inputStyle, width: "100%", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }}
-              />
-              <button onClick={() => saveSemanticPrompt(tab.value)} style={{
-                padding: "8px 16px",
-                borderRadius: BORDER_RADIUS.md,
-                border: "none",
-                background: COLORS.primary,
-                color: "#fff",
-                fontSize: FONT_SIZES.md,
-                fontWeight: 600,
-                cursor: "pointer",
-                alignSelf: "flex-start"
-              }}>{t.save}</button>
+                <button onClick={() => saveSemanticPrompt(p.value)} style={{
+                  padding: "6px 16px", marginTop: 8,
+                  borderRadius: BORDER_RADIUS.md, border: "none",
+                  background: COLORS.primary, color: "#fff",
+                  fontSize: FONT_SIZES.sm, fontWeight: 600, cursor: "pointer",
+                  alignSelf: "flex-start"
+                }}>{t.save}</button>
+              </div>
             </div>
           );
         })}

@@ -1,5 +1,7 @@
 import * as cheerio from "cheerio";
 import Parser from "rss-parser";
+import { chromium } from "playwright";
+import iconv from "iconv-lite";
 import {
   fetchWithTimeout,
   resolveUrl,
@@ -184,7 +186,30 @@ async function fetchHtml(url, timeoutMs = 20000) {
     timeoutMs
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.text();
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return decodeHtmlBuffer(buffer, res.headers.get("content-type") || "");
+}
+
+/**
+ * Decode an HTML response buffer, handling GBK/GB2312/GB18030 pages that
+ * declare their charset in the Content-Type header or a <meta> tag.
+ * Falls back to UTF-8.
+ */
+export function decodeHtmlBuffer(buffer, contentType = "") {
+  // 1) charset from Content-Type header
+  const headerCharset = (contentType || "").match(/charset=([\w-]+)/i)?.[1];
+  // 2) charset from <meta charset=...> / <meta http-equiv="Content-Type" ... charset=...>
+  let html = buffer.toString("utf-8");
+  const metaCharset = html.match(/<meta[^>]+charset=["']?\s*([\w-]+)/i)?.[1];
+  const charset = headerCharset || metaCharset;
+  if (charset && /^gbk$|^gb2312$|^gb18030$/i.test(charset)) {
+    try {
+      return iconv.decode(buffer, charset.toLowerCase());
+    } catch {
+      // fall through to utf-8
+    }
+  }
+  return html;
 }
 
 async function fetchArticleDetail(url, detailSelectors = {}) {
@@ -363,6 +388,8 @@ export function extractArticleLinks(html, baseUrl, limit = 10, customListSelecto
     ? [customListSelectors, DEFAULT_LIST_SELECTORS]
     : [DEFAULT_LIST_SELECTORS];
 
+  const SHORT_TITLE_PATTERNS = /^(阅读更多|查看详情|了解更多|read more|view more|详细|详情|more|learn more)$/i;
+
   for (const selectors of selectorGroups) {
     for (const selector of selectors) {
       $(selector).each((_i, el) => {
@@ -372,6 +399,38 @@ export function extractArticleLinks(html, baseUrl, limit = 10, customListSelecto
         if (!url || seen.has(url)) return;
 
         let title = $el.text().trim();
+        // If link text is empty/short/generic, try image alt, then nearby heading
+        if (!title || SHORT_TITLE_PATTERNS.test(title)) {
+          // 1) Image alt inside the link (common on news portals: <a><img alt="标题"></a>)
+          const imgAlt = $el.find("img[alt]").first().attr("alt")?.trim();
+          if (imgAlt && imgAlt.length >= 5) {
+            title = imgAlt;
+          } else {
+            // 2) Search upward for a heading (h1-h6) or known title class
+            let $parent = $el.parent();
+            for (let depth = 0; depth < 5 && $parent.length; depth++) {
+              const $heading = $parent.find("h1, h2, h3, h4, h5, h6, .title, .headline, [class*='__title']").first();
+              if ($heading.length) {
+                const headingText = $heading.text().trim();
+                if (headingText && headingText.length >= 5) {
+                  title = headingText;
+                  break;
+                }
+              }
+              // Also check siblings at this level
+              const $sibling = $parent.children("h1, h2, h3, h4, h5, h6, .title, .headline, [class*='__title']").first();
+              if ($sibling.length) {
+                const sibText = $sibling.text().trim();
+                if (sibText && sibText.length >= 5) {
+                  title = sibText;
+                  break;
+                }
+              }
+              $parent = $parent.parent();
+            }
+          }
+        }
+
         if (!title) {
           title = $el.attr("title")?.trim() || "";
         }
@@ -409,6 +468,209 @@ function scoreAndLimit(links, config) {
     .map(link => ({ ...link, score: scoreArticleLink(link) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, config.articleLimit * 2);
+}
+
+/**
+ * Playwright-based fallback for JS-heavy / anti-bot sites.
+ * Renders the page in a headless browser and extracts article links.
+ */
+async function fetchWithPlaywright(source) {
+  const config = parseConfig(source);
+  let browser;
+  try {
+    console.log(`[website] Trying Playwright for ${source.name}: ${source.url}`);
+    browser = await chromium.launch({
+      headless: true,
+      args: [
+        "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-infobars",
+        "--disable-dev-shm-usage"
+      ]
+    });
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      viewport: { width: 1440, height: 900 },
+      locale: "zh-CN",
+      timezoneId: "Asia/Shanghai"
+    });
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+      Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
+      Object.defineProperty(navigator, "languages", { get: () => ["zh-CN", "zh", "en"] });
+    });
+
+    const page = await context.newPage();
+
+    // Passive interception: listen for JSON API responses
+    const apiArticles = [];
+    const apiResponsePromises = [];
+    const apiResponseHandler = (resp) => {
+      const url = resp.url();
+      const ct = (resp.headers()["content-type"] || "").toLowerCase();
+      if (!ct.includes("json")) return;
+      if (url.includes("favicon") || url.includes("manifest")) return;
+      const p = resp.text().then(body => {
+        if (!body || body.length < 50 || body.length > 500000) return;
+        try {
+          const data = JSON.parse(body);
+          const results = data?.data?.results || data?.data?.list || data?.results || data?.list || [];
+          if (Array.isArray(results) && results.length > 0 && results[0]?.title) {
+            console.log(`[website] Playwright API found: ${url.slice(0, 100)} (${results.length} items)`);
+            for (const item of results.slice(0, 20)) {
+              const title = item.title || item.name || "";
+              const link = item.url || item.link || item.href || "";
+              if (title.length >= 5) {
+                apiArticles.push({ title, url: link ? resolveUrl(source.url, link) : "" });
+              }
+            }
+          }
+        } catch {}
+      }).catch(() => {});
+      apiResponsePromises.push(p);
+    };
+    page.on("response", apiResponseHandler);
+
+    await page.goto(source.url, { waitUntil: "load", timeout: 20000 });
+    // Wait for API calls and dynamic content to load
+    await page.waitForTimeout(5000);
+
+    // Wait for all captured API responses to be processed
+    await Promise.all(apiResponsePromises);
+    page.off("response", apiResponseHandler);
+
+    // Scroll to trigger lazy loads
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(1500);
+
+    // If API articles were found, use them directly (most reliable)
+    if (apiArticles.length > 0) {
+      console.log(`[website] Playwright API discovery: ${apiArticles.length} articles`);
+      const unique = [];
+      const seen = new Set();
+      for (const a of apiArticles) {
+        const key = a.url || a.title;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(a);
+      }
+
+      const articles = [];
+      for (const api of unique.slice(0, config.articleLimit * 2)) {
+        try {
+          if (config.requireNewsPattern && !isNewsTitle(api.title)) continue;
+          // For API-discovered articles, use title directly; try detail fetch if URL available
+          if (api.url) {
+            try {
+              const detail = await fetchArticleDetail(api.url, config.detailSelectors);
+              // If detail title looks like the actual article title (not generic site title), use detail
+              if (detail.title && detail.title.length >= 10 &&
+                  !detail.title.includes(source.name) &&
+                  detail.title !== api.title) {
+                articles.push(detail);
+              } else {
+                // Use API-provided title — more reliable for SPA sites
+                articles.push({
+                  title: api.title, summary: detail.summary || "",
+                  url: api.url,
+                  publishDate: detail.publishDate || new Date().toISOString(),
+                  rawContent: detail.rawContent || ""
+                });
+              }
+            } catch {
+              articles.push({
+                title: api.title, summary: "",
+                url: api.url,
+                publishDate: new Date().toISOString(),
+                rawContent: ""
+              });
+            }
+          } else {
+            articles.push({
+              title: api.title, summary: "",
+              url: "",
+              publishDate: new Date().toISOString(),
+              rawContent: ""
+            });
+          }
+          if (articles.length >= config.articleLimit) break;
+        } catch (e) {
+          console.error(`[website] Playwright API article processing failed:`, e.message);
+        }
+        await sleep(200);
+      }
+      await context.close();
+      return articles;
+    }
+
+    // Fall back to DOM link extraction
+    const html = await page.content();
+    const $ = cheerio.load(html);
+    const links = extractArticleLinks(html, source.url, config.articleLimit * 3, config.listSelectors);
+
+    let allLinks = [...links];
+    if (allLinks.length === 0) {
+      allLinks = await page.evaluate(() => {
+        const results = [];
+        const seen = new Set();
+        document.querySelectorAll("a[href]").forEach(a => {
+          const href = a.getAttribute("href");
+          if (!href || href === "#" || href === "/" || href.startsWith("javascript:") || href.startsWith("mailto:")) return;
+          if (seen.has(href)) return;
+          seen.add(href);
+          let title = (a.textContent || "").trim();
+          if (title.length < 5) {
+            let el = a.parentElement;
+            for (let i = 0; i < 6 && el; i++) {
+              const h = el.querySelector("h1, h2, h3, h4, h5, h6, .title, .headline, [class*=\"__title\"], [class*=\"-title\"]");
+              if (h) {
+                const t = h.textContent.trim();
+                if (t.length >= 5) { title = t; break; }
+              }
+              el = el.parentElement;
+            }
+          }
+          if (title.length >= 5) results.push({ href, title });
+        });
+        return results;
+      });
+      allLinks = allLinks
+        .filter(l => l.title.length >= 5)
+        .map(l => ({ url: resolveUrl(source.url, l.href), title: l.title, date: null }));
+    }
+
+    console.log(`[website] Playwright DOM found ${allLinks.length} candidate links`);
+
+    if (allLinks.length === 0) { await context.close(); return []; }
+
+    const scored = scoreAndLimit(allLinks, config);
+    const articles = [];
+    for (const link of scored.slice(0, config.articleLimit * 2)) {
+      try {
+        if (config.requireNewsPattern && !isNewsTitle(link.title)) continue;
+        const article = await fetchArticleDetail(link.url, config.detailSelectors);
+        if (!article.title) article.title = link.title;
+        articles.push(article);
+        if (articles.length >= config.articleLimit) break;
+      } catch (e) {
+        console.error(`[website] Playwright: failed detail fetch ${link.url}:`, e.message);
+      }
+      await sleep(300);
+    }
+
+    await context.close();
+    return articles;
+  } catch (e) {
+    console.error(`[website] Playwright fallback failed for ${source.name}:`, e.message);
+    return [];
+  } finally {
+    if (browser) {
+      try { await browser.close(); } catch {}
+    }
+  }
 }
 
 export async function fetchArticles(source) {
@@ -500,5 +762,18 @@ export async function fetchArticles(source) {
     }
   }
 
-  throw new Error("No articles found via RSS, sitemap or HTML list");
+  // 4) Playwright headless browser fallback (for JS-heavy / anti-bot sites)
+  if (strategy === "auto" || strategy === "browser") {
+    try {
+      const pwArticles = await fetchWithPlaywright(source);
+      if (pwArticles.length > 0) {
+        console.log(`[website] Playwright returned ${pwArticles.length} articles`);
+        return pwArticles.map(a => ({ ...a, source: source.name || "" }));
+      }
+    } catch (e) {
+      console.error("[website] Playwright strategy failed:", e.message);
+    }
+  }
+
+  throw new Error("No articles found via RSS, sitemap, HTML list or browser");
 }

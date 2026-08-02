@@ -80,6 +80,8 @@ export const backendApi = {
   createFilterRule: (rule) => request("/filters/rules", { method: "POST", body: JSON.stringify(rule) }),
   updateFilterRule: (id, rule) => request(`/filters/rules/${id}`, { method: "PUT", body: JSON.stringify(rule) }),
   deleteFilterRule: (id) => request(`/filters/rules/${id}`, { method: "DELETE" }),
+  regenerateAliases: (id, opts = {}) => request(`/filters/rules/${id}/regenerate-aliases`, { method: "POST", body: JSON.stringify(opts) }),
+  generateAliasesPreview: (keyword) => request("/industries/suggest-keywords", { method: "POST", body: JSON.stringify({ keyword }) }),
   getBusinessCategories: () => request("/filters/categories"),
   updateBusinessCategory: (id, category) => request(`/filters/categories/${id}`, { method: "PUT", body: JSON.stringify(category) }),
   getSemanticConfig: (purpose) => {

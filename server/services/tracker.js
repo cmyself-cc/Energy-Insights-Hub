@@ -6,7 +6,7 @@ import { loadActiveCategories, matchesEnabledCategory } from "./businessCategori
 import { loadFilterRules, groupRulesByPurpose } from "./filterRules.js";
 import { loadSettings } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
-import { applyKeywordGate, applyIndustryFilter } from "./keywordGate.js";
+import { applyKeywordGate, applyIndustryFilter, loadIndustryKeywordsWithAliases } from "./keywordGate.js";
 import { deduplicateItems } from "./dedup.js";
 import { applyUserFeedbackScore, loadSemanticWeights } from "./feedbackWeights.js";
 
@@ -279,13 +279,49 @@ export async function runTracker(runId = null) {
 
   console.log(`[tracker] Phase 1 complete: ${allCollected.length} items collected`);
 
-  // Industry filter on combined pool
+  // Industry filter on combined pool (with alias expansion from industry_categories)
   let candidates = allCollected;
-  const industryKeywords = settings.requiredIndustryKeywords;
-  if (industryKeywords && industryKeywords.length > 0) {
-    candidates = applyIndustryFilter(allCollected, industryKeywords);
+  const industryKeywords = loadIndustryKeywordsWithAliases();
+  const requiredIndustrySet = new Set((settings.requiredIndustryKeywords || []).map(k => String(k).toLowerCase()));
+  // Only apply aliases for keywords that are actually in the required list (if the list is non-empty)
+  const effectiveIndustryKeywords = (settings.requiredIndustryKeywords || []).length > 0
+    ? industryKeywords.filter(k => requiredIndustrySet.has(String(k.name).toLowerCase()))
+    : industryKeywords;
+  if (effectiveIndustryKeywords.length > 0) {
+    candidates = applyIndustryFilter(allCollected, effectiveIndustryKeywords);
     console.log(`[tracker] After industry filter: ${candidates.length} items`);
   }
+
+  // Date-based lookback filter
+  const lookbackHours = settings.lookbackHours || 168;
+  const cutoffDate = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
+  const dateFiltered = [];
+  let dateExcluded = 0;
+  for (const item of candidates) {
+    const pd = item.publishDate;
+    if (!pd) {
+      // No date available — include but mark as undated
+      dateFiltered.push(item);
+      continue;
+    }
+    const d = new Date(pd);
+    if (isNaN(d.getTime())) {
+      dateFiltered.push(item);
+      continue;
+    }
+    if (d >= cutoffDate) {
+      dateFiltered.push(item);
+    } else {
+      dateExcluded++;
+      if (process.env.TRACE_KEYWORD_GATE === "1") {
+        console.log(`[date-filter] EXCLUDED: date=${pd.slice(0,10)} older than cutoff=${cutoffDate.toISOString().slice(0,10)} — "${(item.title||'').slice(0,50)}"`);
+      }
+    }
+  }
+  if (dateExcluded > 0) {
+    console.log(`[tracker] Date filter: excluded ${dateExcluded} items older than ${lookbackHours}h`);
+  }
+  candidates = dateFiltered;
 
   // =====================================================================
   // Phase 2: Filtering (40-60%)

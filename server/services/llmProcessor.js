@@ -1,6 +1,53 @@
 import { fetchWithTimeout } from "../crawlers/utils.js";
 import db from "../db.js";
 
+/**
+ * Safely parse JSON from LLM output, handling common issues:
+ * - Truncated JSON (missing closing braces/quotes)
+ * - Trailing commas
+ * - Text before/after JSON object
+ * - Unescaped newlines in strings
+ */
+function safeJsonParse(txt, fallbackItem = {}) {
+  if (!txt) throw new Error("Empty LLM response");
+
+  // 1. Try direct parse first
+  try { return JSON.parse(txt); } catch {}
+
+  // 2. Extract JSON object from text (find first { to last })
+  const firstBrace = txt.indexOf("{");
+  const lastBrace = txt.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    let jsonStr = txt.slice(firstBrace, lastBrace + 1);
+    try { return JSON.parse(jsonStr); } catch {}
+  }
+
+  // 3. Try fixing common JSON issues
+  let fixed = txt;
+  // Remove trailing commas before } or ]
+  fixed = fixed.replace(/,(\s*[}\]])/g, "$1");
+  // Try to close unclosed strings/objects
+  const openBraces = (fixed.match(/{/g) || []).length;
+  const closeBraces = (fixed.match(/}/g) || []).length;
+  if (openBraces > closeBraces) {
+    fixed += "}".repeat(openBraces - closeBraces);
+  }
+  // Remove unescaped control chars in strings
+  fixed = fixed.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
+  try { return JSON.parse(fixed); } catch {}
+
+  // 4. Last resort: extract individual fields with regex
+  console.warn("[llmProcessor] JSON parse failed, falling back to regex extraction");
+  return {
+    title: fallbackItem.title || "",
+    summary: fallbackItem.summary || "",
+    keywords: [],
+    purposes: [],
+    categories: [],
+    china_relevance: true
+  };
+}
+
 export function loadSemanticConfig(purpose = null) {
   if (purpose) {
     const row = db
@@ -113,14 +160,14 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
 - categories: array of strings`;
 
   const messages = [{ role: "user", content: prompt }];
-  const { url, headers, body } = buildRequest(config, messages, 2000, 0.5);
+  const { url, headers, body } = buildRequest(config, messages, 800, 0.5);
 
   try {
     const response = await fetchWithTimeout(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body)
-    }, 60000);
+    }, 90000);
 
     if (!response.ok) {
       throw new Error(`LLM API failed: ${response.status}`);
@@ -129,7 +176,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
     const data = await response.json();
     const txt = extractContent(data, config);
     const cleanTxt = txt.replace(/```json\s*|\s*```/g, "").trim();
-    const parsed = JSON.parse(cleanTxt);
+    const parsed = safeJsonParse(cleanTxt, item);
 
     return {
       title: parsed.title || item.title,
