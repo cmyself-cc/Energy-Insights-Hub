@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM docker.1panel.live/library/node:22-alpine AS build
 
 RUN apk add --no-cache python3 make g++
 
@@ -16,7 +16,7 @@ COPY src/ ./src/
 COPY public/ ./public/
 RUN npm run build
 
-FROM node:22-alpine
+FROM docker.1panel.live/library/node:22-alpine
 
 RUN apk add --no-cache python3 make g++
 
