@@ -1,7 +1,22 @@
 import * as cheerio from "cheerio";
+import { loadSettings } from "../lib/trackerSettings.js";
 
 const DEFAULT_ARTICLE_LIMIT = 20;
 const DEFAULT_LOOKBACK_HOURS = 720; // default 30 days to match tracker lookback
+
+/**
+ * 计算每个公众号的抓取上限。优先级：
+ * 1. 源 config.perFeedLimit（跟踪设置保存时同步写入）
+ * 2. 指定了 feedId 时用 articleLimit
+ * 3. 全局 tracker_settings.wechat_mcp_per_feed_limit（未同步到源 config 时的兜底）
+ * 4. 兜底：articleLimit 按 feed 数量平均分配
+ */
+export function resolvePerFeedLimit({ configPerFeedLimit, feedId, articleLimit, feedCount, globalPerFeedLimit }) {
+  if (configPerFeedLimit) return Math.max(1, parseInt(configPerFeedLimit, 10) || 1);
+  if (feedId) return articleLimit;
+  if (globalPerFeedLimit) return Math.max(1, Number(globalPerFeedLimit) || 1);
+  return Math.max(1, Math.ceil(articleLimit / Math.max(1, feedCount)));
+}
 
 function parseConfig(source) {
   let config = source.config || {};
@@ -264,11 +279,16 @@ export async function fetchArticles(source) {
       throw new Error("No WeChat feeds found in MCP server");
     }
 
-    // 每个公众号抓取上限：优先用 config.perFeedLimit（跟踪设置可配），
-    // 否则按 articleLimit 平均分配
-    const perFeedLimit = config.perFeedLimit
-      ? Math.max(1, parseInt(config.perFeedLimit, 10) || 1)
-      : (feedId ? articleLimit : Math.max(1, Math.ceil(articleLimit / feedIds.length)));
+    // 每个公众号抓取上限：优先 config.perFeedLimit，其次全局 tracker_settings，
+    // 最后按 articleLimit 平均分配（resolvePerFeedLimit 统一决策）
+    const settings = loadSettings();
+    const perFeedLimit = resolvePerFeedLimit({
+      configPerFeedLimit: config.perFeedLimit,
+      feedId,
+      articleLimit,
+      feedCount: feedIds.length,
+      globalPerFeedLimit: settings.wechatMcpPerFeedLimit,
+    });
     const cutoff = Date.now() - lookbackHours * 60 * 60 * 1000;
     const articles = [];
 
