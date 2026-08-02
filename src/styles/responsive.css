@@ -229,12 +229,17 @@
     padding: 16px !important;
   }
 
-  .insight-grid {
-    grid-template-columns: 1fr !important;
-  }
-
   header > div:first-child > div:last-child {
     display: none !important;
+  }
+}
+
+/* insight-grid 单列断点降到 560px：
+   避免 Windows 高缩放下 Edge 视口偏窄被误判为单列；
+   桌面窗口（即使缩放）保持多列，仅真移动/极小窗口单列 */
+@media (max-width: 560px) {
+  .insight-grid {
+    grid-template-columns: 1fr !important;
   }
 }
 

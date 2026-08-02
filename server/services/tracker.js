@@ -63,8 +63,8 @@ function deriveFields(item, source) {
   const keywords = item.keywords || [];
   const text = `${item.title || ""} ${item.summary || ""} ${keywords.join(" ")}`.toLowerCase();
 
-  // Derive sourceType from source type
-  const sourceType = SOURCE_TYPE_MAP[source?.type] || "新闻门户";
+  // Derive sourceType from source type（优先用收集时带上的 sourceType）
+  const sourceType = item.sourceType || SOURCE_TYPE_MAP[source?.type] || "新闻门户";
 
   // LLM-provided categories take precedence
   let categories = Array.isArray(item.categories) ? item.categories : [];
@@ -255,7 +255,14 @@ export async function runTracker(runId = null) {
           "SELECT id FROM insights WHERE url = ? OR title = ?"
         ).get(item.url || "", item.title);
         if (!existing) {
-          allCollected.push({ ...item, sourceId: source.id, source });
+          // 保留 crawler 返回的 item.source（wechat_mcp = 公众号名），
+          // 仅在缺失时回退到源名；同时带上源类型供后续派生使用
+          allCollected.push({
+            ...item,
+            sourceId: source.id,
+            source: item.source || source.name,
+            sourceType: SOURCE_TYPE_MAP[source.type]
+          });
           newCount++;
         }
       }
@@ -500,7 +507,7 @@ export async function runTracker(runId = null) {
           if (!row.title) continue;
           insert.run(
             row.sourceId, row.title, row.summary, row.url, row.publishDate,
-            row.sourceType, row.source?.name || null,
+            row.sourceType, row.source || null,
             row.businessDomain, row.enterpriseType,
             JSON.stringify(row.entities), JSON.stringify(row.features),
             row.rawContent || row.summary || "",

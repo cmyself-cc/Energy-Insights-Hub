@@ -103,6 +103,13 @@ export const backendApi = {
   saveLlmEnv: (baseUrl, modelId) => request("/tracker-settings/save-llm-env", { method: "POST", body: JSON.stringify({ baseUrl, modelId }) }),
   testLlm: (modelId) => request("/tracker-settings/test-llm", { method: "POST", body: JSON.stringify({ modelId }) }),
 
+  // Server-managed models (browser never sees baseUrl/apiKey)
+  getModels: () => request("/models"),
+  getCurrentModel: () => request("/models/current"),
+  addModel: (data) => request("/models", { method: "POST", body: JSON.stringify(data) }),
+  setActiveModel: (id) => request(`/models/${id}/active`, { method: "PUT" }),
+  deleteModel: (id) => request(`/models/${id}`, { method: "DELETE" }),
+
   // Industry categories
   getIndustryCategories: () => request("/industries"),
   createIndustryCategory: (data) => request("/industries", { method: "POST", body: JSON.stringify(data) }),

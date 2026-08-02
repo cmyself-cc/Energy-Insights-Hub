@@ -13,6 +13,7 @@ const TABS = [
   { key: "ai", icon: "◇", labelKey: "aiConfig" },
   { key: "feedback", icon: "✦", labelKey: "feedback" },
   { key: "tracker", icon: "⚙", labelKey: "trackerSettingsTab" },
+  { key: "models", icon: "⊙", labelKey: "globalConfigTab" },
 ];
 
 export default function ConfigurationPage({ darkMode, language, onTrackerComplete }) {
@@ -28,7 +29,20 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
   const [aiModelId, setAiModelId] = useState(() => localStorage.getItem("ai_model_id") || "");
   const [savedModels, setSavedModels] = useState([]);
   const [configMessage, setConfigMessage] = useState(null);
+  const [modelMessage, setModelMessage] = useState(null);
+  const [modelForm, setModelForm] = useState({ name: "", baseUrl: "", modelId: "", apiKey: "" });
   const fileInputRef = useRef(null);
+
+  const loadModels = async () => {
+    try {
+      const res = await backendApi.getModels();
+      setSavedModels(res.data || []);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    loadModels();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -45,11 +59,6 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
       } catch (e) { /* ignore */ }
       setLoading(false);
     })();
-    try {
-      const raw = localStorage.getItem("energy_insights_api_config");
-      const parsed = raw ? JSON.parse(raw) : [];
-      setSavedModels(Array.isArray(parsed) ? parsed : [parsed]);
-    } catch { setSavedModels([]); }
   }, []);
 
   const saveAiPresets = async () => {
@@ -140,6 +149,54 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
       setConfigMessage({ type: "error", text: e.message });
     }
     setTimeout(() => setConfigMessage(null), 5000);
+  };
+
+  // --- 全局模型配置 ---
+  const handleAddModel = async () => {
+    const f = modelForm;
+    if (!f.baseUrl.trim() || !f.modelId.trim()) {
+      setModelMessage({ type: "error", text: language === "zh" ? "Base URL 和模型 ID 必填" : "Base URL and model ID are required" });
+      return;
+    }
+    try {
+      const res = await backendApi.addModel({
+        name: f.name.trim() || f.modelId.trim(),
+        baseUrl: f.baseUrl.trim(),
+        modelId: f.modelId.trim(),
+        apiKey: f.apiKey.trim()
+      });
+      setSavedModels(res.data || []);
+      setModelForm({ name: "", baseUrl: "", modelId: "", apiKey: "" });
+      setModelMessage({ type: "success", text: language === "zh" ? "模型已添加并设为生效" : "Model added and activated" });
+      // 通知 Header 刷新当前模型
+      window.dispatchEvent(new Event("model-updated"));
+    } catch (e) {
+      setModelMessage({ type: "error", text: e.message });
+    }
+    setTimeout(() => setModelMessage(null), 3000);
+  };
+
+  const handleSetActiveModel = async (id) => {
+    try {
+      const res = await backendApi.setActiveModel(id);
+      setSavedModels(res.data || []);
+      setModelMessage({ type: "success", text: language === "zh" ? "已切换生效模型" : "Active model switched" });
+      window.dispatchEvent(new Event("model-updated"));
+    } catch (e) {
+      setModelMessage({ type: "error", text: e.message });
+    }
+    setTimeout(() => setModelMessage(null), 3000);
+  };
+
+  const handleDeleteModel = async (id) => {
+    if (!confirm(language === "zh" ? "确定删除该模型配置？" : "Delete this model config?")) return;
+    try {
+      await backendApi.deleteModel(id);
+      await loadModels();
+      window.dispatchEvent(new Event("model-updated"));
+    } catch (e) {
+      setModelMessage({ type: "error", text: e.message });
+    }
   };
 
   return (
@@ -250,8 +307,8 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
               }}
             >
               <option key="global" value="">{language === "zh" ? "使用全局模型" : "Use global"}</option>
-              {savedModels.map(c => (
-                <option key={c.id} value={c.id}>{c.providerName} / {c.modelId}</option>
+              {savedModels.map(m => (
+                <option key={m.id} value={String(m.id)}>{m.name} / {m.modelId}</option>
               ))}
             </select>
           </div>
@@ -306,6 +363,119 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
       )}
       {tab === "feedback" && <FeedbackPage darkMode={darkMode} language={language} />}
       {tab === "tracker" && <TrackerSettingsPage darkMode={darkMode} language={language} />}
+      {tab === "models" && (
+        <div style={{ background: cardBg, borderRadius: BORDER_RADIUS.lg, border: `1px solid ${border}`, padding: "24px" }}>
+          <h3 style={{ fontSize: FONT_SIZES.xl, fontWeight: 700, color: text, margin: "0 0 6px" }}>
+            {language === "zh" ? "全局模型配置" : "Global Model Config"}
+          </h3>
+          <p style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : "#999", marginBottom: 20 }}>
+            {language === "zh"
+              ? "模型配置保存在服务器端，API Key 不会暴露到浏览器/公网。添加后自动设为生效模型并同步服务器 .env。"
+              : "Model configs are stored server-side; API keys never reach the browser. Adding a model activates it and syncs the server .env."}
+          </p>
+
+          {modelMessage && (
+            <div style={{ padding: "10px 16px", borderRadius: 8, marginBottom: 16, background: modelMessage.type === "success" ? "#e8f5ee" : "#fff0f0", border: modelMessage.type === "success" ? "1px solid #1a6b3c" : "1px solid #fcc", color: modelMessage.type === "success" ? "#1a6b3c" : "#c00", fontSize: FONT_SIZES.sm, fontWeight: 500 }}>
+              {modelMessage.type === "success" ? "✓" : "✗"} {modelMessage.text}
+            </div>
+          )}
+
+          {/* 模型列表 */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: darkMode ? "#ccc" : COLORS.text.secondary, marginBottom: 8 }}>
+              {language === "zh" ? "已配置模型" : "Configured Models"} ({savedModels.length})
+            </div>
+            {savedModels.length === 0 ? (
+              <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#777" : "#999" }}>
+                {language === "zh" ? "暂无模型，请在下方添加。" : "No models yet. Add one below."}
+              </div>
+            ) : (
+              savedModels.map(m => (
+                <div key={m.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "10px 14px", borderRadius: 8, marginBottom: 6,
+                  background: m.isActive ? COLORS.primaryLight : (darkMode ? "#1c1f2b" : "#f5f5f5"),
+                  border: `1px solid ${m.isActive ? COLORS.primary : (darkMode ? COLORS.border.dark : "#e8e8e8")}`
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: darkMode ? "#e8e8e8" : "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
+                      {m.isActive && (
+                        <span style={{ fontSize: 10, color: "#fff", background: COLORS.primary, padding: "1px 6px", borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>
+                          {language === "zh" ? "生效中" : "Active"}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: darkMode ? "#888" : "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.modelId}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                    {!m.isActive && (
+                      <button onClick={() => handleSetActiveModel(m.id)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${COLORS.primary}`, background: COLORS.primary, color: "#fff", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        {language === "zh" ? "设为生效" : "Activate"}
+                      </button>
+                    )}
+                    <button onClick={() => handleDeleteModel(m.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #c00", background: "transparent", color: "#c00", fontSize: 12, cursor: "pointer" }}>
+                      {language === "zh" ? "删除" : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 添加模型表单 */}
+          <div style={{ borderTop: `1px dashed ${border}`, paddingTop: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: darkMode ? "#ccc" : COLORS.text.secondary, marginBottom: 12 }}>
+              {language === "zh" ? "添加新模型" : "Add New Model"}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "#aaa" : "#666", marginBottom: 4 }}>{language === "zh" ? "名称（可选）" : "Name (optional)"}</label>
+                <input
+                  value={modelForm.name}
+                  onChange={e => setModelForm({ ...modelForm, name: e.target.value })}
+                  placeholder={language === "zh" ? "如：硅基流动 DeepSeek" : "e.g. SiliconFlow DeepSeek"}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "#aaa" : "#666", marginBottom: 4 }}>Base URL *</label>
+                <input
+                  value={modelForm.baseUrl}
+                  onChange={e => setModelForm({ ...modelForm, baseUrl: e.target.value })}
+                  placeholder="https://api.siliconflow.cn/v1"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "#aaa" : "#666", marginBottom: 4 }}>{language === "zh" ? "模型 ID *" : "Model ID *"}</label>
+                <input
+                  value={modelForm.modelId}
+                  onChange={e => setModelForm({ ...modelForm, modelId: e.target.value })}
+                  placeholder="deepseek-ai/DeepSeek-V4-Flash"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "#aaa" : "#666", marginBottom: 4 }}>
+                  API Key {language === "zh" ? "（仅存服务器）" : "(server only)"}
+                </label>
+                <input
+                  type="password"
+                  value={modelForm.apiKey}
+                  onChange={e => setModelForm({ ...modelForm, apiKey: e.target.value })}
+                  placeholder="sk-..."
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+            </div>
+            <button onClick={handleAddModel} style={{
+              padding: "10px 20px", borderRadius: BORDER_RADIUS.md, border: "none",
+              background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.md, fontWeight: 600, cursor: "pointer"
+            }}>{language === "zh" ? "添加并设为生效" : "Add & Activate"}</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

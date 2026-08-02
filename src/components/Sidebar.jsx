@@ -56,14 +56,19 @@ export default function Sidebar({ darkMode, language, activeTab, onTabChange, co
       {!collapsed && (
         <div style={{
           marginTop: "auto",
-          padding: "16px 24px",
-          borderTop: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`
+          padding: "0 24px",
+          borderTop: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: 72,
+          boxSizing: "border-box"
         }}>
           <a
             href="https://cmyself.cc"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ display: "block" }}
+            style={{ display: "block", lineHeight: 0 }}
           >
             <img
               src="/cmflow-logo.png"

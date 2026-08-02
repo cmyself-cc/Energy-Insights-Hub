@@ -1,48 +1,21 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
-import { storage } from "../utils/storage";
 import { backendApi } from "../utils/backendApi";
 import TrackerProgress from "./TrackerProgress";
 
-export default function Header({ darkMode, language, onLanguageToggle, onOpenApiConfig }) {
-  const [configs, setConfigs] = useState([]);
-  const [current, setCurrent] = useState(null);
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+export default function Header({ darkMode, language, onLanguageToggle }) {
+  const [currentModel, setCurrentModel] = useState(null);
 
   useEffect(() => {
-    const saved = storage.getApiConfigs();
-    setConfigs(saved);
-    setCurrent(saved.length > 0 ? saved[0] : null);
-  }, []);
-
-  useEffect(() => {
-    const handler = () => {
-      const saved = storage.getApiConfigs();
-      setConfigs(saved);
-      setCurrent(saved.length > 0 ? saved[0] : null);
+    const load = () => {
+      backendApi.getCurrentModel()
+        .then(res => setCurrentModel(res.data || null))
+        .catch(() => {});
     };
-    window.addEventListener("api-config-updated", handler);
-    return () => window.removeEventListener("api-config-updated", handler);
+    load();
+    window.addEventListener("model-updated", load);
+    return () => window.removeEventListener("model-updated", load);
   }, []);
-
-  useEffect(() => {
-    const handleClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const switchConfig = (id) => {
-    const cfg = storage.switchApiConfig(id);
-    if (cfg) {
-      setConfigs(storage.getApiConfigs());
-      setCurrent(cfg);
-      setOpen(false);
-      // 同步到服务器 .env，使服务端 LLM 调用（tracker、同义词生成、行业建议等）
-      // 跟随全局模型选择（apiKey 保留在服务器 .env，不传）
-      backendApi.saveLlmEnv(cfg.baseUrl, cfg.modelId).catch(() => {});
-    }
-  };
 
   return (
     <header style={{ position: "sticky", top: 0, zIndex: 100, height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", background: darkMode ? COLORS.background.cardDark : COLORS.background.card, borderBottom: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
@@ -56,37 +29,19 @@ export default function Header({ darkMode, language, onLanguageToggle, onOpenApi
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <TrackerProgress darkMode={darkMode} language={language} />
-        {/* Model quick switch */}
-        <div ref={ref} style={{ position: "relative" }}>
-          <button onClick={() => setOpen(!open)} style={{
+        {/* 当前生效模型（只读展示，配置在设置页全局配置） */}
+        <div
+          title={language === "zh" ? "当前生效模型（在设置页全局配置中管理）" : "Active model (manage in Settings → Global Config)"}
+          style={{
             padding: "6px 12px", borderRadius: BORDER_RADIUS.md,
             border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-            background: current ? COLORS.primaryLight : "transparent",
-            color: current ? COLORS.primary : (darkMode ? "#888" : "#999"),
-            fontSize: FONT_SIZES.sm, fontWeight: 500, cursor: "pointer",
-            display: "flex", alignItems: "center", gap: 6, maxWidth: 300
-          }}>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
-              {current ? `${current.providerName} / ${current.modelId}` : (language === "zh" ? "未配置模型" : "No model")}
-            </span>
-            <span style={{ fontSize: 10 }}>▼</span>
-          </button>
-          {open && (
-            <div style={{ position: "absolute", top: 38, right: 0, minWidth: 220, background: darkMode ? COLORS.background.cardDark : "#fff", border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`, borderRadius: BORDER_RADIUS.md, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", zIndex: 200, padding: "4px 0" }}>
-              {configs.map(c => (
-                <button key={c.id} onClick={() => switchConfig(c.id)} style={{
-                  display: "block", width: "100%", padding: "10px 16px", border: "none", background: c.id === current?.id ? COLORS.primaryLight : "transparent",
-                  color: darkMode ? "#e8e8e8" : COLORS.text.primary, fontSize: FONT_SIZES.sm, textAlign: "left", cursor: "pointer"
-                }}>
-                  <div style={{ fontWeight: 600 }}>{c.providerName}</div>
-                  <div style={{ fontSize: 11, color: darkMode ? "#888" : "#999" }}>{c.modelId}</div>
-                </button>
-              ))}
-              <div style={{ borderTop: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`, marginTop: 4, paddingTop: 4 }}>
-                <button onClick={() => { setOpen(false); onOpenApiConfig(); }} style={{ display: "block", width: "100%", padding: "10px 16px", border: "none", background: "transparent", color: COLORS.primary, fontSize: FONT_SIZES.sm, textAlign: "left", cursor: "pointer", fontWeight: 600 }}>+ {language === "zh" ? "添加配置" : "Add config"}</button>
-              </div>
-            </div>
-          )}
+            background: currentModel ? COLORS.primaryLight : "transparent",
+            color: currentModel ? COLORS.primary : (darkMode ? "#888" : "#999"),
+            fontSize: FONT_SIZES.sm, fontWeight: 500,
+            maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+          }}
+        >
+          {currentModel ? (currentModel.name || currentModel.modelId) : (language === "zh" ? "未配置模型" : "No model")}
         </div>
 
         <button onClick={onLanguageToggle} style={{ padding: "6px 12px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`, background: "transparent", color: darkMode ? "#e8e8e8" : COLORS.text.secondary, fontSize: FONT_SIZES.md, cursor: "pointer", fontWeight: 500, transition: `all ${TRANSITIONS.fast}` }}>

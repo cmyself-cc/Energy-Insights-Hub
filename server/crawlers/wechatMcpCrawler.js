@@ -231,7 +231,6 @@ export async function fetchArticles(source) {
   const feedId = config.feedId || "";
   const articleLimit = config.articleLimit || DEFAULT_ARTICLE_LIMIT;
   const lookbackHours = config.lookbackHours || DEFAULT_LOOKBACK_HOURS;
-
   if (!sseUrl) {
     throw new Error("wechat_mcp source requires an MCP SSE URL");
   }
@@ -265,7 +264,11 @@ export async function fetchArticles(source) {
       throw new Error("No WeChat feeds found in MCP server");
     }
 
-    const perFeedLimit = feedId ? articleLimit : Math.max(1, Math.ceil(articleLimit / feedIds.length));
+    // 每个公众号抓取上限：优先用 config.perFeedLimit（跟踪设置可配），
+    // 否则按 articleLimit 平均分配
+    const perFeedLimit = config.perFeedLimit
+      ? Math.max(1, parseInt(config.perFeedLimit, 10) || 1)
+      : (feedId ? articleLimit : Math.max(1, Math.ceil(articleLimit / feedIds.length)));
     const cutoff = Date.now() - lookbackHours * 60 * 60 * 1000;
     const articles = [];
 

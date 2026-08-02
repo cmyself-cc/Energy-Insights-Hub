@@ -241,7 +241,6 @@ export default function App() {
         darkMode={darkMode}
         language={language}
         onLanguageToggle={handleLanguageToggle}
-        onOpenApiConfig={() => setShowApiConfig(true)}
       />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>

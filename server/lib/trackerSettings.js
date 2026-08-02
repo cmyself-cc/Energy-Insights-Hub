@@ -3,6 +3,7 @@ import db from "../db.js";
 export const DEFAULTS = {
   lookback_hours: "24",
   max_per_source: "3",
+  wechat_mcp_per_feed_limit: "10",
   include_business_domains: "",
   include_enterprise_types: "",
   include_categories: "",
@@ -26,6 +27,7 @@ export function loadSettings() {
   return {
     lookbackHours: parseInt(map.lookback_hours, 10) || 24,
     maxPerSource: parseInt(map.max_per_source, 10) || 3,
+    wechatMcpPerFeedLimit: parseInt(map.wechat_mcp_per_feed_limit, 10) || 10,
     includeBusinessDomains: toArray(map.include_business_domains),
     includeEnterpriseTypes: toArray(map.include_enterprise_types),
     includeCategories: toArray(map.include_categories),

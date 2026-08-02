@@ -331,66 +331,20 @@ Formatting Requirements:
     }
   },
 
-  interpretArticle: async (item, question = "", language = "en", history = [], signal = null, modelOverride = null) => {
-    const config = modelOverride || storage.getApiConfig();
-    if (!config) {
-      throw new Error("API_KEY_REQUIRED");
+  interpretArticle: async (item, question = "", language = "en", history = [], signal = null, modelId = null) => {
+    // 服务器代理：模型配置（含 apiKey）在服务器端，浏览器只传文章上下文 + 模型 id
+    const res = await fetch("/api/ai/interpret", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item, question, language, history, modelId }),
+      signal
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `API_CALL_FAILED (HTTP ${res.status})`);
     }
-
-    const isZh = language === "zh";
-    const systemPrompt = isZh
-      ? "你是一位能源行业分析师。请基于提供的文章信息给出专业、简洁的解读。"
-      : "You are an energy industry analyst. Provide a professional, concise interpretation based on the article information provided.";
-
-    const articleContext = `Title: ${item.title}
-Summary: ${item.summary || ""}
-Source: ${item.source || ""}
-Date: ${item.date || ""}
-Business Domain: ${item.businessDomain || ""}
-Enterprise Type: ${item.enterpriseType || ""}
-Source Type: ${item.sourceType || ""}
-Entities: ${item.entities?.join(", ") || ""}
-Features: ${item.features?.join(", ") || ""}
-URL: ${item.url || ""}`;
-
-    let userPrompt;
-    if (!question) {
-      userPrompt = isZh
-        ? `请解读以下文章，提炼核心观点、战略影响、涉及主体及关键数据：\n\n${articleContext}`
-        : `Please interpret the following article, extracting key points, strategic implications, involved parties, and key data points:\n\n${articleContext}`;
-    } else {
-      const historyText = history.map(h => `Q: ${h.question}\nA: ${h.answer}`).join("\n\n");
-      userPrompt = isZh
-        ? `基于以下文章信息${historyText ? "和此前的问答" : ""}回答问题。\n\n${articleContext}\n\n${historyText ? "此前问答：\n" + historyText + "\n\n" : ""}问题：${question}`
-        : `Based on the article information below${historyText ? " and previous Q&A" : ""}, answer the question.\n\n${articleContext}\n\n${historyText ? "Previous Q&A:\n" + historyText + "\n\n" : ""}Question: ${question}`;
-    }
-
-    const messages = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ];
-
-    const { url, headers, body } = buildRequest(config, messages, 2000, 0.7);
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error?.message || `API_CALL_FAILED (HTTP ${response.status})`);
-      }
-
-      const data = await response.json();
-      return extractContent(data, config);
-    } catch (error) {
-      console.error("Interpret article error:", error);
-      throw error;
-    }
+    const data = await res.json();
+    return data.data?.content || "";
   },
 
   search: async (query, _language = "en", signal = null) => {

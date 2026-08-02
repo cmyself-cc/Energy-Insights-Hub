@@ -28,6 +28,7 @@ const PURPOSE_KEYS = ["competitor", "policy", "tech"];
 const DEFAULT_SETTINGS = {
   lookbackHours: 24,
   maxPerSource: 3,
+  wechatMcpPerFeedLimit: 10,
   includeBusinessDomains: "",
   includeEnterpriseTypes: "",
   includeCategories: "",
@@ -60,6 +61,7 @@ export default function TrackerSettingsPage({ darkMode, language }) {
         setSettings({
           lookbackHours: s.lookbackHours,
           maxPerSource: s.maxPerSource,
+          wechatMcpPerFeedLimit: s.wechatMcpPerFeedLimit,
           includeBusinessDomains: toCsv(s.includeBusinessDomains),
           includeEnterpriseTypes: toCsv(s.includeEnterpriseTypes),
           includeCategories: toCsv(s.includeCategories),
@@ -144,6 +146,7 @@ export default function TrackerSettingsPage({ darkMode, language }) {
       await backendApi.updateTrackerSettings({
         lookbackHours: Number(settings.lookbackHours),
         maxPerSource: Number(settings.maxPerSource),
+        wechatMcpPerFeedLimit: Number(settings.wechatMcpPerFeedLimit),
         requiredIndustryKeywords: fromCsv(settings.requiredIndustryKeywords),
         fuzzyDeduplicationThreshold: Number(settings.fuzzyDeduplicationThreshold)
       });
@@ -154,10 +157,11 @@ export default function TrackerSettingsPage({ darkMode, language }) {
     setSaving(false);
   };
 
+  const secondaryText = darkMode ? "#aaa" : COLORS.text.secondary;
+
   const inputStyle = {
     padding: "8px 12px",
-    borderRadius: BORDER_RADIUS.md,
-    border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+    borderRadius: BORDER_RADIUS.md,    border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
     background: darkMode ? "#1c1f2b" : "#fff",
     color: darkMode ? "#e8e8e8" : COLORS.text.primary,
     fontSize: FONT_SIZES.base,
@@ -290,6 +294,21 @@ export default function TrackerSettingsPage({ darkMode, language }) {
             onChange={e => handleChange("maxPerSource", e.target.value)}
             style={inputStyle}
           />
+        </div>
+
+        <div>
+          <label style={labelStyle}>{t.wechatMcpPerFeedLimit}</label>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={settings.wechatMcpPerFeedLimit}
+            onChange={e => handleChange("wechatMcpPerFeedLimit", e.target.value)}
+            style={inputStyle}
+          />
+          <div style={{ fontSize: 11, color: secondaryText, marginTop: 2 }}>
+            {language === "zh" ? "微信公众号每个公众号抓取的文章数量上限" : "Max articles fetched per WeChat official account"}
+          </div>
         </div>
 
         <div>

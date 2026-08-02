@@ -13,6 +13,8 @@ import settingsRouter from "./routes/settings.js";
 import filtersRouter from "./routes/filters.js";
 import feedbackRoutes from "./routes/feedback.js";
 import industriesRouter from "./routes/industries.js";
+import modelsRouter from "./routes/models.js";
+import aiRouter from "./routes/ai.js";
 import { startScheduler } from "./services/tracker.js";
 import { seedSources } from "./seeds/002_seed_sources.js";
 import { seedIndustryCategories } from "./seeds/seedIndustryCategories.js";
@@ -40,6 +42,8 @@ app.use("/api/tracker-settings", settingsRouter);
 app.use("/api/filters", filtersRouter);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/industries", industriesRouter);
+app.use("/api/models", modelsRouter);
+app.use("/api/ai", aiRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

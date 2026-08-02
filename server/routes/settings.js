@@ -19,6 +19,7 @@ router.put("/", (req, res) => {
     const {
       lookbackHours,
       maxPerSource,
+      wechatMcpPerFeedLimit,
       requiredIndustryKeywords,
       fuzzyDeduplicationThreshold
     } = req.body;
@@ -28,6 +29,10 @@ router.put("/", (req, res) => {
     }
     if (typeof maxPerSource !== "number" || maxPerSource < 1 || maxPerSource > 50) {
       return res.status(400).json({ error: "maxPerSource must be between 1 and 50" });
+    }
+    const perFeed = Number(wechatMcpPerFeedLimit);
+    if (wechatMcpPerFeedLimit !== undefined && (Number.isNaN(perFeed) || perFeed < 1 || perFeed > 50)) {
+      return res.status(400).json({ error: "wechatMcpPerFeedLimit must be between 1 and 50" });
     }
     const threshold = Number(fuzzyDeduplicationThreshold);
     if (Number.isNaN(threshold) || threshold < 0 || threshold > 1) {
@@ -40,6 +45,18 @@ router.put("/", (req, res) => {
       required_industry_keywords: toArray(requiredIndustryKeywords).join(","),
       fuzzy_deduplication_threshold: String(threshold)
     };
+    if (wechatMcpPerFeedLimit !== undefined) {
+      values.wechat_mcp_per_feed_limit = String(perFeed);
+      // 同步到微信MCP 源的 config.perFeedLimit
+      const src = db.prepare("SELECT * FROM sources WHERE type = 'wechat_mcp' LIMIT 1").get();
+      if (src) {
+        let cfg = {};
+        try { cfg = JSON.parse(src.config || "{}"); } catch (e) { /* keep {} */ }
+        cfg.perFeedLimit = perFeed;
+        db.prepare("UPDATE sources SET config = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+          .run(JSON.stringify(cfg), src.id);
+      }
+    }
 
     const update = db.prepare(
       "INSERT INTO tracker_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
@@ -61,7 +78,7 @@ router.post("/save-llm-env", (req, res) => {
     const envPath = path.join(process.cwd(), ".env");
 
     let envContent = "";
-    try { envContent = fs.readFileSync(envPath, "utf-8"); } catch (e) {}
+    try { envContent = fs.readFileSync(envPath, "utf-8"); } catch (e) { /* file may not exist yet */ }
 
     const lines = envContent.split("\n");
     const keys = { LLM_BASE_URL: baseUrl, LLM_MODEL: modelId };

@@ -1,10 +1,39 @@
 import { useState, useRef, useEffect } from "react";
+import { marked } from "marked";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { api } from "../utils/api";
 import { backendApi } from "../utils/backendApi";
 
 const DISCLAIMER_KEY = "energy_insights_ai_disclaimer_accepted";
+
+// 自定义 markdown 渲染：标题间加大行距、列表缩进对齐、行内紧凑
+marked.use({
+  renderer: {
+    heading({ tokens, depth }) {
+      const text = this.parser.parseInline(tokens);
+      const s = {
+        1: { size: 20, margin: "24px 0 10px" },
+        2: { size: 18, margin: "20px 0 8px" },
+        3: { size: 16, margin: "16px 0 6px" },
+        4: { size: 14, margin: "12px 0 5px" }
+      }[depth] || { size: 14, margin: "12px 0 5px" };
+      return `<h${depth} style="margin:${s.margin};font-size:${s.size}px;font-weight:700;line-height:1.5">${text}</h${depth}>`;
+    },
+    list({ ordered, items }) {
+      const tag = ordered ? "ol" : "ul";
+      const inner = items.map(item => {
+        const content = this.parser.parse(item.tokens);
+        return `<li style="margin:2px 0;padding-left:4px">${content}</li>`;
+      }).join("");
+      return `<${tag} style="padding-left:26px;margin:6px 0;list-style:${ordered ? "decimal" : "disc"};${ordered ? "list-style-position:inside" : ""}">${inner}</${tag}>`;
+    },
+    paragraph({ tokens }) {
+      const text = this.parser.parseInline(tokens);
+      return `<p style="margin:6px 0;line-height:1.6">${text}</p>`;
+    }
+  }
+});
 
 export default function AiDrawer({ item, darkMode, language, onClose }) {
   const t = i18n[language];
@@ -75,17 +104,9 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
     abortRef.current = new AbortController();
 
     try {
+      // ai_model_id 存的是服务器模型配置的 id（localStorage），服务器端用该模型解读
       const modelId = localStorage.getItem("ai_model_id") || "";
-      let modelOverride = null;
-      if (modelId) {
-        try {
-          const raw = localStorage.getItem("energy_insights_api_config");
-          const configs = raw ? JSON.parse(raw) : [];
-          const list = Array.isArray(configs) ? configs : [configs];
-          modelOverride = list.find(c => c.id === modelId) || null;
-        } catch { /* ignore */ }
-      }
-      const result = await api.interpretArticle(item, q, language, history, abortRef.current.signal, modelOverride);
+      const result = await api.interpretArticle(item, q, language, history, abortRef.current.signal, modelId || null);
       if (q) {
         setHistory(prev => [...prev, { question: q, answer: result }]);
       } else {
@@ -105,18 +126,11 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
 
   const renderMarkdown = (text) => {
     if (!text) return "";
-    let html = text
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/^### (.+)$/gm, "<h4 style='margin:6px 0 2px;font-size:16px;font-weight:700'>$1</h4>")
-      .replace(/^## (.+)$/gm, "<h3 style='margin:8px 0 2px;font-size:18px;font-weight:700'>$1</h3>")
-      .replace(/^# (.+)$/gm, "<h2 style='margin:10px 0 4px;font-size:18px;font-weight:700'>$1</h2>")
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/^- (.+)$/gm, "<li style='margin:1px 0 1px 16px'>$1</li>")
-      .replace(/(<li.*<\/li>\n?)+/g, "<ul style='margin:2px 0;padding:0'>$&</ul>")
-      .replace(/`([^`]+)`/g, "<code style='background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-size:13px'>$1</code>")
-      .replace(/\n\n/g, "</p><p style='margin:0 0 2px'>")
-      .replace(/\n/g, "<br/>");
-    return html;
+    try {
+      return marked.parse(text);
+    } catch {
+      return text;
+    }
   };
   const handleAsk = (e) => {
     e.preventDefault();

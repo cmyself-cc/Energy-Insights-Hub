@@ -1,8 +1,18 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import FilterBar from "./FilterBar";
 import InsightCard from "./InsightCard";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
+
+// 估算卡片高度（用于 masonry 分列）
+function estimateCardHeight(item) {
+  const summaryLen = (item.summary || "").length;
+  const titleLen = (item.title || "").length;
+  const summaryLines = Math.max(2, Math.ceil(summaryLen / 42));
+  const titleLines = Math.max(1, Math.ceil(titleLen / 22));
+  const keywords = (item.keywords || []).length;
+  return 70 + titleLines * 22 + summaryLines * 20 + Math.min(keywords, 3) * 24 + 50;
+}
 
 function SkeletonCard({ darkMode }) {
   const bg = darkMode ? "#2a2d3a" : "#eee";
@@ -39,6 +49,33 @@ export default function IntelligencePage(props) {
 
   const displayItems = subTab === "bookmarks" ? bookmarks : insights;
   const visibleItems = displayItems.filter(item => !hidden.includes(item.title));
+
+  // --- JS masonry：按容器宽度算列数，按估算高度贪心分列（跨浏览器稳定） ---
+  const gridRef = useRef(null);
+  const [colCount, setColCount] = useState(3);
+
+  useEffect(() => {
+    if (!gridRef.current) return;
+    const update = () => {
+      const w = gridRef.current.clientWidth;
+      setColCount(Math.max(1, Math.floor(w / 340)));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(gridRef.current);
+    return () => ro.disconnect();
+  }, [visibleItems.length]);
+
+  const columns = useMemo(() => {
+    const heights = Array(colCount).fill(0);
+    const cols = Array.from({ length: colCount }, () => []);
+    for (const item of visibleItems) {
+      const idx = heights.indexOf(Math.min(...heights));
+      cols[idx].push(item);
+      heights[idx] += estimateCardHeight(item) + 16;
+    }
+    return cols;
+  }, [visibleItems, colCount]);
 
   return (
     <div>
@@ -135,42 +172,34 @@ export default function IntelligencePage(props) {
               {visibleItems.length} {language === "zh" ? "条结果" : "results"}
             </div>
           </div>
-          <div style={{
-            columnWidth: 340,
-            columnGap: 16,
-            columnFill: "auto",
-            paddingBottom: 80
-          }}>
-            {visibleItems.map((item, i) => {
-              const inCart = !!cart.find(c => c.title === item.title);
-              const bookmarked = !!bookmarks.find(b => b.title === item.title);
-              return (
-                <div
-                  key={item.id || i}
-                  onClick={() => onToggleCart(item)}
-                  style={{
-                    cursor: "pointer",
-                    display: "inline-block",
-                    width: "100%",
-                    marginTop: 0,
-                    breakInside: "avoid",
-                    marginBottom: 16
-                  }}
-                >
-                  <InsightCard
-                    item={item}
-                    darkMode={darkMode}
-                    language={language}
-                    bookmarked={bookmarked}
-                    inCart={inCart}
-                    onBookmark={(e) => { e?.stopPropagation(); onToggleBookmark(item); }}
-                    onHide={(reason) => { onHide(item, reason); }}
-                    onAiInterpret={(e) => { e?.stopPropagation(); onAiInterpret(item); }}
-                    onKeywordClick={onKeywordClick}
-                  />
-                </div>
-              );
-            })}
+          <div ref={gridRef} data-masonry-grid style={{ display: "flex", gap: 16, alignItems: "flex-start", paddingBottom: 80 }}>
+            {columns.map((col, ci) => (
+              <div key={ci} data-masonry-col style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+                {col.map((item, i) => {
+                  const inCart = !!cart.find(c => c.title === item.title);
+                  const bookmarked = !!bookmarks.find(b => b.title === item.title);
+                  return (
+                    <div
+                      key={item.id || i}
+                      onClick={() => onToggleCart(item)}
+                      style={{ cursor: "pointer", width: "100%" }}
+                    >
+                      <InsightCard
+                        item={item}
+                        darkMode={darkMode}
+                        language={language}
+                        bookmarked={bookmarked}
+                        inCart={inCart}
+                        onBookmark={(e) => { e?.stopPropagation(); onToggleBookmark(item); }}
+                        onHide={(reason) => { onHide(item, reason); }}
+                        onAiInterpret={(e) => { e?.stopPropagation(); onAiInterpret(item); }}
+                        onKeywordClick={onKeywordClick}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </>
       )}
