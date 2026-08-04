@@ -560,6 +560,7 @@ async function fetchWithPlaywright(source) {
               if (detail.title && detail.title.length >= 10 &&
                   !detail.title.includes(source.name) &&
                   detail.title !== api.title) {
+                if (!detail.publishDate) detail.publishDate = new Date().toISOString();
                 articles.push(detail);
               } else {
                 // Use API-provided title — more reliable for SPA sites
