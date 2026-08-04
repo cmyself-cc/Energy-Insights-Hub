@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { extractArticleLinks, fetchArticles } from "./websiteCrawler.js";
+import { clearCachedCookie } from "./challenge.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -66,6 +67,8 @@ describe("extractArticleLinks", () => {
 // requireNewsPattern 默认 true（websiteCrawler.js parseConfig），会过滤标题 <10 字符的链接，
 // 因此需要纯测试 mock 行为的用例显式关闭
 describe("fetchArticles", { concurrency: false }, () => {
+  beforeEach(() => clearCachedCookie());
+
   it("parses JSON-string config and applies articleLimit and selectors", withMockFetch(
     async (url) => {
       if (url === "https://example.com/news") {
@@ -163,6 +166,74 @@ describe("fetchArticles", { concurrency: false }, () => {
       const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
       expect(articles.length).toBe(1);
       expect(articles[0].title).toBe("Success");
+    }
+  ));
+
+  it("solves a WAF challenge protecting article detail pages", withMockFetch(
+    (() => {
+      const detailCalls = [];
+      return Object.assign(
+        async (url) => {
+          if (url === "https://example.com/news") {
+            return htmlResponse(`<!doctype html><html><body>
+              <article><h2><a href="/article/one">能源行业新闻标题测试</a></h2></article>
+            </body></html>`);
+          }
+          detailCalls.push(url);
+          const challengeHtml = fs.readFileSync(path.join(__dirname, "__fixtures__/bjx-challenge.html"), "utf-8");
+          // 首次返回挑战页，带 cookie 后返回真实页面
+          const cookieSent = detailCalls.length > 1;
+          return htmlResponse(cookieSent
+            ? `<!doctype html><html><body>
+                <h1 class="article-title">真实文章标题</h1>
+                <div class="post-content">${"真实正文内容。".repeat(50)}</div>
+              </body></html>`
+            : challengeHtml);
+        },
+        { detailCalls }
+      );
+    })(),
+    async () => {
+      const config = JSON.stringify({ strategy: "html", requireNewsPattern: false, articleLimit: 1 });
+      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+      expect(articles.length).toBe(1);
+      expect(articles[0].rawContent).toContain("真实正文内容");
+    }
+  ));
+
+  it("decodes GBK-encoded sub-pages", withMockFetch(
+    async (url) => {
+      const iconv = (await import("iconv-lite")).default;
+      const gbkResponse = (body) => ({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => iconv.encode(body, "gbk"),
+        headers: { get: (name) => (name.toLowerCase() === "content-type" ? "text/html; charset=gbk" : null) }
+      });
+      if (url === "https://example.com/news") {
+        return gbkResponse("<!doctype html><html><body><p>首页无列表</p></body></html>");
+      }
+      if (url === "https://example.com/list") {
+        return gbkResponse(`<!doctype html><html><body>
+          <article><h2><a href="/article/one">煤炭价格变动情况分析</a></h2></article>
+        </body></html>`);
+      }
+      return gbkResponse(`<!doctype html><html><body>
+        <h1 class="article-title">煤炭文章标题</h1>
+        <div class="post-content">${"中文正文内容测试。".repeat(40)}</div>
+      </body></html>`);
+    },
+    async () => {
+      const config = JSON.stringify({
+        strategy: "html",
+        requireNewsPattern: false,
+        articleLimit: 1,
+        subPages: [{ url: "https://example.com/list", active: true }]
+      });
+      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+      expect(articles.length).toBe(1);
+      expect(articles[0].title).toBe("煤炭文章标题");
+      expect(articles[0].rawContent).toContain("中文正文内容测试");
     }
   ));
 });

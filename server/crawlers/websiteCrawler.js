@@ -14,6 +14,7 @@ import {
   normalizeUrl,
   decodeHtmlBuffer
 } from "./utils.js";
+import { fetchHtmlSmart } from "./challenge.js";
 
 const rssParser = new Parser({
   timeout: 20000,
@@ -173,7 +174,7 @@ export function discoverListSelectors(html) {
 }
 
 async function fetchHtml(url, timeoutMs = 20000) {
-  const res = await fetchWithTimeout(
+  return fetchHtmlSmart(
     url,
     {
       headers: {
@@ -185,9 +186,6 @@ async function fetchHtml(url, timeoutMs = 20000) {
     },
     timeoutMs
   );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const buffer = Buffer.from(await res.arrayBuffer());
-  return decodeHtmlBuffer(buffer, res.headers.get("content-type") || "");
 }
 
 // Re-exported for backward compatibility; implementation lives in utils.js
@@ -703,9 +701,9 @@ export async function fetchArticles(source) {
     const subPages = (config.subPages || []).filter(sp => sp.active !== false);
     for (const sp of subPages) {
       try {
-        const spHtml = await (await fetchWithTimeout(sp.url, {
+        const spHtml = await fetchHtmlSmart(sp.url, {
           headers: { "User-Agent": randomUserAgent(), "Accept": "text/html" }
-        }, 20000)).text();
+        }, 20000);
         const selector = sp.listSelectors?.length ? sp.listSelectors : (config.listSelectors || undefined);
         const spLinks = extractArticleLinks(spHtml, sp.url, config.articleLimit * 2, selector);
         for (const link of spLinks) {
