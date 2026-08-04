@@ -236,4 +236,51 @@ describe("fetchArticles", { concurrency: false }, () => {
       expect(articles[0].rawContent).toContain("中文正文内容测试");
     }
   ));
+
+  it("skips articles older than maxAgeDays in the HTML list path", withMockFetch(
+    async (url) => {
+      const oldDate = new Date(Date.now() - 10 * 86400000).toISOString();
+      const newDate = new Date(Date.now() - 1 * 86400000).toISOString();
+      if (url === "https://example.com/news") {
+        return htmlResponse(`<!doctype html><html><body>
+          <article><h2><a href="/article/old">旧文章标题测试</a></h2></article>
+          <article><h2><a href="/article/new">新文章标题测试</a></h2></article>
+        </body></html>`);
+      }
+      if (url === "https://example.com/article/old") {
+        return htmlResponse(`<!doctype html><html><head>
+          <meta property="article:published_time" content="${oldDate}">
+        </head><body><h1 class="article-title">旧文章</h1><div class="post-content">${"旧文内容。".repeat(40)}</div></body></html>`);
+      }
+      return htmlResponse(`<!doctype html><html><head>
+        <meta property="article:published_time" content="${newDate}">
+      </head><body><h1 class="article-title">新文章</h1><div class="post-content">${"新文内容。".repeat(40)}</div></body></html>`);
+    },
+    async () => {
+      const config = JSON.stringify({ strategy: "html", requireNewsPattern: false, articleLimit: 5, maxAgeDays: 7 });
+      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+      expect(articles.length).toBe(1);
+      expect(articles[0].url).toBe("https://example.com/article/new");
+    }
+  ));
+
+  it("keeps articles without a detectable date and falls back to now", withMockFetch(
+    async (url) => {
+      if (url === "https://example.com/news") {
+        return htmlResponse(`<!doctype html><html><body>
+          <article><h2><a href="/article/undated">无日期文章标题</a></h2></article>
+        </body></html>`);
+      }
+      return htmlResponse(`<!doctype html><html><body>
+        <h1 class="article-title">无日期文章</h1><div class="post-content">${"内容。".repeat(60)}</div>
+      </body></html>`);
+    },
+    async () => {
+      const config = JSON.stringify({ strategy: "html", requireNewsPattern: false, articleLimit: 5, maxAgeDays: 7 });
+      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+      expect(articles.length).toBe(1);
+      const age = Date.now() - new Date(articles[0].publishDate).getTime();
+      expect(age).toBeLessThan(60000); // 回退为抓取时刻
+    }
+  ));
 });

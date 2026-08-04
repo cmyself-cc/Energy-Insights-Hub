@@ -202,7 +202,9 @@ async function fetchArticleDetail(url, detailSelectors = {}) {
   contentEl.find("script,style,nav,header,footer,aside,.advertisement,.ads,.social-share,.comments").remove();
   const content = cleanText(contentEl.text());
   const summary = content.slice(0, 600);
-  const publishDate = extractPublishedDate($) || new Date().toISOString();
+  // Keep null when no date is found; callers apply the fallback so that
+  // maxAgeDays filtering can distinguish real dates from missing ones.
+  const publishDate = extractPublishedDate($);
 
   return {
     title,
@@ -236,6 +238,8 @@ async function fetchRssArticles(feedUrl, config) {
     if (config.requireNewsPattern) {
       items = items.filter(item => isNewsUrl(item.url) && isNewsTitle(item.title));
     }
+
+    items = items.filter(item => !isTooOld(item.publishDate, config.maxAgeDays));
 
     // Enrich thin RSS items with the full article page when useful.
     const enriched = [];
@@ -347,7 +351,7 @@ async function fetchSitemapArticles(baseUrl, config) {
     try {
       const detail = await fetchArticleDetail(candidate.url, config.detailSelectors);
       if (config.requireNewsPattern && (!isNewsUrl(detail.url) || !isNewsTitle(detail.title))) continue;
-      articles.push({ ...detail, publishDate: candidate.publishDate || detail.publishDate });
+      articles.push({ ...detail, publishDate: candidate.publishDate || detail.publishDate || new Date().toISOString() });
       if (articles.length >= config.articleLimit) break;
     } catch (e) {
       console.error(`[website] Failed to fetch sitemap article ${candidate.url}:`, e.message);
@@ -447,6 +451,13 @@ function scoreAndLimit(links, config) {
     .map(link => ({ ...link, score: scoreArticleLink(link) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, config.articleLimit * 2);
+}
+
+function isTooOld(publishDate, maxAgeDays) {
+  if (!publishDate || !maxAgeDays || maxAgeDays <= 0) return false;
+  const t = new Date(publishDate).getTime();
+  if (isNaN(t)) return false;
+  return (Date.now() - t) / 86400000 > maxAgeDays;
 }
 
 /**
@@ -631,7 +642,9 @@ async function fetchWithPlaywright(source) {
       try {
         if (config.requireNewsPattern && !isNewsTitle(link.title)) continue;
         const article = await fetchArticleDetail(link.url, config.detailSelectors);
+        if (isTooOld(article.publishDate, config.maxAgeDays)) continue;
         if (!article.title) article.title = link.title;
+        if (!article.publishDate) article.publishDate = new Date().toISOString();
         articles.push(article);
         if (articles.length >= config.articleLimit) break;
       } catch (e) {
@@ -726,7 +739,12 @@ export async function fetchArticles(source) {
           continue;
         }
         const article = await fetchArticleDetail(link.url, config.detailSelectors);
+        if (isTooOld(article.publishDate, config.maxAgeDays)) {
+          console.log(`[website] Skipping article older than ${config.maxAgeDays}d: ${link.url}`);
+          continue;
+        }
         if (!article.title) article.title = link.title;
+        if (!article.publishDate) article.publishDate = new Date().toISOString();
         articles.push(article);
         if (articles.length >= config.articleLimit) break;
       } catch (e) {
