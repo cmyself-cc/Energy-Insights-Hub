@@ -5,7 +5,8 @@ import {
   setCachedCookie,
   getCachedCookie,
   clearCachedCookie,
-  solveChallengeInVm
+  solveChallengeInVm,
+  fetchHtmlSmart
 } from "./challenge.js";
 import fs from "fs";
 import path from "path";
@@ -94,4 +95,118 @@ describe("solveChallengeInVm", () => {
   it("returns null for non-challenge HTML", () => {
     expect(solveChallengeInVm("<html><body>hello</body></html>", "https://example.com/")).toBeNull();
   });
+});
+
+function htmlResponse(body, status = 200, contentType = "text/html; charset=utf-8") {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    arrayBuffer: async () => Buffer.from(body, "utf-8"),
+    headers: { get: (name) => (name.toLowerCase() === "content-type" ? contentType : null) }
+  };
+}
+
+function withMockFetch(mockFn, testFn) {
+  return async () => {
+    const originalFetch = global.fetch;
+    global.fetch = mockFn;
+    try {
+      await testFn();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  };
+}
+
+const REAL_ARTICLE_HTML = "<!doctype html><html><head><title>Real Article</title></head><body><div class=\"cc-article\">这是真实正文内容。</div></body></html>";
+
+describe("fetchHtmlSmart", { concurrency: false }, () => {
+  beforeEach(() => clearCachedCookie());
+
+  it("returns decoded HTML for normal pages", withMockFetch(
+    async () => htmlResponse(REAL_ARTICLE_HTML),
+    async () => {
+      const html = await fetchHtmlSmart("https://example.com/a", {}, 20000, { retryDelayMs: 1 });
+      expect(html).toContain("Real Article");
+    }
+  ));
+
+  it("retries once on network error then succeeds", withMockFetch(
+    (() => {
+      let calls = 0;
+      return async () => {
+        calls += 1;
+        if (calls === 1) throw new TypeError("fetch failed");
+        return htmlResponse(REAL_ARTICLE_HTML);
+      };
+    })(),
+    async () => {
+      const html = await fetchHtmlSmart("https://example.com/a", {}, 20000, { retryDelayMs: 1 });
+      expect(html).toContain("Real Article");
+    }
+  ));
+
+  it("retries once on HTTP 500 then succeeds", withMockFetch(
+    (() => {
+      let calls = 0;
+      return async () => {
+        calls += 1;
+        if (calls === 1) return htmlResponse("err", 500);
+        return htmlResponse(REAL_ARTICLE_HTML);
+      };
+    })(),
+    async () => {
+      const html = await fetchHtmlSmart("https://example.com/a", {}, 20000, { retryDelayMs: 1 });
+      expect(html).toContain("Real Article");
+    }
+  ));
+
+  it("does not retry on HTTP 404", (() => {
+    const calls = [];
+    return withMockFetch(
+      async () => {
+        calls.push(1);
+        return htmlResponse("Not Found", 404);
+      },
+      async () => {
+        await expect(
+          fetchHtmlSmart("https://example.com/a", {}, 20000, { retryDelayMs: 1 })
+        ).rejects.toThrow(/HTTP 404/);
+        expect(calls.length).toBe(1);
+      }
+    );
+  })());
+
+  it("solves a challenge via vm, caches the cookie, and retries with it", withMockFetch(
+    (() => {
+      const calls = [];
+      const fn = async (url, options) => {
+        calls.push(options?.headers?.Cookie || "");
+        return htmlResponse(calls.length === 1 ? bjxChallengeHtml : REAL_ARTICLE_HTML);
+      };
+      fn.calls = calls;
+      return Object.assign(fn, { calls });
+    })(),
+    async () => {
+      const html = await fetchHtmlSmart("https://news.bjx.com.cn/html/x.shtml", {}, 20000, { retryDelayMs: 1 });
+      expect(html).toContain("Real Article");
+      expect(getCachedCookie("bjx.com.cn")).not.toBeNull();
+    }
+  ));
+
+  it("uses cached cookie on subsequent requests within TTL", withMockFetch(
+    (() => {
+      const calls = [];
+      const fn = async (url, options) => {
+        calls.push(options?.headers?.Cookie || "");
+        return htmlResponse(REAL_ARTICLE_HTML);
+      };
+      return Object.assign(fn, { calls });
+    })(),
+    async () => {
+      setCachedCookie("example.com", "seeded-cookie");
+      const html = await fetchHtmlSmart("https://sub.example.com/a", {}, 20000, { retryDelayMs: 1 });
+      expect(html).toContain("Real Article");
+    }
+  ));
 });

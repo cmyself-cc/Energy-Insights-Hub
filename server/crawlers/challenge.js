@@ -2,6 +2,8 @@
 // (e.g. Aliyun WAF "acw_sc__v2"). See spec 2026-08-04-waf-challenge-fetch-layer-design.md.
 
 import vm from "vm";
+import { chromium } from "playwright";
+import { fetchWithTimeout, sleep, decodeHtmlBuffer } from "./utils.js";
 
 const cookieCache = new Map(); // domain -> { value, expiresAt }
 const DEFAULT_COOKIE_TTL_MS = 55 * 60 * 1000; // slightly under the typical 1h cookie lifetime
@@ -125,4 +127,133 @@ export function solveChallengeInVm(html, pageUrl = "") {
   if (canonical) value = canonical[1];
   const maxAge = captured.match(/max-age=(\d+)/i);
   return { value, maxAgeMs: maxAge ? Number(maxAge[1]) * 1000 : null };
+}
+
+const RETRYABLE_STATUS = (status) => status === 429 || status >= 500;
+
+async function fetchOnceWithRetry(url, options, timeoutMs, retryDelayMs) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res;
+    try {
+      res = await fetchWithTimeout(url, options, timeoutMs);
+    } catch (e) {
+      if (attempt === 0) {
+        console.error(`[website] fetch error for ${url}, retrying: ${e.message}`);
+        await sleep(retryDelayMs);
+        continue;
+      }
+      throw e;
+    }
+    if (RETRYABLE_STATUS(res.status) && attempt === 0) {
+      console.error(`[website] HTTP ${res.status} for ${url}, retrying`);
+      await sleep(retryDelayMs);
+      continue;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res;
+  }
+}
+
+async function fetchDecoded(url, options, timeoutMs, retryDelayMs) {
+  const res = await fetchOnceWithRetry(url, options, timeoutMs, retryDelayMs);
+  return decodeHtmlBuffer(Buffer.from(await res.arrayBuffer()), res.headers.get("content-type") || "");
+}
+
+function withCookieHeader(options, cookieValue) {
+  if (!cookieValue) return options;
+  return { ...(options || {}), headers: { ...((options || {}).headers || {}), "Cookie": `acw_sc__v2=${cookieValue}` } };
+}
+
+/**
+ * Solve the challenge by letting a real headless browser execute the JS and
+ * reload; then harvest the cookie. Used only when the vm solver fails.
+ */
+export async function solveChallengeWithPlaywright(url, timeoutMs = 20000) {
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      args: [
+        "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-infobars",
+        "--disable-dev-shm-usage"
+      ]
+    });
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      locale: "zh-CN",
+      timezoneId: "Asia/Shanghai"
+    });
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: "load", timeout: timeoutMs });
+
+    // The challenge script computes the cookie and reloads; poll for it.
+    const deadline = Date.now() + 10000;
+    let cookie = null;
+    while (Date.now() < deadline) {
+      cookie = (await context.cookies(url)).find(c => c.name === "acw_sc__v2");
+      if (cookie) break;
+      await sleep(500);
+    }
+    await context.close();
+    if (!cookie) return null;
+
+    const maxAgeMs = cookie.expires && cookie.expires > 0
+      ? Math.max(cookie.expires * 1000 - Date.now(), 60000)
+      : null;
+    return { value: cookie.value, maxAgeMs };
+  } catch (e) {
+    console.error(`[website] Playwright challenge solve failed for ${url}:`, e.message);
+    return null;
+  } finally {
+    if (browser) {
+      try { await browser.close(); } catch {}
+    }
+  }
+}
+
+/**
+ * Challenge-aware fetch. Flow: cached cookie -> fetch -> challenge detected?
+ * -> vm solve -> Playwright solve -> re-fetch with cookie. Cookie is cached
+ * per registrable domain.
+ */
+export async function fetchHtmlSmart(url, options = {}, timeoutMs = 20000, { retryDelayMs = 1000 } = {}) {
+  let domain = "";
+  try {
+    domain = getRegistrableDomain(new URL(url).hostname);
+  } catch {}
+
+  let html = await fetchDecoded(url, withCookieHeader(options, getCachedCookie(domain)), timeoutMs, retryDelayMs);
+  if (!isChallengePage(html)) return html;
+
+  console.log(`[website] WAF challenge detected for ${url}`);
+  clearCachedCookie(domain);
+
+  // 1) vm sandbox solver
+  const vmSolved = solveChallengeInVm(html, url);
+  if (vmSolved) {
+    setCachedCookie(domain, vmSolved.value, vmSolved.maxAgeMs);
+    html = await fetchDecoded(url, withCookieHeader(options, vmSolved.value), timeoutMs, retryDelayMs);
+    if (!isChallengePage(html)) {
+      console.log(`[website] Challenge solved via vm for ${domain || url}`);
+      return html;
+    }
+    clearCachedCookie(domain);
+  }
+
+  // 2) Playwright fallback solver
+  const pwSolved = await solveChallengeWithPlaywright(url);
+  if (pwSolved) {
+    setCachedCookie(domain, pwSolved.value, pwSolved.maxAgeMs);
+    html = await fetchDecoded(url, withCookieHeader(options, pwSolved.value), timeoutMs, retryDelayMs);
+    if (!isChallengePage(html)) {
+      console.log(`[website] Challenge solved via Playwright for ${domain || url}`);
+      return html;
+    }
+    clearCachedCookie(domain);
+  }
+
+  throw new Error(`WAF challenge could not be solved for ${url}`);
 }
