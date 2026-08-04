@@ -191,6 +191,24 @@ async function fetchHtml(url, timeoutMs = 20000) {
 // Re-exported for backward compatibility; implementation lives in utils.js
 export { decodeHtmlBuffer };
 
+/**
+ * Last-resort content extraction: pick the largest block-level text region
+ * after stripping navigation/boilerplate containers. Only used when the
+ * configured/default detail selectors yield almost nothing.
+ */
+function extractLargestTextBlock($) {
+  const bodyHtml = $("body").html();
+  if (!bodyHtml) return "";
+  const $clone = cheerio.load(bodyHtml);
+  $clone("nav, header, footer, aside, form, iframe, noscript, script, style").remove();
+  let best = "";
+  $clone("div, section, article, td").each((_i, el) => {
+    const text = cleanText($clone(el).text());
+    if (text.length > best.length) best = text;
+  });
+  return best;
+}
+
 async function fetchArticleDetail(url, detailSelectors = {}) {
   const html = await fetchHtml(url);
   const $ = cheerio.load(html);
@@ -200,7 +218,11 @@ async function fetchArticleDetail(url, detailSelectors = {}) {
 
   const contentEl = $(detailSelectors.content || DEFAULT_DETAIL_SELECTORS.content).first();
   contentEl.find("script,style,nav,header,footer,aside,.advertisement,.ads,.social-share,.comments").remove();
-  const content = cleanText(contentEl.text());
+  let content = cleanText(contentEl.text());
+  if (content.length < 200) {
+    const fallback = extractLargestTextBlock($);
+    if (fallback.length > content.length) content = fallback;
+  }
   const summary = content.slice(0, 600);
   // Keep null when no date is found; callers apply the fallback so that
   // maxAgeDays filtering can distinguish real dates from missing ones.

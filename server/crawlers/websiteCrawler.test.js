@@ -283,4 +283,25 @@ describe("fetchArticles", { concurrency: false }, () => {
       expect(age).toBeLessThan(60000); // 回退为抓取时刻
     }
   ));
+
+  it("falls back to the largest text block when detail selectors miss", withMockFetch(
+    async (url) => {
+      if (url === "https://example.com/news") {
+        return htmlResponse(`<!doctype html><html><body>
+          <article><h2><a href="/article/one">正文兜底测试标题</a></h2></article>
+        </body></html>`);
+      }
+      // 正文在 cc-article（不在默认 detail 选择器内）
+      return htmlResponse(`<!doctype html><html><body>
+        <h1>正文兜底测试标题</h1>
+        <div class="cc-article">${"北极星能源网正文内容段落。".repeat(40)}</div>
+      </body></html>`);
+    },
+    async () => {
+      const config = JSON.stringify({ strategy: "html", requireNewsPattern: false, articleLimit: 1 });
+      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+      expect(articles.length).toBe(1);
+      expect(articles[0].rawContent).toContain("北极星能源网正文内容段落");
+    }
+  ));
 });
