@@ -169,37 +169,39 @@ describe("fetchArticles", { concurrency: false }, () => {
     }
   ));
 
-  it("solves a WAF challenge protecting article detail pages", withMockFetch(
-    (() => {
-      const detailCalls = [];
-      return Object.assign(
-        async (url) => {
-          if (url === "https://example.com/news") {
-            return htmlResponse(`<!doctype html><html><body>
-              <article><h2><a href="/article/one">能源行业新闻标题测试</a></h2></article>
-            </body></html>`);
-          }
-          detailCalls.push(url);
-          const challengeHtml = fs.readFileSync(path.join(__dirname, "__fixtures__/bjx-challenge.html"), "utf-8");
-          // 首次返回挑战页，带 cookie 后返回真实页面
-          const cookieSent = detailCalls.length > 1;
-          return htmlResponse(cookieSent
-            ? `<!doctype html><html><body>
-                <h1 class="article-title">真实文章标题</h1>
-                <div class="post-content">${"真实正文内容。".repeat(50)}</div>
-              </body></html>`
-            : challengeHtml);
-        },
-        { detailCalls }
-      );
-    })(),
-    async () => {
-      const config = JSON.stringify({ strategy: "html", requireNewsPattern: false, articleLimit: 1 });
-      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
-      expect(articles.length).toBe(1);
-      expect(articles[0].rawContent).toContain("真实正文内容");
-    }
-  ));
+  it("solves a WAF challenge protecting article detail pages", (() => {
+    const detailCalls = [];
+    return withMockFetch(
+      async (url, options) => {
+        if (url === "https://example.com/news") {
+          return htmlResponse(`<!doctype html><html><body>
+            <article><h2><a href="/article/one">能源行业新闻标题测试</a></h2></article>
+          </body></html>`);
+        }
+        const cookie = options?.headers?.Cookie || "";
+        detailCalls.push({ url, cookie });
+        const challengeHtml = fs.readFileSync(path.join(__dirname, "__fixtures__/bjx-challenge.html"), "utf-8");
+        // 首次返回挑战页；仅当请求真正携带解出的 cookie 时才返回真实页面
+        const cookieSent = cookie.includes("acw_sc__v2=");
+        return htmlResponse(cookieSent
+          ? `<!doctype html><html><body>
+              <h1 class="article-title">真实文章标题</h1>
+              <div class="post-content">${"真实正文内容。".repeat(50)}</div>
+            </body></html>`
+          : challengeHtml);
+      },
+      async () => {
+        const config = JSON.stringify({ strategy: "html", requireNewsPattern: false, articleLimit: 1 });
+        const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+        expect(articles.length).toBe(1);
+        expect(articles[0].rawContent).toContain("真实正文内容");
+        // 重试的详情页请求必须带上解出的 cookie
+        expect(detailCalls.length).toBe(2);
+        expect(detailCalls[0].cookie).toBe("");
+        expect(detailCalls.at(-1).cookie).toContain("acw_sc__v2=");
+      }
+    );
+  })());
 
   it("decodes GBK-encoded sub-pages", withMockFetch(
     async (url) => {

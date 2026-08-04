@@ -95,6 +95,38 @@ describe("solveChallengeInVm", () => {
   it("returns null for non-challenge HTML", () => {
     expect(solveChallengeInVm("<html><body>hello</body></html>", "https://example.com/")).toBeNull();
   });
+
+  // 恶意挑战页 fixture：尝试经由宿主 realm 的 Function 构造器逃逸到 process
+  const escapeMarker = "__WAF_VM_ESCAPE_MARKER__";
+  const hostileChallengeHtml = `<!doctype html><html><head>
+    <script>
+      try { console.constructor.constructor('process.env.${escapeMarker}="console-vector"')(); } catch (e) {}
+      try { this.constructor.constructor('process.env.${escapeMarker}="this-vector"')(); } catch (e) {}
+    </script>
+    <script>var arg1='aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeee';
+      document.cookie = "acw_sc__v2=" + console.constructor.constructor("return typeof process")() + ";max-age=3600;path=/";
+    </script>
+  </head><body></body></html>`;
+
+  it("does not let challenge scripts escape the vm to the host process", () => {
+    delete process.env[escapeMarker];
+    try {
+      const solved = solveChallengeInVm(hostileChallengeHtml, "https://news.bjx.com.cn/");
+      // 逃逸成立时恶意脚本会写入该环境变量
+      expect(process.env[escapeMarker]).toBeUndefined();
+      // 探测脚本不应影响正常解题
+      expect(solved).not.toBeNull();
+    } finally {
+      delete process.env[escapeMarker];
+    }
+  });
+
+  it("evaluates Function-constructor probes in the sandbox realm, not the host", () => {
+    const solved = solveChallengeInVm(hostileChallengeHtml, "https://news.bjx.com.cn/");
+    expect(solved).not.toBeNull();
+    // 沙箱内 typeof process 必须是 "undefined"；若能逃逸到宿主则会得到 "object"
+    expect(solved.value).toBe("undefined");
+  });
 });
 
 function htmlResponse(body, status = 200, contentType = "text/html; charset=utf-8") {
@@ -177,36 +209,40 @@ describe("fetchHtmlSmart", { concurrency: false }, () => {
     );
   })());
 
-  it("solves a challenge via vm, caches the cookie, and retries with it", withMockFetch(
-    (() => {
-      const calls = [];
-      const fn = async (url, options) => {
+  it("solves a challenge via vm, caches the cookie, and retries with it", (() => {
+    const calls = [];
+    return withMockFetch(
+      async (url, options) => {
         calls.push(options?.headers?.Cookie || "");
         return htmlResponse(calls.length === 1 ? bjxChallengeHtml : REAL_ARTICLE_HTML);
-      };
-      fn.calls = calls;
-      return Object.assign(fn, { calls });
-    })(),
-    async () => {
-      const html = await fetchHtmlSmart("https://news.bjx.com.cn/html/x.shtml", {}, 20000, { retryDelayMs: 1 });
-      expect(html).toContain("Real Article");
-      expect(getCachedCookie("bjx.com.cn")).not.toBeNull();
-    }
-  ));
+      },
+      async () => {
+        const html = await fetchHtmlSmart("https://news.bjx.com.cn/html/x.shtml", {}, 20000, { retryDelayMs: 1 });
+        expect(html).toContain("Real Article");
+        expect(getCachedCookie("bjx.com.cn")).not.toBeNull();
+        // 重试请求必须真正带上解出的 cookie，否则缓存形同虚设
+        expect(calls.length).toBe(2);
+        expect(calls[0]).toBe("");
+        expect(calls.at(-1)).toContain("acw_sc__v2=");
+        expect(calls.at(-1)).toBe(`acw_sc__v2=${getCachedCookie("bjx.com.cn")}`);
+      }
+    );
+  })());
 
-  it("uses cached cookie on subsequent requests within TTL", withMockFetch(
-    (() => {
-      const calls = [];
-      const fn = async (url, options) => {
+  it("uses cached cookie on subsequent requests within TTL", (() => {
+    const calls = [];
+    return withMockFetch(
+      async (url, options) => {
         calls.push(options?.headers?.Cookie || "");
         return htmlResponse(REAL_ARTICLE_HTML);
-      };
-      return Object.assign(fn, { calls });
-    })(),
-    async () => {
-      setCachedCookie("example.com", "seeded-cookie");
-      const html = await fetchHtmlSmart("https://sub.example.com/a", {}, 20000, { retryDelayMs: 1 });
-      expect(html).toContain("Real Article");
-    }
-  ));
+      },
+      async () => {
+        setCachedCookie("example.com", "seeded-cookie");
+        const html = await fetchHtmlSmart("https://sub.example.com/a", {}, 20000, { retryDelayMs: 1 });
+        expect(html).toContain("Real Article");
+        expect(calls.length).toBe(1);
+        expect(calls.at(-1)).toBe("acw_sc__v2=seeded-cookie");
+      }
+    );
+  })());
 });

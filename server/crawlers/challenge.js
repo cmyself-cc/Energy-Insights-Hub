@@ -63,11 +63,37 @@ export function clearCachedCookie(domain = null) {
   else cookieCache.clear();
 }
 
+// DOM/browser shims defined INSIDE the context realm by a prelude script.
+// Challenge pages are untrusted third-party content: injecting host-realm
+// objects (console/document/navigator) lets script code walk the prototype
+// chain to the host Function constructor and reach `process` (full RCE), e.g.
+// console.constructor.constructor('return process')(). Only primitives are
+// passed into the context (__renderData/__pageUrl); everything else is built
+// by this prelude, and the captured cookie is read back as a primitive string
+// via __capturedCookie. Sloppy-mode top-level `this` is the context global.
+const VM_PRELUDE = `
+var window = this, self = this, top = this;
+var console = { log: function(){}, warn: function(){}, error: function(){}, info: function(){}, debug: function(){} };
+var setTimeout = function(){ return 0; }, setInterval = function(){ return 0; };
+var clearTimeout = function(){}, clearInterval = function(){};
+var location = { href: __pageUrl, reload: function(){}, replace: function(){} };
+var navigator = { userAgent: "Mozilla/5.0", language: "zh-CN" };
+var __capturedCookie = "";
+var document = {
+  getElementById: function(id){ return id === "renderData" ? { innerHTML: __renderData } : null; },
+  get cookie(){ return __capturedCookie; },
+  set cookie(v){ if (typeof v === "string" && v.indexOf("acw_sc__v2") !== -1) __capturedCookie = v; },
+  referrer: "",
+  location: location
+};
+`;
+
 /**
  * Solve an Aliyun WAF-style JS challenge by executing the page's scripts in a
  * Node vm sandbox and intercepting the document.cookie assignment.
- * The sandbox exposes no file/network/process capabilities; each script runs
- * with a 5s timeout. Errors after the cookie is captured are tolerated.
+ * The sandbox exposes no file/network/process capabilities (all shims live in
+ * the context realm, see VM_PRELUDE); each script runs with a 5s timeout.
+ * Errors after the cookie is captured are tolerated.
  *
  * Returns { value, maxAgeMs } or null when no acw_sc__v2 cookie was produced.
  */
@@ -79,37 +105,29 @@ export function solveChallengeInVm(html, pageUrl = "") {
     .filter(s => s.trim());
   const renderData = html.match(/<textarea id="renderData"[^>]*>([\s\S]*?)<\/textarea>/i)?.[1] || "";
 
-  let captured = null;
-  const locationShim = { href: pageUrl, reload() {}, replace() {} };
-  const sandbox = {
-    console: { log() {}, warn() {}, error() {}, info() {}, debug() {} },
-    setTimeout: () => 0,
-    setInterval: () => 0,
-    clearTimeout: () => {},
-    clearInterval: () => {},
-    document: {
-      getElementById: (id) => (id === "renderData" ? { innerHTML: renderData } : null),
-      get cookie() { return captured || ""; },
-      set cookie(v) {
-        if (typeof v === "string" && v.includes("acw_sc__v2")) captured = v;
-      },
-      referrer: "",
-      location: locationShim
-    },
-    navigator: { userAgent: "Mozilla/5.0", language: "zh-CN" },
-    location: locationShim
-  };
-  sandbox.window = sandbox;
-  sandbox.self = sandbox;
-  sandbox.top = sandbox;
+  // Bare null-prototype object: no host prototype chain to climb out of the
+  // sandbox. Only primitive strings cross the realm boundary.
+  const contextObject = Object.create(null);
+  contextObject.__renderData = renderData;
+  contextObject.__pageUrl = pageUrl;
+  const ctx = vm.createContext(contextObject);
+  vm.runInContext(VM_PRELUDE, ctx);
 
-  const ctx = vm.createContext(sandbox);
+  let captured = "";
   for (const script of scripts) {
     try {
       vm.runInContext(script, ctx, { timeout: 5000 });
     } catch {
       // Challenge scripts often end with a reload/navigation we cannot honor;
       // keep going as long as we have not captured the cookie.
+    }
+    try {
+      // Read back even after a script error: the cookie may have been set
+      // before the script threw on a navigation we cannot honor.
+      const readBack = vm.runInContext("__capturedCookie", ctx, { timeout: 5000 });
+      if (typeof readBack === "string" && readBack) captured = readBack;
+    } catch {
+      // Keep any previously captured value.
     }
     if (captured) break;
   }
