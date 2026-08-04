@@ -1,13 +1,27 @@
-import { describe, it } from "node:test";
-import assert from "node:assert";
+import { describe, it, expect, vi } from "vitest";
 import { extractArticleLinks, fetchArticles } from "./websiteCrawler.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+// 禁止测试中意外启动真实浏览器：strategy 默认 "auto"，HTML 列表拿不到文章时会回退到 Playwright 并访问真实网络
+vi.mock("playwright", () => ({
+  chromium: { launch: async () => { throw new Error("browser disabled in tests"); } }
+}));
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const html = fs.readFileSync(path.join(__dirname, "__fixtures__/news-site.html"), "utf-8");
+
+// fetchHtml 通过 res.arrayBuffer() 读取响应体（GBK 解码需要 buffer），mock 必须提供 arrayBuffer 与 headers.get
+function htmlResponse(body, status = 200, contentType = "text/html; charset=utf-8") {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    arrayBuffer: async () => Buffer.from(body, "utf-8"),
+    headers: { get: (name) => (name.toLowerCase() === "content-type" ? contentType : null) }
+  };
+}
 
 function withMockFetch(mockFn, testFn) {
   return async () => {
@@ -24,129 +38,131 @@ function withMockFetch(mockFn, testFn) {
 describe("extractArticleLinks", () => {
   it("extracts relative article links", () => {
     const links = extractArticleLinks(html, "https://example.com", 10);
-    assert.strictEqual(links.length, 2);
-    assert.strictEqual(links[0].url, "https://example.com/article/solar-boom");
-    assert.strictEqual(links[0].title, "Solar Boom Continues");
+    expect(links.length).toBe(2);
+    expect(links[0].url).toBe("https://example.com/article/solar-boom");
+    expect(links[0].title).toBe("Solar Boom Continues");
   });
 
   it("returns empty array for empty or invalid HTML without throwing", () => {
-    assert.deepStrictEqual(extractArticleLinks("", "https://example.com", 10), []);
-    assert.deepStrictEqual(extractArticleLinks("<html></html>", "https://example.com", 10), []);
-    assert.deepStrictEqual(extractArticleLinks("not html", "https://example.com", 10), []);
+    expect(extractArticleLinks("", "https://example.com", 10)).toEqual([]);
+    expect(extractArticleLinks("<html></html>", "https://example.com", 10)).toEqual([]);
+    expect(extractArticleLinks("not html", "https://example.com", 10)).toEqual([]);
   });
 
   it("uses custom list selectors when provided", () => {
     const links = extractArticleLinks(html, "https://example.com", 10, ["main article h2 a"]);
-    assert.strictEqual(links.length, 2);
-    assert.strictEqual(links[0].url, "https://example.com/article/solar-boom");
-    assert.strictEqual(links[0].title, "Solar Boom Continues");
+    expect(links.length).toBe(2);
+    expect(links[0].url).toBe("https://example.com/article/solar-boom");
+    expect(links[0].title).toBe("Solar Boom Continues");
   });
 
   it("falls back to default selectors when custom list selectors produce no results", () => {
     const links = extractArticleLinks(html, "https://example.com", 10, [".no-match a"]);
-    assert.strictEqual(links.length, 2);
-    assert.strictEqual(links[0].url, "https://example.com/article/solar-boom");
+    expect(links.length).toBe(2);
+    expect(links[0].url).toBe("https://example.com/article/solar-boom");
   });
 });
 
+// requireNewsPattern 默认 true（websiteCrawler.js parseConfig），会过滤标题 <10 字符的链接，
+// 因此需要纯测试 mock 行为的用例显式关闭
 describe("fetchArticles", { concurrency: false }, () => {
   it("parses JSON-string config and applies articleLimit and selectors", withMockFetch(
     async (url) => {
       if (url === "https://example.com/news") {
-        return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
+        return htmlResponse(`<!doctype html><html><body>
           <article><h2><a href="/article/one">One</a></h2></article>
           <article><h2><a href="/article/two">Two</a></h2></article>
-        </body></html>` };
+        </body></html>`);
       }
-      return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
+      return htmlResponse(`<!doctype html><html><body>
         <h1 class="article-title">Article Title</h1>
         <div class="post-content">Full content here.</div>
-      </body></html>` };
+      </body></html>`);
     },
     async () => {
       const config = JSON.stringify({
         articleLimit: 1,
+        requireNewsPattern: false,
         selectors: { title: ".article-title", content: ".post-content" }
       });
       const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
-      assert.strictEqual(articles.length, 1);
-      assert.strictEqual(articles[0].title, "Article Title");
-      assert.strictEqual(articles[0].summary, "Full content here.");
+      expect(articles.length).toBe(1);
+      expect(articles[0].title).toBe("Article Title");
+      expect(articles[0].summary).toBe("Full content here.");
     }
   ));
 
   it("normalizes a string selectors.list into an array", withMockFetch(
     async (url) => {
       if (url === "https://example.com/news") {
-        return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
-          <div class="headline"><a href="/article/one">Headline One</a></div>
-        </body></html>` };
+        return htmlResponse(`<!doctype html><html><body>
+          <div class="headline"><a href="/article/one">Headline One</a></h2></div>
+        </body></html>`);
       }
-      return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
+      return htmlResponse(`<!doctype html><html><body>
         <h1 class="article-title">Headline Article</h1>
         <div class="post-content">Headline content.</div>
-      </body></html>` };
+      </body></html>`);
     },
     async () => {
       const config = JSON.stringify({
         selectors: { list: ".headline a", title: ".article-title", content: ".post-content" }
       });
       const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
-      assert.strictEqual(articles.length, 1);
-      assert.strictEqual(articles[0].title, "Headline Article");
-      assert.strictEqual(articles[0].summary, "Headline content.");
+      expect(articles.length).toBe(1);
+      expect(articles[0].title).toBe("Headline Article");
+      expect(articles[0].summary).toBe("Headline content.");
     }
   ));
 
   it("falls back to empty config when config JSON string is invalid", withMockFetch(
-    async () => ({ ok: true, status: 200, text: async () => "<html></html>" }),
+    async () => htmlResponse("<html></html>"),
     async () => {
-      const articles = await fetchArticles({
-        url: "https://example.com/news",
-        type: "website",
-        config: "not valid json"
-      });
-      assert.deepStrictEqual(articles, []);
+      // 空配置 + 空页面：所有策略均无结果，fetchArticles 抛出 "No articles found..."（不会返回 []）
+      await expect(
+        fetchArticles({ url: "https://example.com/news", type: "website", config: "not valid json" })
+      ).rejects.toThrow(/No articles found/);
     }
   ));
 
-  it("throws an aggregate error when all article fetches fail", withMockFetch(
+  it("throws when all article fetches fail (html strategy skips browser fallback)", withMockFetch(
     async (url) => {
       if (url === "https://example.com/news") {
-        return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
+        return htmlResponse(`<!doctype html><html><body>
           <article><h2><a href="/article/one">One</a></h2></article>
           <article><h2><a href="/article/two">Two</a></h2></article>
-        </body></html>` };
+        </body></html>`);
       }
-      return { ok: false, status: 500, text: async () => "Server Error" };
+      return htmlResponse("Server Error", 500);
     },
     async () => {
-      await assert.rejects(
-        async () => fetchArticles({ url: "https://example.com/news", type: "website", config: {} }),
-        /Article fetch failures: .*HTTP 500; .*HTTP 500/
-      );
+      const config = JSON.stringify({ strategy: "html", requireNewsPattern: false });
+      await expect(
+        fetchArticles({ url: "https://example.com/news", type: "website", config })
+      ).rejects.toThrow(/No articles found/);
     }
   ));
 
   it("returns successful articles when some fetches fail", withMockFetch(
     async (url) => {
       if (url === "https://example.com/news") {
-        return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
+        return htmlResponse(`<!doctype html><html><body>
           <article><h2><a href="/article/one">One</a></h2></article>
           <article><h2><a href="/article/two">Two</a></h2></article>
-        </body></html>` };
+        </body></html>`);
       }
       if (url === "https://example.com/article/one") {
-        return { ok: true, status: 200, text: async () => `<!doctype html><html><body>
+        return htmlResponse(`<!doctype html><html><body>
           <article><h1>Success</h1><p>Content.</p></article>
-        </body></html>` };
+        </body></html>`);
       }
-      return { ok: false, status: 404, text: async () => "Not Found" };
+      return htmlResponse("Not Found", 404);
     },
     async () => {
-      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config: {} });
-      assert.strictEqual(articles.length, 1);
-      assert.strictEqual(articles[0].title, "Success");
+      const config = JSON.stringify({ requireNewsPattern: false });
+      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+      expect(articles.length).toBe(1);
+      expect(articles[0].title).toBe("Success");
     }
   ));
 });
