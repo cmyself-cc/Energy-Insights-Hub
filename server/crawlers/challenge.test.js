@@ -4,8 +4,15 @@ import {
   getRegistrableDomain,
   setCachedCookie,
   getCachedCookie,
-  clearCachedCookie
+  clearCachedCookie,
+  solveChallengeInVm
 } from "./challenge.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const bjxChallengeHtml = fs.readFileSync(path.join(__dirname, "__fixtures__/bjx-challenge.html"), "utf-8");
 
 describe("isChallengePage", () => {
   it("detects Aliyun WAF challenge page markers", () => {
@@ -66,5 +73,25 @@ describe("cookie cache", () => {
     setCachedCookie("a.com", "");
     expect(getCachedCookie("")).toBeNull();
     expect(getCachedCookie("a.com")).toBeNull();
+  });
+});
+
+describe("solveChallengeInVm", () => {
+  it("extracts acw_sc__v2 cookie from a real bjx challenge page", () => {
+    const solved = solveChallengeInVm(bjxChallengeHtml, "https://news.bjx.com.cn/html/20260727/1505924.shtml");
+    expect(solved).not.toBeNull();
+    // 实测观察到的 cookie 形态：10 位 hex + '-' + 40 位 hex
+    expect(solved.value).toMatch(/^[0-9a-f]{10}-[0-9a-f]{40}$/);
+    expect(solved.maxAgeMs).toBe(3600 * 1000);
+  });
+
+  it("is deterministic for a fixed challenge page", () => {
+    const a = solveChallengeInVm(bjxChallengeHtml, "https://news.bjx.com.cn/");
+    const b = solveChallengeInVm(bjxChallengeHtml, "https://news.bjx.com.cn/");
+    expect(a.value).toBe(b.value);
+  });
+
+  it("returns null for non-challenge HTML", () => {
+    expect(solveChallengeInVm("<html><body>hello</body></html>", "https://example.com/")).toBeNull();
   });
 });
