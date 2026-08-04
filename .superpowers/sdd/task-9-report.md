@@ -1,111 +1,85 @@
-# Task 9: Final Integration Verification Report
+# Task 9 Report: routes/sources.js 发现端点接入挑战层
 
-**Date:** 2026-07-25  
-**Base commit:** 29b4f2d  
-**Final commit:** 013f5e1
+**Status:** DONE
+**Commit:** `7ad65be` — `fix: route source discovery endpoints through challenge-aware fetch`
 
----
+## What I implemented
 
-## 1. Test Suite
+Switched both sub-page discovery endpoints in `server/routes/sources.js` from raw
+`fetchWithTimeout(...).text()` (UTF-8-forced, no challenge handling) to the
+challenge-aware `fetchHtmlSmart(...)` from `server/crawlers/challenge.js`
+(GBK/charset decoding, retry, WAF challenge solving, cookie cache):
 
-### feedbackService.test.js — ✅ 3/3 passed
+1. **Imports (lines 7–8):** replaced
+   `import { fetchWithTimeout, randomUserAgent } from "../crawlers/utils.js";`
+   with
+   `import { randomUserAgent } from "../crawlers/utils.js";` and
+   `import { fetchHtmlSmart } from "../crawlers/challenge.js";`.
+   `fetchWithTimeout` was verified to have zero remaining references in the file
+   (grep after edit: no matches), so it was removed from the import per the brief.
+   `randomUserAgent` is kept and still used in both new calls.
 
-```
- ✓ server/services/feedbackService.test.js (3 tests) 4ms
-   ✓ records bookmark and creates boost weights
-   ✓ records hide with irrelevant reason and creates suppress weights
-   ✓ returns stats
-```
+2. **`POST /:id/discover-subpages`** (line 173): fetch of the source homepage now
+   `const html = await fetchHtmlSmart(source.url, { headers: { "User-Agent": randomUserAgent(), "Accept": "text/html" } }, 20000);`
 
-### feedbackWeights.test.js — ✅ 3/3 passed (after fix)
+3. **`POST /:id/confirm-subpages`** (line 199): fetch of each confirmed sub-page for
+   list-selector detection now uses the same `fetchHtmlSmart(sp.url, {...}, 20000)` shape.
+   Error behavior is preserved: the surrounding `try/catch` still sets
+   `sp.listSelectors = []` if the fetch/challenge-solving throws (verified
+   `fetchHtmlSmart` throws `WAF challenge could not be solved for <url>` when unsolvable).
 
-Initial failure: `loads empty weights when none exist` failed because the database had residual data from earlier tests. Fixed by adding `beforeEach` with `DELETE FROM feedback_semantic_weights` cleanup.
+Signature compatibility confirmed against `server/crawlers/challenge.js:222`:
+`export async function fetchHtmlSmart(url, options = {}, timeoutMs = 20000, { retryDelayMs = 1000 } = {})`
+— it returns a decoded HTML **string** (via `fetchDecoded`), so the downstream
+`discoverSubPages(html, source.url)` and `discoverListSelectors(html)` calls receive
+the same type they did before, now correctly decoded for GBK pages.
 
-```
- ✓ server/services/feedbackWeights.test.js (3 tests) 2ms
-   ✓ loads empty weights when none exist
-   ✓ drops item when suppress keywords match above threshold
-   ✓ keeps item when no threshold crossed
-```
+## Verification
 
-**Fix applied:** `server/services/feedbackWeights.test.js` — added `import db` and `beforeEach` cleanup.
+### eslint — `server/routes/sources.js` (before vs after)
 
----
+| When | Finding |
+|------|---------|
+| Before change | `192:63 error Empty block statement no-empty` (1 problem) |
+| After change  | `193:63 error Empty block statement no-empty` (1 problem) |
 
-## 2. Frontend Build
+Same single pre-existing error (line shifted 192→193 because one import line was
+added). **Zero new lint issues introduced.** The pre-existing `catch {}` inside
+confirm-subpages' `JSON.parse` was left untouched per instructions.
 
-```
-npm run build → ✅ built in 697ms
-dist/index.html                   0.47 kB
-dist/assets/index-DJEytHl_.css    3.39 kB
-dist/assets/index-Ddg3N0Ej.js   532.68 kB
-```
+Additionally verified via stash-diff of full `npm run lint`: the sources.js section of
+the lint output is identical before and after (same 1 error), while the full-project
+lint has unrelated pre-existing failures elsewhere (23 problems total: 15 errors /
+8 warnings, e.g. `no-dupe-keys` in `src/constants/i18n.js`, unused vars in
+`src/components/*`) — none touched or caused by this task.
 
-No build errors. (Chunk size warning is pre-existing and non-blocking.)
+### build — `npm run build`
 
----
+Exit code 0. `vite v5.4.21` built successfully: 60 modules transformed,
+`dist/index.html`, `dist/assets/index-*.css`, `dist/assets/index-*.js` emitted in 886ms.
+The >500 kB chunk-size warning is informational and pre-existing.
 
-## 3. End-to-End API Tests
+### grep
 
-| # | Endpoint | Method | Status | Result |
-|---|----------|--------|--------|--------|
-| 1 | `/api/feedback` | POST | ✅ | `{"data":{"id":14,"insightId":111,"action":"hide","reason":"irrelevant","keywords":["新能源","储能"]}}` |
-| 2 | `/api/feedback` | POST (bookmark) | ✅ | `{"data":{"id":15,"insightId":111,"action":"bookmark","reason":null,"keywords":["新能源","储能"]}}` |
-| 3 | `/api/feedback/stats` | GET | ✅ | `{"data":{"total":2,"bookmarks":1,"hides":1,"byReason":{"irrelevant":1}}}` |
-| 4 | `/api/feedback/generate-suggestions` | POST | ⚠️ | Timed out — no LLM API key configured (expected per brief) |
-| 5 | `/api/feedback/suggestions` | GET | ✅ | Returned existing pending suggestion from prior run |
+`fetchWithTimeout` in `server/routes/sources.js` after edits: no matches.
 
-### Semantic Weights Verification
+## Files changed
 
-The `feedback_semantic_weights` table was populated correctly:
+- `server/routes/sources.js` — 6 insertions, 5 deletions (import line split + two fetch sites)
 
-| term | action | reason_category | score |
-|------|--------|-----------------|-------|
-| 新能源 | suppress | irrelevant | 1 |
-| 储能 | suppress | irrelevant | 1 |
-| 新能源 | boost | — | 1 |
-| 储能 | boost | — | 1 |
+## Self-review findings
 
----
+- `fetchHtmlSmart` returns a string, matching the prior `.text()` contract — no shape change for callers.
+- Timeout argument (20000) and headers (`User-Agent` via `randomUserAgent()`, `Accept: text/html`) preserved exactly at both sites, matching the brief's target code verbatim.
+- Error paths preserved: discover-subpages still returns 500 with `e.message` on failure; confirm-subpages still falls back to `listSelectors = []` per sub-page on fetch error.
+- No other routes, crawlers, or files were modified. Unrelated pre-existing working-tree changes (`.superpowers/sdd/progress.md`, task-7/8 reports, untracked docs) were deliberately NOT staged.
+- No unit tests exist for these endpoints (pre-existing, per task instructions); verification was eslint + build only, as directed. No new test infrastructure invented.
 
-## 4. File Verification
+## Deviations
 
-### Created files — ✅ all present
-
-- `server/migrations/013_user_feedback.sql`
-- `server/services/feedbackService.js`
-- `server/services/feedbackWeights.js`
-- `server/services/feedbackSuggestionGenerator.js`
-- `server/routes/feedback.js`
-- `src/components/FeedbackPage.jsx`
-
-### Modified files — ✅ all present with changes committed in prior tasks
-
-- `src/components/CardActions.jsx`
-- `src/components/IntelligencePage.jsx`
-- `src/App.jsx`
-- `src/utils/backendApi.js`
-- `src/components/ConfigurationPage.jsx`
-- `server/services/tracker.js`
-- `server/index.js`
-
----
-
-## 5. Spec Coverage
-
-- ✅ 三张表：`user_feedback`、`feedback_semantic_weights`、`feedback_rules_suggestions`
-- ✅ 隐藏原因四分：irrelevant / duplicate / low_quality / not_now
-- ✅ 即时生效：tracker 调用 `applyUserFeedbackScore`
-- ✅ 周期汇总：LLM 生成建议（API 超时因无 LLM key，代码逻辑正确）
-- ✅ 半自动确认：用户接受/拒绝建议
-- ✅ 本地关键词相似：权重基于 keywords/title/summary 文本匹配
-- ✅ 只影响未来抓取：不改变当前池子查询逻辑
-
----
-
-## 6. Issues & Notes
-
-1. **vitest missing from package.json** — tests used `vitest` imports but the package wasn't installed. Added as devDependency.
-2. **Test isolation** — `feedbackWeights.test.js` lacked DB cleanup in setup, causing cross-test contamination. Fixed.
-3. **generate-suggestions timeout** — no LLM API key configured, endpoint hangs. Code path is correct; needs `OPENAI_API_KEY` (or equivalent) in `.env` for production use.
-4. **Port 3001 conflict** — server was already running from prior session. Killed before starting.
+None. All three steps of the brief followed exactly, including the exact commit message.
+One note: the brief's Step 2 says `npm run lint && npm run build` "均通过"; full
+`npm run lint` cannot pass due to pre-existing project-wide errors unrelated to this
+file (documented above). Per the task instructions, the required verification was
+`npx eslint server/routes/sources.js` introducing no new issues (satisfied — findings
+identical before/after) and `npm run build` (exit 0).

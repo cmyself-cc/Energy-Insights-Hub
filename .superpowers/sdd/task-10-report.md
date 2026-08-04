@@ -1,43 +1,78 @@
-# Task 10 Report: Group ContentFiltersPage.jsx filter rules by purpose
+# Task 10 Report: 新增 bjx source + 端到端活体冒烟 + 最终验证
 
-## Status: DONE_WITH_CONCERNS
+**Status:** DONE_WITH_CONCERNS（一个无害的 lint 基线问题 + 一处脚本内容微偏差，详见下）
+**Commit:** `2bd66a7` feat: add bjx energy source, live smoke script for challenge-aware crawler
 
-(Only concern: the brief's Step 2 git commit was not executed — see "Left undone" below. The implementation itself is complete and verified.)
+## 1. DB Insert（先查重，只 INSERT）
 
-## What I changed
+- **Pre-check:** `SELECT id, url FROM sources WHERE url = 'https://energy.bjx.com.cn';` → 无输出（不存在），安全插入。
+- **INSERT 语句:** 与 brief 完全一致（单条 INSERT，无任何 DELETE/UPDATE）。
+- **插入结果回显:**
 
-File modified: `src/components/ContentFiltersPage.jsx` (only file touched)
+```
+318|北极星能源网|https://energy.bjx.com.cn|1|{"strategy":"auto","articleLimit":10,"detailSelectors":{"title":"h1","content":".cc-article"}}
+```
 
-1. **Added a `PURPOSES` constant** (top of file), matching the shape already used in `SourcesPage.jsx`:
-   `competitor` (竞争对手/Competitor), `policy` (政策动态/Policy), `tech` (技术突破/Tech).
+id=318，config JSON 完整。
 
-2. **Grouped rules by purpose** per the brief's snippet: built `rulesByPurpose` where each purpose holds `enterprise`, `include_keyword`, and `exclude_keyword` sub-lists, with rules having an empty/missing `purpose` defaulting to `"competitor"` (`(r.purpose || "competitor") === p.value`).
+## 2. 活体冒烟（首次运行即 PASS，未重试）
 
-3. **Collapsible sections**: replaced the flat three-type list under "Three-Layer Filter Rules" with a per-purpose loop. Each purpose renders a clickable header (▶/▼ toggle, localized purpose label, total rule count) and, when expanded, its three keyword sub-lists. Added `collapsedPurposes` state; all sections default to expanded.
+命令: `node scripts/smoke-bjx.mjs`，完整输出：
 
-4. **Purpose-aware add flow**: the new-keyword inputs are now keyed by `${purpose}:${type}` in `newKeywordForType`, and `addTypedKeyword(type, purpose)` passes `purpose` to `backendApi.createFilterRule`, so a keyword added under "Policy" is actually created with `purpose: "policy"` (the POST route accepts `purpose` since Task 8).
+```
+[website] HTML list found 20 candidate links (incl. sub-pages)
+[website] WAF challenge detected for https://guangfu.bjx.com.cn/news/20260803/1506923.shtml
+[website] Challenge solved via vm for bjx.com.cn
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260727/1505924.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260724/1505676.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260727/1506010.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260724/1505713.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260721/1505148.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260728/1506107.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260722/1505280.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260728/1506202.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260728/1506071.shtml
+[website] Skipping article older than 7d: https://news.bjx.com.cn/html/20260720/1504932.shtml
+[website] HTML list returned 10 articles
+Fetched 10 articles in 8.6s
+- [2026-08-03] 两部门印发《新型电力系统建设"十五五"规划》 | content:705字
+- [2026-08-03] 第八师石玛兵地融合陕建100万千瓦"草光互补"光伏项目支架采购中标结果公示 | content:5073字
+- [2026-08-03] 中电工程总经理李屹立：从五大创新看"十五五"新型能源体系建设 | content:2530字
+- [2026-08-03] 协合新能源：附属公司与特斯拉签订469MW光伏项目售电协议 | content:5156字
+- [2026-07-31] 全球能源价格走势分析报告（2026年7月） | content:7712字
+- [2026-08-03] 集中供冷来了！全国首个废弃矿井水集中供冷项目在徐矿建成投运 | content:975字
+- [2026-07-30] 中能财经 | 今夏动力煤市场为何"燃"不起来？ | content:6964字
+- [2026-07-30] 国家能源局：推动油气与新能源、CCUS、伴生资源协同开发 | content:579字
+- [2026-07-29] 中国海油2026年年中工作会议召开 | content:2509字
+- [2026-08-03] *ST天宜被责令改正 | content:408字
+PASS
+```
 
-5. **Preserve purpose on edit**: `saveTypedKeyword` now sends `purpose: rule.purpose || ""` in the PUT body. This was necessary because `server/routes/filters.js` PUT does `purpose || ""` — omitting it would have silently wiped a rule's purpose on every rename.
+断言核验：10 篇（≥5 ✓）；正文 408–7712 字（均 ≥100 ✓）；日期 2026-07-29 ~ 2026-08-03（今天 2026-08-04，均在近 8 天内 ✓）；耗时 8.6s。
+关键日志：`WAF challenge detected`（首个详情页触发阿里云 WAF 挑战）→ `Challenge solved via vm`（vm 沙箱解算成功，cookie 被 bjx.com.cn 全站接受，后续 9 个详情请求无再触发），maxAgeDays 过滤正常工作（跳过 10 条超龄文章）。
 
-No changes to CSV import/export, semantic prompt, or business categories sections.
+## 3. 最终验证
 
-## Test results
+- **vitest（scoped）:** `npx vitest run server/crawlers/websiteCrawler.test.js server/crawlers/challenge.test.js`
+  → `Test Files  2 passed (2)` / `Tests  32 passed (32)`（6.48s）
+- **eslint（scoped，本任务唯一触碰文件）:** `npx eslint scripts/smoke-bjx.mjs --max-warnings 0` → 0 errors 0 warnings（修复后，见偏差 1）。另 `node --check` 语法校验通过。
+- **eslint（全量 `npm run lint`）:** 退出码 1，23 problems（15 errors, 8 warnings）。全部位于本任务未触碰的文件：src/*、server/services/*、server/routes/sources.js、server/lib/llmAlias.js，以及 challenge.js（2× no-empty）与 websiteCrawler.js（2× no-empty + 1× no-unused-vars）。后两者在工作区相对 HEAD 无改动（`git status` 确认），即这些是 tasks 1–9 已提交并经 review 的基线，非本任务引入。**本任务零新增 lint 问题。**
+- **build:** `npm run build` → `✓ 60 modules transformed` / `✓ built in 861ms`（chunk-size 警告为既有提示，非错误）。
 
-- `npx eslint src/components/ContentFiltersPage.jsx` → exit 0, no warnings/errors.
-- `npm run build` (vite build) → success: `✓ 55 modules transformed`, `✓ built in 686ms`. Only the pre-existing >500 kB chunk-size warning, unrelated to this change.
+## 4. Files changed
 
-No automated test suite exists in this project (no test script in package.json), so verification is lint + production build. Manual UI verification of collapse/expand and add/edit was not performed.
+| 文件 | 变更 |
+|---|---|
+| `data/energy_insights.db` | INSERT 1 行（id=318，北极星能源网）；gitignored 运行时数据 |
+| `scripts/smoke-bjx.mjs` | 新建，35 行；已提交 `2bd66a7` |
 
-## Concerns
+## 5. Self-review findings
 
-- Rules with a `purpose` value outside the three known values (e.g. legacy or typo values) will not appear in any section, per the brief's exact grouping logic. Empty purpose correctly falls back to "competitor".
-- Section collapse state is local component state; it resets on page reload (acceptable per brief, which didn't specify persistence).
+- 冒烟脚本仅 readonly 打开 DB，只 import `websiteCrawler.js`，未触碰 Express/migrations，符合 brief 约束。
+- 活体运行证明端到端链路：列表抓取 → WAF 挑战检测 → vm 解算 → cookie 缓存（registrable domain bjx.com.cn 覆盖 guangfu/news 子域）→ GBK 子页解码 → maxAgeDays 过滤 → detailSelectors(.cc-article) 正文提取，全部生效。
+- 既有 website 源无回归：websiteCrawler.test.js 14 个测试全绿。
 
-## Left undone
+## 6. Deviations
 
-- **Step 2 (git commit) was not executed.** My operating rules prohibit git mutations without explicit per-action user confirmation, which I cannot obtain as a subagent. The change to `src/components/ContentFiltersPage.jsx` is staged-ready but uncommitted. The parent agent/user should run:
-  ```bash
-  git add src/components/ContentFiltersPage.jsx
-  git commit -m "feat: content filters grouped by purpose"
-  ```
-  Note: the working tree also contains unrelated modifications (other task reports, `progress.md`, an untracked `energy_insights.db` and a stray `new Database(DB_PATH)` file) — commit only the ContentFiltersPage.jsx file to keep the diff clean.
+1. **smoke-bjx.mjs 加了一行 `/* global process */`**（brief 原稿无）。原因：`.eslintrc.cjs` 的 node env 仅覆盖 `server/**/*.js`，`scripts/` 下 `process` 触发 no-undef，违反"零新增 lint 问题"验收项。相比改动共享 eslint 配置（会引入第二个变更文件），文件内 directive 是最小侵入修复。不影响脚本行为。
+2. `npm run lint` 全量不通过，但失败全部为既有基线（见第 3 节），非本任务引入；brief 验收语境为"无新增问题"，故判定满足。若后续要求全量 lint 绿，需另开清理任务（challenge.js/websiteCrawler.js 的 4 处 no-empty 建议用 `// ignored` 注释或 `eslint-disable-next-line` 处理，属 tasks 1–9 遗留）。
