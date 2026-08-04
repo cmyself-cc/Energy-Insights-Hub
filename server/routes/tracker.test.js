@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, beforeEach, afterEach, expect } from "vitest";
 import express from "express";
 import db, { initDb } from "../db.js";
 import trackerRouter from "./tracker.js";
@@ -72,9 +71,7 @@ describe("tracker router /import-config", () => {
   it("append mode skips duplicate categories and rules", async () => {
     const payload = {
       excludeKeywords: ["duplicate"],
-      compositeRules: [
-        { name: "composite", mustInclude: ["a", "b"], mustExclude: ["c"] }
-      ],
+      enterpriseKeywords: ["enterprise-dup"],
       categories: [
         { name: "UniqueCategory", description: "d", inclusionPrompt: "p" }
       ],
@@ -82,37 +79,34 @@ describe("tracker router /import-config", () => {
     };
 
     const first = await importConfig(server, payload, "append");
-    assert.strictEqual(first.data.rulesImported, 2);
-    assert.strictEqual(first.data.categoriesImported, 1);
-    assert.strictEqual(first.data.sourcesImported, 0);
+    expect(first.data.rulesImported).toBe(2);
+    expect(first.data.categoriesImported).toBe(1);
+    expect(first.data.sourcesImported).toBe(0);
 
     const second = await importConfig(server, payload, "append");
-    assert.strictEqual(second.data.rulesImported, 0);
-    assert.strictEqual(second.data.categoriesImported, 0);
-    assert.strictEqual(second.data.sourcesImported, 0);
+    expect(second.data.rulesImported).toBe(0);
+    expect(second.data.categoriesImported).toBe(0);
+    expect(second.data.sourcesImported).toBe(0);
 
-    assert.strictEqual(db.prepare("SELECT COUNT(*) AS c FROM filter_rules").get().c, 2);
-    assert.strictEqual(db.prepare("SELECT COUNT(*) AS c FROM business_categories").get().c, 1);
+    expect(db.prepare("SELECT COUNT(*) AS c FROM filter_rules").get().c).toBe(2);
+    expect(db.prepare("SELECT COUNT(*) AS c FROM business_categories").get().c).toBe(1);
   });
 
   it("append mode counts reflect actual inserts for partial duplicates", async () => {
     const firstPayload = {
       excludeKeywords: ["dup"],
-      compositeRules: [{ mustInclude: ["x"], mustExclude: [] }],
+      enterpriseKeywords: ["x"],
       categories: [{ name: "A", description: "d", inclusionPrompt: "p" }],
       sources: []
     };
 
     const first = await importConfig(server, firstPayload, "append");
-    assert.strictEqual(first.data.rulesImported, 2);
-    assert.strictEqual(first.data.categoriesImported, 1);
+    expect(first.data.rulesImported).toBe(2);
+    expect(first.data.categoriesImported).toBe(1);
 
     const secondPayload = {
       excludeKeywords: ["dup", "new"],
-      compositeRules: [
-        { mustInclude: ["x"], mustExclude: [] },
-        { mustInclude: ["y"], mustExclude: [] }
-      ],
+      enterpriseKeywords: ["x", "y"],
       categories: [
         { name: "A", description: "d", inclusionPrompt: "p" },
         { name: "B", description: "d", inclusionPrompt: "p" }
@@ -121,11 +115,11 @@ describe("tracker router /import-config", () => {
     };
 
     const second = await importConfig(server, secondPayload, "append");
-    assert.strictEqual(second.data.rulesImported, 2);
-    assert.strictEqual(second.data.categoriesImported, 1);
+    expect(second.data.rulesImported).toBe(2);
+    expect(second.data.categoriesImported).toBe(1);
 
-    assert.strictEqual(db.prepare("SELECT COUNT(*) AS c FROM filter_rules").get().c, 4);
-    assert.strictEqual(db.prepare("SELECT COUNT(*) AS c FROM business_categories").get().c, 2);
+    expect(db.prepare("SELECT COUNT(*) AS c FROM filter_rules").get().c).toBe(4);
+    expect(db.prepare("SELECT COUNT(*) AS c FROM business_categories").get().c).toBe(2);
   });
 
   it("append mode updates existing categories with new description and prompt", async () => {
@@ -143,11 +137,11 @@ describe("tracker router /import-config", () => {
       "append"
     );
 
-    assert.strictEqual(result.data.categoriesImported, 0);
+    expect(result.data.categoriesImported).toBe(0);
 
     const row = db.prepare("SELECT description, inclusion_prompt FROM business_categories WHERE name = ?").get("ExistingCategory");
-    assert.strictEqual(row.description, "new description");
-    assert.strictEqual(row.inclusion_prompt, "new prompt");
+    expect(row.description).toBe("new description");
+    expect(row.inclusion_prompt).toBe("new prompt");
   });
 
   it("append mode preserves the active flag of an existing disabled category", async () => {
@@ -165,12 +159,12 @@ describe("tracker router /import-config", () => {
       "append"
     );
 
-    assert.strictEqual(result.data.categoriesImported, 0);
+    expect(result.data.categoriesImported).toBe(0);
 
     const row = db.prepare("SELECT description, inclusion_prompt, active FROM business_categories WHERE name = ?").get("DisabledCategory");
-    assert.strictEqual(row.description, "new description");
-    assert.strictEqual(row.inclusion_prompt, "new prompt");
-    assert.strictEqual(row.active, 0);
+    expect(row.description).toBe("new description");
+    expect(row.inclusion_prompt).toBe("new prompt");
+    expect(row.active).toBe(0);
   });
 
   it("replace mode clears existing rules and categories before inserting", async () => {
@@ -188,23 +182,23 @@ describe("tracker router /import-config", () => {
       server,
       {
         excludeKeywords: ["new"],
-        compositeRules: [{ mustInclude: ["z"], mustExclude: [] }],
+        enterpriseKeywords: ["z"],
         categories: [{ name: "NewCategory", description: "d", inclusionPrompt: "p" }],
         sources: []
       },
       "replace"
     );
 
-    assert.strictEqual(replace.data.rulesImported, 2);
-    assert.strictEqual(replace.data.categoriesImported, 1);
-    assert.strictEqual(replace.data.sourcesImported, 0);
+    expect(replace.data.rulesImported).toBe(2);
+    expect(replace.data.categoriesImported).toBe(1);
+    expect(replace.data.sourcesImported).toBe(0);
 
     const categories = db.prepare("SELECT name FROM business_categories").all().map((r) => r.name);
-    assert.deepStrictEqual(categories, ["NewCategory"]);
+    expect(categories).toEqual(["NewCategory"]);
 
     const ruleNames = db.prepare("SELECT name FROM filter_rules").all().map((r) => r.name);
-    assert.strictEqual(ruleNames.length, 2);
-    assert.ok(ruleNames.includes("new"));
-    assert.ok(ruleNames.includes(null));
+    expect(ruleNames.length).toBe(2);
+    expect(ruleNames).toContain("new");
+    expect(ruleNames).toContain("z");
   });
 });
