@@ -1,7 +1,6 @@
 import * as cheerio from "cheerio";
 import Parser from "rss-parser";
 import { chromium } from "playwright";
-import iconv from "iconv-lite";
 import {
   fetchWithTimeout,
   resolveUrl,
@@ -12,7 +11,8 @@ import {
   extractPublishedDate,
   cleanText,
   decompressIfNeeded,
-  normalizeUrl
+  normalizeUrl,
+  decodeHtmlBuffer
 } from "./utils.js";
 
 const rssParser = new Parser({
@@ -190,27 +190,8 @@ async function fetchHtml(url, timeoutMs = 20000) {
   return decodeHtmlBuffer(buffer, res.headers.get("content-type") || "");
 }
 
-/**
- * Decode an HTML response buffer, handling GBK/GB2312/GB18030 pages that
- * declare their charset in the Content-Type header or a <meta> tag.
- * Falls back to UTF-8.
- */
-export function decodeHtmlBuffer(buffer, contentType = "") {
-  // 1) charset from Content-Type header
-  const headerCharset = (contentType || "").match(/charset=([\w-]+)/i)?.[1];
-  // 2) charset from <meta charset=...> / <meta http-equiv="Content-Type" ... charset=...>
-  let html = buffer.toString("utf-8");
-  const metaCharset = html.match(/<meta[^>]+charset=["']?\s*([\w-]+)/i)?.[1];
-  const charset = headerCharset || metaCharset;
-  if (charset && /^gbk$|^gb2312$|^gb18030$/i.test(charset)) {
-    try {
-      return iconv.decode(buffer, charset.toLowerCase());
-    } catch {
-      // fall through to utf-8
-    }
-  }
-  return html;
-}
+// Re-exported for backward compatibility; implementation lives in utils.js
+export { decodeHtmlBuffer };
 
 async function fetchArticleDetail(url, detailSelectors = {}) {
   const html = await fetchHtml(url);
