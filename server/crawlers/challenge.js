@@ -209,7 +209,7 @@ export async function solveChallengeWithPlaywright(url, timeoutMs = 20000) {
     return null;
   } finally {
     if (browser) {
-      try { await browser.close(); } catch {}
+      try { await browser.close(); } catch { /* already closed */ }
     }
   }
 }
@@ -223,7 +223,9 @@ export async function fetchHtmlSmart(url, options = {}, timeoutMs = 20000, { ret
   let domain = "";
   try {
     domain = getRegistrableDomain(new URL(url).hostname);
-  } catch {}
+  } catch {
+    // Invalid URL: fall back to no cookie caching (empty domain key)
+  }
 
   let html = await fetchDecoded(url, withCookieHeader(options, getCachedCookie(domain)), timeoutMs, retryDelayMs);
   if (!isChallengePage(html)) return html;
