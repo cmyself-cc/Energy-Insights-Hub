@@ -4,7 +4,8 @@ import { loadSourcesFromMd } from "../lib/sourcesMdLoader.js";
 import { parseConfigFile } from "../lib/configParser.js";
 import { importSources, normalizeImportType } from "../services/sourceImporter.js";
 import { discoverSubPages, discoverListSelectors } from "../crawlers/websiteCrawler.js";
-import { fetchWithTimeout, randomUserAgent } from "../crawlers/utils.js";
+import { randomUserAgent } from "../crawlers/utils.js";
+import { fetchHtmlSmart } from "../crawlers/challenge.js";
 
 const router = Router();
 
@@ -169,9 +170,9 @@ router.post("/:id/discover-subpages", async (req, res) => {
     const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(req.params.id);
     if (!source) return res.status(404).json({ error: "Source not found" });
 
-    const html = await (await fetchWithTimeout(source.url, {
+    const html = await fetchHtmlSmart(source.url, {
       headers: { "User-Agent": randomUserAgent(), "Accept": "text/html" }
-    }, 20000)).text();
+    }, 20000);
 
     const subPages = discoverSubPages(html, source.url);
     res.json({ data: subPages });
@@ -195,9 +196,9 @@ router.post("/:id/confirm-subpages", async (req, res) => {
     for (const sp of subPages) {
       if (!sp.listSelectors) {
         try {
-          const html = await (await fetchWithTimeout(sp.url, {
+          const html = await fetchHtmlSmart(sp.url, {
             headers: { "User-Agent": randomUserAgent(), "Accept": "text/html" }
-          }, 20000)).text();
+          }, 20000);
           sp.listSelectors = discoverListSelectors(html);
         } catch { sp.listSelectors = []; }
       }
