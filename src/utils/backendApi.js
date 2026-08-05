@@ -57,6 +57,15 @@ export const backendApi = {
   getReport: (id) => request(`/reports/${id}`),
   createReport: (report) => request("/reports", { method: "POST", body: JSON.stringify(report) }),
   deleteReport: (id) => request(`/reports/${id}`, { method: "DELETE" }),
+  getReportTemplates: () => request("/reports/templates"),
+  createReportTemplate: (data) => request("/reports/templates", { method: "POST", body: JSON.stringify(data) }),
+  updateReportTemplate: (id, data) => request(`/reports/templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteReportTemplate: (id) => request(`/reports/templates/${id}`, { method: "DELETE" }),
+  screenReport: (templateId, insightIds) => request("/reports/screening", { method: "POST", body: JSON.stringify({ templateId, insightIds }) }),
+  generateReport: (templateId, insightIds, resolutions) => request("/reports/generate", { method: "POST", body: JSON.stringify({ templateId, insightIds, resolutions }) }),
+  getReportJobs: () => request("/reports/jobs"),
+  getReportJob: (id) => request(`/reports/jobs/${id}`),
+  retryReportJob: (id) => request(`/reports/jobs/${id}/retry`, { method: "POST" }),
 
   // Tracker
   runTracker: () => request("/tracker/run", { method: "POST" }),

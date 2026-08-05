@@ -39,7 +39,7 @@ export default function IntelligencePage(props) {
   const {
     darkMode, language, filters, onFilterChange, onSearch, loading, fetched, error,
     insights, bookmarks, hidden, cart, onToggleCart, onToggleBookmark, onHide, onAiInterpret,
-    onClearCart, onGenerateNewsletter, summarizing, onKeywordClick
+    onClearCart, onGenerateReport, onKeywordClick
   } = props;
   const [subTab, setSubTab] = useState("feed");
 
@@ -126,7 +126,7 @@ export default function IntelligencePage(props) {
               fontSize: FONT_SIZES.sm,
               cursor: "pointer"
             }}>{t.buttons.clearCart}</button>
-            <button onClick={onGenerateNewsletter} disabled={summarizing} style={{
+            <button onClick={onGenerateReport} style={{
               padding: "5px 14px",
               borderRadius: BORDER_RADIUS.sm,
               border: "none",
@@ -134,9 +134,9 @@ export default function IntelligencePage(props) {
               color: "#fff",
               fontSize: FONT_SIZES.sm,
               fontWeight: 700,
-              cursor: summarizing ? "not-allowed" : "pointer"
+              cursor: "pointer"
             }}>
-              {summarizing ? t.buttons.generating : t.buttons.generateNewsletter}
+              {language === "zh" ? "生成报告" : "Generate Report"}
             </button>
           </div>
         </div>

@@ -6,6 +6,7 @@ import Sidebar from "./components/Sidebar";
 import IntelligencePage from "./components/IntelligencePage";
 import AiDrawer from "./components/AiDrawer";
 import ReportsPage from "./components/ReportsPage";
+import ReportGeneratorModal from "./components/ReportGeneratorModal";
 import ConfigurationPage from "./components/ConfigurationPage";
 import { ToastContainer } from "./components/Toast";
 import { storage } from "./utils/storage";
@@ -23,13 +24,15 @@ export default function App() {
   const [error, setError] = useState(null);
   const [fetched, setFetched] = useState(false);
   const [cart, setCart] = useState([]);
-  const [summarizing, setSummarizing] = useState(false);
   const [newsletter, setNewsletter] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
   const [bookmarks, setBookmarks] = useState([]);
   const [hidden, setHidden] = useState([]);
   const [activeTab, setActiveTab] = useState("intelligence");
   const [showApiConfig, setShowApiConfig] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportTemplates, setReportTemplates] = useState([]);
+  const [openReportId, setOpenReportId] = useState(null);
   const [apiConfig, setApiConfig] = useState(null);
   const [language, setLanguage] = useState("en");
   const [toasts, setToasts] = useState([]);
@@ -60,6 +63,7 @@ export default function App() {
     const savedLanguage = storage.getLanguage();
     setLanguage(savedLanguage);
     loadInsightsFromBackend();
+    backendApi.getReportTemplates().then(r => setReportTemplates(r.data || [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -178,26 +182,6 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [filters, fetchInsights]);
 
-  const generateNewsletter = useCallback(async (overrideLang) => {
-    if (!cart.length) return;
-    if (!apiConfig) {
-      setShowApiConfig(true);
-      addToast(t.toasts.apiKeyRequired, "error");
-      return;
-    }
-
-    const lang = overrideLang || language;
-    setSummarizing(true);
-    try {
-      const txt = await api.generateNewsletter(cart, lang);
-      setNewsletter(txt);
-      addToast(t.toasts.newsletterGenerated, "success");
-    } catch (e) {
-      addToast(t.toasts.newsletterFailed + e.message, "error");
-    }
-    setSummarizing(false);
-  }, [cart, apiConfig, language, t]);
-
   const openAiDrawer = (item) => {
     setSelectedArticle(item);
     setAiDrawerOpen(true);
@@ -287,8 +271,7 @@ export default function App() {
               onHide={hideItem}
               onAiInterpret={openAiDrawer}
               onClearCart={clearCart}
-              onGenerateNewsletter={generateNewsletter}
-              summarizing={summarizing}
+              onGenerateReport={() => setShowReportModal(true)}
               onKeywordClick={(keyword) => {
                 setFilters(prev => ({ ...prev, query: keyword }));
               }}
@@ -299,6 +282,8 @@ export default function App() {
             <ReportsPage
               darkMode={darkMode}
               language={language}
+              openReportId={openReportId}
+              onOpenReportHandled={() => setOpenReportId(null)}
               onViewReport={(report) => {
                 setNewsletter(report.content);
               }}
@@ -354,6 +339,18 @@ export default function App() {
           darkMode={darkMode}
           language={language}
           onClose={closeAiDrawer}
+        />
+      )}
+
+      {showReportModal && (
+        <ReportGeneratorModal
+          darkMode={darkMode}
+          language={language}
+          templates={reportTemplates}
+          cart={cart}
+          onClose={() => setShowReportModal(false)}
+          onDone={(reportId) => { setOpenReportId(reportId); }}
+          onOpenReports={() => { setShowReportModal(false); setActiveTab("reports"); }}
         />
       )}
 
