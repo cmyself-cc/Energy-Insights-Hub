@@ -6,7 +6,7 @@ function safeJson(value) {
   try { return JSON.parse(value); } catch { return []; }
 }
 
-function buildRequest(config, messages, maxTokens = 2000) {
+function buildRequest(config, messages, maxTokens = 8192) {
   const isAnthropic = config.providerId === "anthropic";
   const url = isAnthropic ? `${config.baseUrl}/messages` : `${config.baseUrl}/chat/completions`;
   const headers = isAnthropic
@@ -67,9 +67,28 @@ ${JSON.stringify(samples, null, 2)}
   const response = await fetchWithTimeout(url, { method: "POST", headers, body: JSON.stringify(body) }, 60000);
   if (!response.ok) throw new Error(`LLM API failed: ${response.status}`);
 
-  const data = await response.json();
+  // Read the raw body first so a non-JSON gateway response produces a
+  // meaningful error instead of "Unexpected end of JSON input".
+  let data;
+  try {
+    data = await response.json();
+  } catch (e) {
+    throw new Error(`LLM API returned a non-JSON response: ${e.message}`);
+  }
+  const finishReason = data.choices?.[0]?.finish_reason;
   const txt = extractContent(data, config).replace(/```json\s*|\s*```/g, "").trim();
-  const suggestions = JSON.parse(txt);
+  if (!txt) {
+    if (finishReason === "length") {
+      throw new Error("LLM response was truncated (token limit reached with no content); please retry or increase the model limit");
+    }
+    throw new Error("LLM returned an empty response");
+  }
+  let suggestions;
+  try {
+    suggestions = JSON.parse(txt);
+  } catch (e) {
+    throw new Error(`LLM returned invalid JSON (${e.message}). Raw preview: ${txt.slice(0, 120)}`);
+  }
   if (!Array.isArray(suggestions)) throw new Error("Invalid suggestions format");
 
   const insert = db.prepare(

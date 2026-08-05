@@ -78,7 +78,6 @@ export default function App() {
       : [...cart, item];
     setCart(newCart);
     storage.saveCart(newCart);
-    addToast(newCart.length > cart.length ? t.toasts.addedToCart : t.toasts.removedFromCart, "info");
   };
 
   const toggleBookmark = async (item) => {
@@ -114,7 +113,6 @@ export default function App() {
   const clearCart = () => {
     setCart([]);
     storage.saveCart([]);
-    addToast(t.toasts.cartCleared, "info");
   };
 
   const handleDarkModeToggle = () => {

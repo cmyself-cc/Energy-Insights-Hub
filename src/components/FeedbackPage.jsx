@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
-import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 
 const REASON_LABELS = {
@@ -9,7 +8,6 @@ const REASON_LABELS = {
 };
 
 export default function FeedbackPage({ darkMode, language }) {
-  const t = i18n[language];
   const [stats, setStats] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -71,7 +69,7 @@ export default function FeedbackPage({ darkMode, language }) {
   return (
     <div>
       <h2 style={{ fontSize: FONT_SIZES.xl, color: text, marginBottom: 16 }}>
-        {language === "zh" ? "我的反馈" : "My Feedback"}
+        {language === "zh" ? "反馈建议" : "Feedback Suggestions"}
       </h2>
 
       {error && (

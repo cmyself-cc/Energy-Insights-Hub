@@ -25,6 +25,10 @@ function parseJsonArray(value) {
 
 const PURPOSE_KEYS = ["competitor", "policy", "tech"];
 
+// 与后端 server/lib/trackerSettings.js 的 SOURCE_TYPES 保持一致，
+// 即"数据来源"页可创建的合法类型（rss/website/wechat_mcp）。
+const SOURCE_TYPES = ["rss", "website", "wechat_mcp"];
+
 const DEFAULT_SETTINGS = {
   lookbackHours: 24,
   maxPerSource: 3,
@@ -35,7 +39,12 @@ const DEFAULT_SETTINGS = {
   excludeKeywords: "",
   requiredIndustryKeywords: "",
   requiredCompanyKeywords: "",
-  fuzzyDeduplicationThreshold: 0.85
+  fuzzyDeduplicationThreshold: 0.85,
+  scheduleEnabled: true,
+  scheduleFrequency: "daily",
+  scheduleTime: "05:00",
+  scheduleWeekday: 1,
+  enabledSourceTypes: ["rss", "website", "wechat_mcp"]
 };
 
 export default function TrackerSettingsPage({ darkMode, language }) {
@@ -70,7 +79,12 @@ export default function TrackerSettingsPage({ darkMode, language }) {
           requiredCompanyKeywords: toCsv(s.requiredCompanyKeywords),
           fuzzyDeduplicationThreshold: Number.isFinite(s.fuzzyDeduplicationThreshold)
             ? s.fuzzyDeduplicationThreshold
-            : 0.85
+            : 0.85,
+          scheduleEnabled: s.scheduleEnabled !== false,
+          scheduleFrequency: s.scheduleFrequency === "weekly" ? "weekly" : "daily",
+          scheduleTime: s.scheduleTime || "05:00",
+          scheduleWeekday: Number.isInteger(s.scheduleWeekday) ? s.scheduleWeekday : 1,
+          enabledSourceTypes: Array.isArray(s.enabledSourceTypes) ? s.enabledSourceTypes : []
         });
         setPurposeRules(rulesRes.data || []);
         setPurposeSources(sourcesRes.data || []);
@@ -138,6 +152,18 @@ export default function TrackerSettingsPage({ darkMode, language }) {
     }
   };
 
+  // 监控信源选项 = 系统支持并可在"数据来源"页创建的合法类型
+  const sourceTypeOptions = [...SOURCE_TYPES];
+
+  const toggleSourceType = (type) => {
+    setSettings(prev => ({
+      ...prev,
+      enabledSourceTypes: prev.enabledSourceTypes.includes(type)
+        ? prev.enabledSourceTypes.filter(x => x !== type)
+        : [...prev.enabledSourceTypes, type]
+    }));
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -148,7 +174,12 @@ export default function TrackerSettingsPage({ darkMode, language }) {
         maxPerSource: Number(settings.maxPerSource),
         wechatMcpPerFeedLimit: Number(settings.wechatMcpPerFeedLimit),
         requiredIndustryKeywords: fromCsv(settings.requiredIndustryKeywords),
-        fuzzyDeduplicationThreshold: Number(settings.fuzzyDeduplicationThreshold)
+        fuzzyDeduplicationThreshold: Number(settings.fuzzyDeduplicationThreshold),
+        scheduleEnabled: settings.scheduleEnabled === true,
+        scheduleFrequency: settings.scheduleFrequency,
+        scheduleTime: settings.scheduleTime,
+        scheduleWeekday: Number(settings.scheduleWeekday),
+        enabledSourceTypes: settings.enabledSourceTypes
       });
       setMessage({ type: "success", text: t.saved });
     } catch (err) {
@@ -260,6 +291,101 @@ export default function TrackerSettingsPage({ darkMode, language }) {
             </div>
           );
         })}
+
+        <div style={{ borderTop: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`, marginTop: 8, paddingTop: 12 }}>
+          <h4 style={{ margin: "0 0 4px", color: darkMode ? "#fff" : COLORS.text.primary, fontSize: FONT_SIZES.base }}>
+            {t.sourcesTitle}
+          </h4>
+          <p style={{ margin: "0 0 10px", fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.secondary }}>
+            {t.sourcesDesc}
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 18px" }}>
+            {sourceTypeOptions.map(type => (
+              <label key={type} style={{
+                display: "flex", alignItems: "center", gap: 6,
+                fontSize: FONT_SIZES.sm, color: darkMode ? "#e8e8e8" : COLORS.text.primary,
+                cursor: "pointer"
+              }}>
+                <input
+                  type="checkbox"
+                  checked={settings.enabledSourceTypes.includes(type)}
+                  onChange={() => toggleSourceType(type)}
+                  style={{ width: 16, height: 16, cursor: "pointer" }}
+                />
+                {t.sourceTypes?.[type] || type}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+        borderRadius: BORDER_RADIUS.lg,
+        border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+        padding: "16px 20px",
+        marginBottom: 20,
+        maxWidth: 640
+      }}>
+        <h3 style={{ margin: "0 0 4px", color: darkMode ? "#fff" : COLORS.text.primary }}>
+          {t.scheduleTitle}
+        </h3>
+        <p style={{ margin: "0 0 12px", fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.secondary }}>
+          {t.scheduleDesc}
+        </p>
+
+        <label style={{
+          display: "flex", alignItems: "center", gap: 8, marginBottom: 12,
+          fontSize: FONT_SIZES.base, color: darkMode ? "#e8e8e8" : COLORS.text.primary, cursor: "pointer"
+        }}>
+          <input
+            type="checkbox"
+            checked={settings.scheduleEnabled}
+            onChange={e => handleChange("scheduleEnabled", e.target.checked)}
+            style={{ width: 16, height: 16, cursor: "pointer" }}
+          />
+          {t.scheduleToggle}
+        </label>
+
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", opacity: settings.scheduleEnabled ? 1 : 0.5, pointerEvents: settings.scheduleEnabled ? "auto" : "none" }}>
+          <div style={{ flex: "0 0 auto" }}>
+            <label style={labelStyle}>{t.frequencyLabel}</label>
+            <select
+              value={settings.scheduleFrequency}
+              onChange={e => handleChange("scheduleFrequency", e.target.value)}
+              style={inputStyle}
+            >
+              <option value="daily">{t.daily}</option>
+              <option value="weekly">{t.weekly}</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>{t.timeLabel}</label>
+            <input
+              type="time"
+              value={settings.scheduleTime}
+              onChange={e => handleChange("scheduleTime", e.target.value)}
+              style={{ ...inputStyle, width: 140 }}
+            />
+          </div>
+          {settings.scheduleFrequency === "weekly" && (
+            <div>
+              <label style={labelStyle}>{t.weekdayLabel}</label>
+              <select
+                value={settings.scheduleWeekday === 0 ? 7 : settings.scheduleWeekday}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  handleChange("scheduleWeekday", v === 7 ? 0 : v);
+                }}
+                style={inputStyle}
+              >
+                {t.weekdays.map((label, idx) => (
+                  <option key={idx} value={idx + 1}>{label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       <form onSubmit={handleSave} style={{

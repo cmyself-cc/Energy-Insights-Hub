@@ -4,7 +4,7 @@ import { fetchArticles } from "../crawlers/index.js";
 import { processInsight, loadSemanticConfig } from "./llmProcessor.js";
 import { loadActiveCategories, matchesEnabledCategory } from "./businessCategories.js";
 import { loadFilterRules, groupRulesByPurpose } from "./filterRules.js";
-import { loadSettings } from "../lib/trackerSettings.js";
+import { loadSettings, buildScheduleCron, filterSourcesByType } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 import { applyKeywordGate, applyIndustryFilter, loadIndustryKeywordsWithAliases } from "./keywordGate.js";
 import { deduplicateItems } from "./dedup.js";
@@ -178,7 +178,8 @@ export async function runTracker(runId = null) {
     const groupedRules = groupRulesByPurpose(allRules);
     const activeCategories = loadActiveCategories();
 
-    const sources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
+    const allSources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
+    const sources = filterSourcesByType(allSources, settings.enabledSourceTypes);
 
   // Check LLM API key before processing
   if (!process.env.LLM_API_KEY) {
@@ -576,9 +577,31 @@ export async function runTracker(runId = null) {
 }
 
 export function startScheduler() {
-  const cronExpression = process.env.TRACKER_CRON || "0 5 * * *";
-  console.log(`[scheduler] Registered daily tracker at cron "${cronExpression}"`);
-  cron.schedule(cronExpression, () => {
+  scheduleFromSettings();
+}
+
+// Re-read schedule settings and (re)create the cron task. Called at startup
+// and after the user saves the schedule settings in the UI, so changes apply
+// without a server restart.
+export function rescheduleScheduler() {
+  if (scheduledTask) {
+    scheduledTask.stop();
+    scheduledTask = null;
+  }
+  scheduleFromSettings();
+}
+
+let scheduledTask = null;
+
+function scheduleFromSettings() {
+  const settings = loadSettings();
+  if (!settings.scheduleEnabled) {
+    console.log("[scheduler] Scheduled tracking is disabled.");
+    return;
+  }
+  const cronExpression = buildScheduleCron(settings);
+  console.log(`[scheduler] Registered tracker at cron "${cronExpression}" (frequency=${settings.scheduleFrequency}, time=${settings.scheduleTime})`);
+  scheduledTask = cron.schedule(cronExpression, () => {
     console.log("[scheduler] Running scheduled tracker...");
     runTracker().catch(err => console.error("Scheduled tracker failed:", err));
   }, {

@@ -2,7 +2,8 @@ import { Router } from "express";
 import fs from "fs";
 import path from "path";
 import db from "../db.js";
-import { loadSettings, toArray } from "../lib/trackerSettings.js";
+import { loadSettings, toArray, SOURCE_TYPES } from "../lib/trackerSettings.js";
+import { rescheduleScheduler } from "../services/tracker.js";
 
 const router = Router();
 
@@ -21,7 +22,12 @@ router.put("/", (req, res) => {
       maxPerSource,
       wechatMcpPerFeedLimit,
       requiredIndustryKeywords,
-      fuzzyDeduplicationThreshold
+      fuzzyDeduplicationThreshold,
+      scheduleEnabled,
+      scheduleFrequency,
+      scheduleTime,
+      scheduleWeekday,
+      enabledSourceTypes
     } = req.body;
 
     if (typeof lookbackHours !== "number" || lookbackHours < 1 || lookbackHours > 168) {
@@ -39,12 +45,41 @@ router.put("/", (req, res) => {
       return res.status(400).json({ error: "fuzzyDeduplicationThreshold must be between 0 and 1" });
     }
 
+    // Optional schedule settings: 定时跟踪的开关、频次、时间点（每周时还需周几）
+    const freq = scheduleFrequency === undefined ? "daily" : scheduleFrequency;
+    if (freq !== "daily" && freq !== "weekly") {
+      return res.status(400).json({ error: "scheduleFrequency must be 'daily' or 'weekly'" });
+    }
+    const time = scheduleTime === undefined ? "05:00" : scheduleTime;
+    if (typeof time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+      return res.status(400).json({ error: "scheduleTime must be HH:MM (24h format)" });
+    }
+    const weekday = scheduleWeekday === undefined ? 1 : Number(scheduleWeekday);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      return res.status(400).json({ error: "scheduleWeekday must be an integer between 0 (Sunday) and 6" });
+    }
+
+    // Optional monitoring source types; empty = all source types enabled.
+    let sourceTypes = enabledSourceTypes;
+    if (sourceTypes !== undefined) {
+      if (!Array.isArray(sourceTypes) || sourceTypes.some(t => !SOURCE_TYPES.includes(t))) {
+        return res.status(400).json({ error: `enabledSourceTypes must be an array of ${SOURCE_TYPES.join(", ")}` });
+      }
+    }
+
     const values = {
       lookback_hours: String(lookbackHours),
       max_per_source: String(maxPerSource),
       required_industry_keywords: toArray(requiredIndustryKeywords).join(","),
-      fuzzy_deduplication_threshold: String(threshold)
+      fuzzy_deduplication_threshold: String(threshold),
+      schedule_enabled: scheduleEnabled === false ? "0" : "1",
+      schedule_frequency: freq,
+      schedule_time: time,
+      schedule_weekday: String(weekday)
     };
+    if (sourceTypes !== undefined) {
+      values.enabled_source_types = sourceTypes.join(",");
+    }
     if (wechatMcpPerFeedLimit !== undefined) {
       values.wechat_mcp_per_feed_limit = String(perFeed);
       // 同步到微信MCP 源的 config.perFeedLimit
@@ -65,6 +100,9 @@ router.put("/", (req, res) => {
       for (const [key, value] of Object.entries(vals)) update.run(key, value);
     });
     tx(values);
+
+    // Apply schedule changes to the running scheduler without a restart.
+    rescheduleScheduler();
 
     res.json({ data: { success: true } });
   } catch (e) {
