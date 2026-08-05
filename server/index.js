@@ -20,6 +20,7 @@ import { seedSources } from "./seeds/002_seed_sources.js";
 import { seedIndustryCategories } from "./seeds/seedIndustryCategories.js";
 import { seedDefaults } from "./seeds/seedDefaults.js";
 import { seedReportTemplates } from "./services/reportTemplateService.js";
+import { startJobRunner } from "./services/reportGenerator.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,6 +64,7 @@ if (process.env.NODE_ENV === "production" && fs.existsSync(distPath)) {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
   startScheduler();
+  startJobRunner();
 });
 
 // 优雅关闭
