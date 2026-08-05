@@ -1,5 +1,19 @@
-import { fetchWithTimeout } from "../crawlers/utils.js";
+import { fetchWithTimeout, stripBoilerplate, truncateAtSentence } from "../crawlers/utils.js";
 import db from "../db.js";
+
+const SUMMARY_MAX_LEN = 200;
+
+/**
+ * Enforce the summary contract regardless of what the LLM returned: cleaned
+ * boilerplate, at most SUMMARY_MAX_LEN chars. Falls back to cleaned
+ * rawContent/placeholder when the preferred text is empty.
+ */
+function enforceSummary(preferred, item) {
+  const primary = stripBoilerplate(preferred);
+  if (primary) return truncateAtSentence(primary, SUMMARY_MAX_LEN);
+  const fallback = stripBoilerplate(item.rawContent || item.summary || "");
+  return truncateAtSentence(fallback, SUMMARY_MAX_LEN);
+}
 
 /**
  * Safely parse JSON from LLM output, handling common issues:
@@ -101,7 +115,7 @@ export async function processInsight(item, _language = "en", _filterContext = nu
   if (!config.apiKey) {
     return {
       title: item.title,
-      summary: item.summary,
+      summary: enforceSummary(item.summary, item),
       url: item.url,
       publishDate: item.publishDate,
       sourceType: "",
@@ -128,7 +142,7 @@ export async function processInsight(item, _language = "en", _filterContext = nu
   const prompt = `你是一名能源行业分析师。请阅读以下文章并提取结构化洞察。
 
 Title: ${item.title}
-Content: ${item.rawContent.slice(0, 3000) || item.summary.slice(0, 3000) || ""}
+Content: ${(item.rawContent || "").slice(0, 3000) || (item.summary || "").slice(0, 3000) || ""}
 URL: ${item.url}
 ${semanticBlock}
 CRITICAL RULES:
@@ -152,12 +166,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
 - keywords: array of exactly 3 strings
 - purposes: array of strings (competitor, policy, tech, or empty [])
 - categories: array of strings
-- china_relevance: boolean
-- title: string
-- summary: string (max 150 Chinese characters)
-- keywords: array of exactly 3 strings
-- purposes: array of strings (competitor, policy, tech, or empty [])
-- categories: array of strings`;
+- china_relevance: boolean`;
 
   const messages = [{ role: "user", content: prompt }];
   const { url, headers, body } = buildRequest(config, messages, 800, 0.5);
@@ -180,7 +189,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
 
     return {
       title: parsed.title || item.title,
-      summary: parsed.summary || item.summary,
+      summary: enforceSummary(parsed.summary, item),
       url: item.url,
       publishDate: item.publishDate,
       source: item.source || "",
@@ -198,7 +207,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
     console.error("LLM process failed:", e.message);
     return {
       title: item.title,
-      summary: item.summary,
+      summary: enforceSummary(item.summary, item),
       url: item.url,
       publishDate: item.publishDate,
       sourceType: "",

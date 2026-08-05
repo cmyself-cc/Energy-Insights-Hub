@@ -306,4 +306,30 @@ describe("fetchArticles", { concurrency: false }, () => {
       expect(articles[0].rawContent).toContain("北极星能源网正文内容段落");
     }
   ));
+
+  it("strips boilerplate from article content and caps the summary at 200 chars", withMockFetch(
+    async (url) => {
+      if (url === "https://example.com/news") {
+        return htmlResponse(`<!doctype html><html><body>
+          <article><h2><a href="/article/one">样板清洗测试标题</a></h2></article>
+        </body></html>`);
+      }
+      const body = "储能项目顺利并网发电。".repeat(30);
+      return htmlResponse(`<!doctype html><html><body>
+        <h1 class="article-title">样板清洗测试标题</h1>
+        <div class="post-content">分享 订阅 投稿 我要投稿 ${body} 阅读下一章… 查看更多> 来源：北极星电力网 责任编辑：张三</div>
+      </body></html>`);
+    },
+    async () => {
+      const config = JSON.stringify({ strategy: "html", requireNewsPattern: false, articleLimit: 1 });
+      const articles = await fetchArticles({ url: "https://example.com/news", type: "website", config });
+      expect(articles.length).toBe(1);
+      expect(articles[0].summary.length).toBeLessThanOrEqual(200);
+      expect(articles[0].summary.startsWith("储能项目顺利并网发电。")).toBe(true);
+      expect(articles[0].summary).not.toContain("查看更多");
+      expect(articles[0].rawContent).not.toContain("我要投稿");
+      expect(articles[0].rawContent).not.toContain("阅读下一章");
+      expect(articles[0].rawContent).not.toContain("责任编辑");
+    }
+  ));
 });

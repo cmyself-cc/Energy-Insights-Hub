@@ -1,4 +1,4 @@
-import { fetchWithTimeout } from "./utils.js";
+import { fetchWithTimeout, stripBoilerplate, truncateAtSentence } from "./utils.js";
 
 const TAVILY_URL = "https://api.tavily.com/search";
 
@@ -91,8 +91,8 @@ export async function fetchArticles(source) {
     .map(item => {
       const title = item.title || "";
       const url = item.url || "";
-      const rawContent = typeof item.content === "string" ? item.content : "";
-      const summary = rawContent.slice(0, 500);
+      const rawContent = stripBoilerplate(typeof item.content === "string" ? item.content : "");
+      const summary = truncateAtSentence(rawContent, 200);
       let publishDate = item.published_date ? new Date(item.published_date).toISOString() : null;
       if (!publishDate || isNaN(new Date(publishDate).getTime())) {
         publishDate = new Date().toISOString();

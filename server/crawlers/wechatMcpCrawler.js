@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { loadSettings } from "../lib/trackerSettings.js";
+import { stripBoilerplate, truncateAtSentence } from "./utils.js";
 
 const DEFAULT_ARTICLE_LIMIT = 20;
 const DEFAULT_LOOKBACK_HOURS = 720; // default 30 days to match tracker lookback
@@ -303,8 +304,8 @@ export async function fetchArticles(source) {
             if (new Date(publishDate).getTime() < cutoff) continue;
 
             const html = await fetchFullText(session, item.id, requestIdRef);
-            const rawContent = stripHtml(html);
-            const summary = rawContent.slice(0, 500);
+            const rawContent = stripBoilerplate(stripHtml(html));
+            const summary = truncateAtSentence(rawContent, 200);
 
             articles.push({
               title: item.title || "",

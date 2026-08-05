@@ -253,6 +253,68 @@ export function cleanText(text) {
     .trim();
 }
 
+// Toolbar/menu tokens that sites like bjx.com.cn concatenate at the start of
+// extracted article text (e.g. "分享订阅投稿我要投稿"). Longest tokens first.
+const LEADING_MENU_TOKENS = "(我要投稿|分享|订阅|投稿|收藏|点赞|转发|评论|打印|关闭|更多)";
+const LEADING_MENU_RE = new RegExp(`^(${LEADING_MENU_TOKENS}\\s*)+`);
+
+// Tail markers: everything from the first occurrence onward is page
+// boilerplate (next-chapter nav, QR promos, related links, legal notices),
+// not article body.
+const TAIL_BOILERPLATE_MARKERS = [
+  "阅读下一章", "查看下一章", "上一章", "下一章",
+  "查看更多>", "查看更多»",
+  "扫码手机查看", "扫一扫在手机", "用手机扫码", "长按识别二维码",
+  "相关阅读", "推荐阅读", "猜你喜欢",
+  "特别声明", "版权声明", "免责声明", "凡本网注明",
+  "投稿热线", "投稿邮箱", "我要投稿",
+  "分享收藏点赞在看", "阅读原文"
+];
+
+/**
+ * Remove page boilerplate from extracted article text: leading share/menu
+ * toolbars and breadcrumb navigation, trailing next-chapter/QR/related-reading
+ * blocks, and inline source/author/editor bylines.
+ */
+export function stripBoilerplate(text) {
+  let t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return "";
+
+  // Leading share/subscribe toolbar, breadcrumb, then toolbar again (some
+  // sites place the toolbar after the breadcrumb)
+  t = t.replace(LEADING_MENU_RE, "");
+  t = t.replace(/^当前位置[：:]\s*/, "");
+  t = t.replace(/^首页(\s*[^>»。！？!?]{0,20}[>»])+\s*/, "");
+  t = t.replace(LEADING_MENU_RE, "");
+
+  // Cut trailing boilerplate from the first marker onward
+  let cutAt = t.length;
+  for (const marker of TAIL_BOILERPLATE_MARKERS) {
+    const i = t.indexOf(marker);
+    if (i >= 0 && i < cutAt) cutAt = i;
+  }
+  t = t.slice(0, cutAt).trim();
+
+  // Inline bylines such as 来源：xxx / 作者：xxx / 责任编辑：xxx
+  t = t.replace(/(责任编辑|来源|作者|编辑|审核)[：:]\s*[^\s。，,;；]{1,30}/g, "").trim();
+
+  return t;
+}
+
+/**
+ * Truncate text to at most maxLen characters, preferring to cut at the last
+ * sentence-ending punctuation within the limit. Falls back to a hard cut when
+ * no punctuation exists in the second half of the window.
+ */
+export function truncateAtSentence(text, maxLen = 200) {
+  const t = String(text || "").trim();
+  if (t.length <= maxLen) return t;
+  const window = t.slice(0, maxLen);
+  const match = window.match(/^(.*[。！？!?；;])/);
+  if (match && match[1].length >= Math.floor(maxLen / 2)) return match[1];
+  return window;
+}
+
 /**
  * Decode an HTML response buffer, handling GBK/GB2312/GB18030 pages that
  * declare their charset in the Content-Type header or a <meta> tag.

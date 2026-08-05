@@ -10,6 +10,8 @@ import {
   isNewsTitle,
   extractPublishedDate,
   cleanText,
+  stripBoilerplate,
+  truncateAtSentence,
   decompressIfNeeded,
   normalizeUrl,
   decodeHtmlBuffer
@@ -223,7 +225,8 @@ async function fetchArticleDetail(url, detailSelectors = {}) {
     const fallback = extractLargestTextBlock($);
     if (fallback.length > content.length) content = fallback;
   }
-  const summary = content.slice(0, 600);
+  content = stripBoilerplate(content);
+  const summary = truncateAtSentence(content, 200);
   // Keep null when no date is found; callers apply the fallback so that
   // maxAgeDays filtering can distinguish real dates from missing ones.
   const publishDate = extractPublishedDate($);

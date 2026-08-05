@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { stripBoilerplate, truncateAtSentence } from "./utils.js";
 
 const WECHAT_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.40(0x18002831) NetType/WIFI Language/zh_CN";
@@ -123,9 +124,10 @@ async function extractArticle(context, articleUrl) {
       return "";
     });
 
+    const cleanedContent = stripBoilerplate(rawContent);
     return {
-      summary: summary || rawContent.slice(0, 500),
-      rawContent,
+      summary: truncateAtSentence(stripBoilerplate(summary), 200) || truncateAtSentence(cleanedContent, 200),
+      rawContent: cleanedContent,
       publishDate: normalizeDate(publishDateRaw)
     };
   } finally {
