@@ -103,4 +103,14 @@ describe("feedbackSuggestionGenerator", () => {
     const body = JSON.parse(fetchWithTimeout.mock.calls[0][1].body);
     expect(body.max_tokens).toBeGreaterThanOrEqual(8000);
   });
+
+  it("disables thinking so a reasoning model cannot burn the whole token budget", async () => {
+    seedFeedback();
+    mockLlmResponse({ content: "[]" });
+
+    await generateSuggestions();
+
+    const body = JSON.parse(fetchWithTimeout.mock.calls[0][1].body);
+    expect(body.thinking).toEqual({ type: "disabled" });
+  });
 });

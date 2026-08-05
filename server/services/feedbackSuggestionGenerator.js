@@ -12,7 +12,14 @@ function buildRequest(config, messages, maxTokens = 8192) {
   const headers = isAnthropic
     ? { "Content-Type": "application/json", "x-api-key": config.apiKey, "anthropic-version": "2023-06-01" }
     : { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` };
-  return { url, headers, body: { model: config.modelId, messages, max_tokens: maxTokens, temperature: 0.3 } };
+  const body = { model: config.modelId, messages, max_tokens: maxTokens, temperature: 0.3 };
+  if (!isAnthropic) {
+    // Reasoning models (e.g. DeepSeek v4 flash) can burn the whole token budget
+    // on reasoning_content and return an empty answer; this task only needs a
+    // direct JSON reply, so disable thinking explicitly.
+    body.thinking = { type: "disabled" };
+  }
+  return { url, headers, body };
 }
 
 function extractContent(data, config) {
