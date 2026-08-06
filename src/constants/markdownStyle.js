@@ -5,6 +5,11 @@ export const MARKDOWN_CSS = `
 .markdown-body h1 { font-size: 20px; font-weight: 800; color: #1a6b3c; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(26,107,60,0.25); }
 .markdown-body h2 { font-size: 16px; font-weight: 700; color: #1a6b3c; margin: 16px 0 8px; }
 .markdown-body h3 { font-size: 14px; font-weight: 700; margin: 12px 0 6px; }
+/* 报告主标题：正文首个段落（如【专题解读】标题）居中、加大加粗、不缩进 */
+.markdown-body > p:first-child { font-size: 22px; font-weight: 800; color: #1a6b3c; text-align: center; text-indent: 0; margin: 8px 0 18px; line-height: 1.5; }
+/* 报告信息区（主标题后的引用块：报告日期/用途/受众/来源）：浅灰斜体，四项间隔充足 */
+.markdown-body > p:first-child + blockquote { border-left: none; color: #999; font-style: italic; margin: 4px 0 24px; }
+.markdown-body > p:first-child + blockquote p { margin: 0; line-height: 2.4; }
 .markdown-body p { margin: 8px 0; line-height: 1.8; text-indent: 2em; }
 .markdown-body ul { margin: 8px 0; padding-left: 2em; }
 .markdown-body ol { margin: 8px 0; padding-left: 0; list-style-position: inside; }
