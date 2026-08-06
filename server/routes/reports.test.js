@@ -6,7 +6,7 @@ import { listTemplates, seedReportTemplates } from "../services/reportTemplateSe
 import { screenCards } from "../services/reportScreening.js";
 import { createReportJob, getJob, retryJob } from "../services/reportGenerator.js";
 
-vi.mock("../services/reportScreening.js", () => ({ screenCards: vi.fn() }));
+vi.mock("../services/reportScreening.js", () => ({ screenCards: vi.fn(), clarifyCards: vi.fn() }));
 vi.mock("../services/reportGenerator.js", () => ({
   createReportJob: vi.fn(), getJob: vi.fn(), listJobs: vi.fn(), retryJob: vi.fn(),
   startJobRunner: vi.fn(), processQueue: vi.fn(() => Promise.resolve())
@@ -65,10 +65,21 @@ describe("reports routes", () => {
   it("runs screening and returns the plan", async () => {
     db.prepare("DELETE FROM insights WHERE id=11").run();
     db.prepare("INSERT INTO insights (id, title, summary, url, keywords) VALUES (11, 'T', 'S', 'https://a', 'k')").run();
-    screenCards.mockResolvedValue({ inconsistencies: [], searchPlan: [], purpose: "日报", exceedsLimit: false });
+    screenCards.mockResolvedValue({ questions: [], searchPlan: [], purpose: "日报", exceedsLimit: false });
     const { status, body } = await call("/screening", { method: "POST", body: JSON.stringify({ templateId: listTemplates()[0].id, insightIds: [11] }) });
     expect(status).toBe(200);
     expect(body.data.purpose).toBe("日报");
+  });
+
+  it("runs clarify and returns resolutions", async () => {
+    db.prepare("DELETE FROM insights WHERE id=11").run();
+    db.prepare("INSERT INTO insights (id, title, summary, url, keywords) VALUES (11, 'T', 'S', 'https://a', 'k')").run();
+    const { clarifyCards: mockClarify } = await import("../services/reportScreening.js");
+    mockClarify.mockResolvedValue({ questions: [], resolutions: [{ key: "q1", issue: "x", choice: "y", cardIds: [11] }], purpose: "日报", done: true });
+    const { status, body } = await call("/clarify", { method: "POST", body: JSON.stringify({ templateId: listTemplates()[0].id, insightIds: [11], answers: [] }) });
+    expect(status).toBe(200);
+    expect(body.data.done).toBe(true);
+    expect(body.data.resolutions).toHaveLength(1);
   });
 
   it("rejects screening without insightIds", async () => {

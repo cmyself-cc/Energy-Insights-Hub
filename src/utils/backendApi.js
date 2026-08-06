@@ -62,6 +62,7 @@ export const backendApi = {
   updateReportTemplate: (id, data) => request(`/reports/templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteReportTemplate: (id) => request(`/reports/templates/${id}`, { method: "DELETE" }),
   screenReport: (templateId, insightIds) => request("/reports/screening", { method: "POST", body: JSON.stringify({ templateId, insightIds }) }),
+  clarifyReport: (templateId, insightIds, answers) => request("/reports/clarify", { method: "POST", body: JSON.stringify({ templateId, insightIds, answers }) }),
   generateReport: (templateId, insightIds, resolutions) => request("/reports/generate", { method: "POST", body: JSON.stringify({ templateId, insightIds, resolutions }) }),
   getReportJobs: () => request("/reports/jobs"),
   getReportJob: (id) => request(`/reports/jobs/${id}`),

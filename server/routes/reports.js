@@ -1,7 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { listTemplates, createTemplate, updateTemplate, deleteTemplate } from "../services/reportTemplateService.js";
-import { screenCards } from "../services/reportScreening.js";
+import { screenCards, clarifyCards } from "../services/reportScreening.js";
 import { createReportJob, getJob, listJobs, retryJob, processQueue } from "../services/reportGenerator.js";
 
 const router = Router();
@@ -86,6 +86,25 @@ router.post("/screening", async (req, res) => {
     const placeholders = ids.map(() => "?").join(",");
     const insights = db.prepare(`SELECT * FROM insights WHERE id IN (${placeholders}) AND hidden = 0`).all(...ids);
     const result = await screenCards({ template, insights });
+    res.json({ data: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 追问：携带用户回答，LLM 决定继续提问或完成澄清
+router.post("/clarify", async (req, res) => {
+  try {
+    const { templateId, insightIds, answers } = req.body;
+    if (!templateId || !Array.isArray(insightIds) || insightIds.length === 0) {
+      return res.status(400).json({ error: "templateId and insightIds are required" });
+    }
+    const template = listTemplates().find(t => t.id === Number(templateId));
+    if (!template) return res.status(404).json({ error: "Template not found" });
+    const ids = insightIds.map(Number).filter(Boolean);
+    const placeholders = ids.map(() => "?").join(",");
+    const insights = db.prepare(`SELECT * FROM insights WHERE id IN (${placeholders}) AND hidden = 0`).all(...ids);
+    const result = await clarifyCards({ template, insights, answers: answers || [] });
     res.json({ data: result });
   } catch (e) {
     res.status(500).json({ error: e.message });
