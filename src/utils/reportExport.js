@@ -1,5 +1,7 @@
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { marked } from "marked";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 export function sanitizeFilename(name) {
   return String(name || "report").replace(/[\\/:*?"<>|\s]+/g, "-").slice(0, 80) || "report";
@@ -22,14 +24,18 @@ export function markdownToDocxSections(md) {
       sections.push({ type: "numbered", text: inlineToRuns(t) });
     } else if (/^>\s?/.test(t)) {
       sections.push({ type: "quote", text: inlineToRuns(t.replace(/^>\s?/, "")) });
-    } else if (t.includes("|")) {
-      // 简易表格：单元格用制表符分隔
-      sections.push({ type: "tableRow", cells: t.split("|").map(c => c.trim()).filter(c => c && !/^[-:]+$/.test(c)) });
+    } else if (/^\|.*\|/.test(t)) {
+      // Markdown 表格行（以 | 开头且含 |）：单元格用制表符分隔
+      sections.push({ type: "tableRow", cells: t.split("|").map(c => c.trim()).filter(c => c && !/^[-:]+$/.test(c)).map(stripInline) });
     } else {
       sections.push({ type: "para", text: inlineToRuns(t) });
     }
   }
   return sections;
+}
+
+function stripInline(text) {
+  return text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1（$2）");
 }
 
 function inlineToRuns(text) {
@@ -64,7 +70,7 @@ export async function buildDocx(markdown) {
     } else if (s.type === "numbered") {
       children.push(new Paragraph({ children: s.text, spacing: { after: 60 } }));
     } else if (s.type === "quote") {
-      children.push(new Paragraph({ children: s.text.map(r => ({ ...r, italics: true })), indent: { left: 480 }, spacing: { after: 120 } }));
+      children.push(new Paragraph({ children: s.text, indent: { left: 480 }, spacing: { after: 120 } }));
     } else if (s.type === "tableRow" && s.cells.length > 0) {
       children.push(new Paragraph({ children: [new TextRun({ text: s.cells.join("\t"), size: 21 })] , spacing: { after: 60 } }));
     } else if (s.type === "para") {
@@ -100,30 +106,56 @@ export async function exportDocx(title, content) {
   downloadBlob(blob, `${sanitizeFilename(title)}.docx`);
 }
 
-export function exportPdf(title, content) {
+const PDF_PAGE_CSS = `
+  html, body { margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; line-height: 1.8; color: #222; }
+  .pdf-page { width: 794px; box-sizing: border-box; padding: 96px 120px; background: #fff; }
+  .pdf-page h1 { font-size: 22px; margin: 18px 0 10px; }
+  .pdf-page h2 { font-size: 18px; margin: 16px 0 8px; }
+  .pdf-page h3 { font-size: 15px; margin: 12px 0 6px; }
+  .pdf-page p { margin: 8px 0; text-indent: 2em; }
+  .pdf-page ul, .pdf-page ol { padding-left: 2em; }
+  .pdf-page li { margin: 4px 0; }
+  .pdf-page a { color: #1a6b3c; }
+  .pdf-page table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  .pdf-page th, .pdf-page td { border: 1px solid #ccc; padding: 5px 10px; font-size: 13px; text-align: left; }
+  .pdf-page blockquote { border-left: 3px solid #1a6b3c; margin: 10px 0; padding: 4px 0 4px 14px; color: #555; }
+  .pdf-page code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .pdf-page pre { background: #f5f5f5; padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
+`;
+
+// 直接生成 PDF 文件下载（jsPDF + html2canvas 渲染，中文排版无损，不弹打印窗口）
+export async function exportPdf(title, content) {
   const html = marked.parse(content || "");
-  const printCss = `
-    @page { size: A4; margin: 2.54cm 3.17cm; }
-    body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; line-height: 1.8; color: #222; max-width: 720px; margin: 0 auto; }
-    h1 { font-size: 22px; margin: 18px 0 10px; }
-    h2 { font-size: 18px; margin: 16px 0 8px; }
-    h3 { font-size: 15px; margin: 12px 0 6px; }
-    p { margin: 8px 0; text-indent: 2em; }
-    ul, ol { padding-left: 2em; }
-    li { margin: 4px 0; }
-    a { color: #1a6b3c; }
-    table { border-collapse: collapse; width: 100%; margin: 10px 0; }
-    th, td { border: 1px solid #ccc; padding: 5px 10px; font-size: 13px; text-align: left; }
-    blockquote { border-left: 3px solid #1a6b3c; margin: 10px 0; padding: 4px 0 4px 14px; color: #555; }
-    code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
-    pre { background: #f5f5f5; padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
-    @media print { body { margin: 0; } }
-  `;
-  const w = window.open("", "_blank", "width=900,height=700");
-  if (!w) { alert("请允许浏览器弹出窗口以导出 PDF"); return; }
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${sanitizeFilename(title)}</title><style>${printCss}</style></head><body>${html}</body></html>`);
-  w.document.close();
-  w.focus();
-  // 等待渲染完成后调起打印（可另存为 PDF）
-  setTimeout(() => { w.print(); }, 400);
+  const container = document.createElement("div");
+  container.style.cssText = "position:fixed;left:-12000px;top:0;width:794px;background:#fff;";
+  container.innerHTML = `<style>${PDF_PAGE_CSS}</style><div class="pdf-page">${html}</div>`;
+  document.body.appendChild(container);
+  try {
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      windowWidth: container.scrollWidth,
+      logging: false
+    });
+    const imgData = canvas.toDataURL("image/jpeg", 0.92);
+    const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgH = (canvas.height * pageW) / canvas.width;
+    let heightLeft = imgH;
+    let position = 0;
+    pdf.addImage(imgData, "JPEG", 0, position, pageW, imgH);
+    heightLeft -= pageH;
+    while (heightLeft > 0) {
+      position -= pageH;
+      pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, position, pageW, imgH);
+      heightLeft -= pageH;
+    }
+    pdf.save(`${sanitizeFilename(title)}.pdf`);
+  } finally {
+    document.body.removeChild(container);
+  }
 }
