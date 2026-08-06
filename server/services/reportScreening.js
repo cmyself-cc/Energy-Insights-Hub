@@ -1,4 +1,4 @@
-import { callLlmJson } from "../lib/llmClient.js";
+import { callLlm, callLlmJson } from "../lib/llmClient.js";
 
 function fallbackPlan(template, insights) {
   return {
@@ -135,8 +135,7 @@ export async function generateManualPrompt({ topic, framework, outline, conclusi
 4. 使用 Markdown 排版要求。
 
 返回 ONLY 提示词正文（纯文本，不要 JSON 包装、不要 markdown 代码围栏）。`;
-    const result = await callLlmJson([{ role: "user", content: prompt }], { maxTokens: 4000 });
-    const text = typeof result === "string" ? result : JSON.stringify(result);
+    const text = await callLlm([{ role: "user", content: prompt }], { maxTokens: 4000, temperature: 0.3 });
     if (!text || text.length < 10) return { prompt: fallback, generated: false };
     return { prompt: text, generated: true };
   } catch (e) {

@@ -1,18 +1,24 @@
 import { useState, useEffect } from "react";
+import { marked } from "marked";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 
-function parseMarkdown(content) {
-  if (!content) return "";
-  return content
-    .replace(/^# (.+)$/gm, "<h1 style='font-size:20px;font-weight:800;color:#1a6b3c;margin:8px 0;'>$1</h1>")
-    .replace(/^## (.+)$/gm, "<h2 style='font-size:16px;font-weight:700;color:#1a6b3c;margin:8px 0;'>$1</h2>")
-    .replace(/^### (.+)$/gm, "<h3 style='font-size:14px;font-weight:700;margin:6px 0;'>$1</h3>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#1a6b3c;text-decoration:none;font-weight:500;">$1</a>')
-    .replace(/\n/g, "<br>");
-}
+// Markdown 渲染样式（marked 输出，无需外部依赖）
+const MARKDOWN_CSS = `
+.markdown-body h1 { font-size: 20px; font-weight: 800; color: #1a6b3c; margin: 12px 0 8px; }
+.markdown-body h2 { font-size: 16px; font-weight: 700; color: #1a6b3c; margin: 10px 0 6px; }
+.markdown-body h3 { font-size: 14px; font-weight: 700; margin: 8px 0 4px; }
+.markdown-body p { margin: 6px 0; }
+.markdown-body ul, .markdown-body ol { margin: 6px 0; padding-left: 22px; }
+.markdown-body li { margin: 3px 0; }
+.markdown-body a { color: #1a6b3c; text-decoration: none; font-weight: 500; }
+.markdown-body strong { font-weight: 700; }
+.markdown-body table { border-collapse: collapse; margin: 8px 0; }
+.markdown-body th, .markdown-body td { border: 1px solid #ddd; padding: 5px 10px; font-size: 13px; }
+.markdown-body code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.markdown-body blockquote { border-left: 3px solid #1a6b3c; margin: 6px 0; padding-left: 10px; color: #555; }
+`;
 
 function statusBadge(status, language) {
   if (status === "generating") {
@@ -26,11 +32,17 @@ function statusBadge(status, language) {
 
 export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled, onViewReport }) {
   const t = i18n[language];
+  const border = darkMode ? COLORS.border.dark : COLORS.border.light;
+  const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
   const [reports, setReports] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [view, setView] = useState("reports"); // reports | templates
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editError, setEditError] = useState(null);
 
   const loadReports = async () => {
     try {
@@ -94,6 +106,24 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
     }
   };
 
+  const startEdit = (report) => {
+    setEditTitle(report.title);
+    setEditContent(report.content || "");
+    setEditing(true);
+    setEditError(null);
+  };
+
+  const saveEdit = async () => {
+    try {
+      const res = await backendApi.updateReport(selectedReport.id, { title: editTitle, content: editContent });
+      setSelectedReport(res.data);
+      setEditing(false);
+      loadReports();
+    } catch (err) {
+      setEditError(err.message);
+    }
+  };
+
   if (selectedReport) {
     const template = templates.find(t => t.id === selectedReport.template_id);
     return (
@@ -129,6 +159,22 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            {!editing && (
+              <button
+                onClick={() => startEdit(selectedReport)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: BORDER_RADIUS.md,
+                  border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+                  background: "transparent",
+                  color: darkMode ? "#e8e8e8" : COLORS.text.primary,
+                  fontSize: FONT_SIZES.md,
+                  cursor: "pointer"
+                }}
+              >
+                {language === "zh" ? "编辑" : "Edit"}
+              </button>
+            )}
             <button
               onClick={() => onViewReport?.(selectedReport)}
               style={{
@@ -145,7 +191,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
               {language === "zh" ? "编辑/重新生成" : "Regenerate"}
             </button>
             <button
-              onClick={() => setSelectedReport(null)}
+              onClick={() => { setSelectedReport(null); setEditing(false); }}
               style={{
                 padding: "8px 16px",
                 borderRadius: BORDER_RADIUS.md,
@@ -160,14 +206,40 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
             </button>
           </div>
         </div>
-        <div
-          style={{
-            fontSize: FONT_SIZES.base,
-            lineHeight: 1.7,
-            color: darkMode ? "#e8e8e8" : COLORS.text.primary
-          }}
-          dangerouslySetInnerHTML={{ __html: parseMarkdown(selectedReport.content) }}
-        />
+        {editing ? (
+          <div>
+            <input
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: FONT_SIZES.lg, fontWeight: 700, outline: "none", boxSizing: "border-box", marginBottom: 12 }}
+            />
+            <textarea
+              value={editContent}
+              onChange={e => setEditContent(e.target.value)}
+              style={{ width: "100%", minHeight: "50vh", padding: "12px 14px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, fontFamily: "monospace", lineHeight: 1.7, outline: "none", boxSizing: "border-box", resize: "vertical" }}
+            />
+            {editError && <div style={{ color: "#c00", fontSize: FONT_SIZES.sm, marginTop: 8 }}>{editError}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button onClick={saveEdit} style={{ padding: "8px 16px", borderRadius: BORDER_RADIUS.md, border: "none", background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.md, cursor: "pointer" }}>
+                {language === "zh" ? "保存" : "Save"}
+              </button>
+              <button onClick={() => setEditing(false)} style={{ padding: "8px 16px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${border}`, background: "transparent", color: text, fontSize: FONT_SIZES.md, cursor: "pointer" }}>
+                {language === "zh" ? "取消" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="markdown-body"
+            style={{
+              fontSize: FONT_SIZES.base,
+              lineHeight: 1.7,
+              color: darkMode ? "#e8e8e8" : COLORS.text.primary
+            }}
+            dangerouslySetInnerHTML={{ __html: marked.parse(selectedReport.content || "") }}
+          />
+        )}
+        <style>{MARKDOWN_CSS}</style>
       </div>
     );
   }

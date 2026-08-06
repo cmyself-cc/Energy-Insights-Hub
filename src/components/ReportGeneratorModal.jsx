@@ -1,66 +1,75 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { backendApi } from "../utils/backendApi";
 
-const MAX_ROUNDS = 3;
-
-export default function ReportGeneratorModal({ darkMode, language, templates, cart, onClose, onDone, onOpenReports }) {
+export default function ReportGeneratorModal({ darkMode, language, templates, cart, onClose, onStarted, onTemplatesChanged }) {
   const zh = language === "zh";
-  const [step, setStep] = useState("pick");
-  const [templateId, setTemplateId] = useState(null);
+  const [step, setStep] = useState("loading"); // loading/quality/purpose/audience/template/confirm
   const [screening, setScreening] = useState(null);
-  const [questions, setQuestions] = useState([]);          // 当前轮问题
-  const [answers, setAnswers] = useState([]);              // 当前轮回答 {key, issue, choice, cardIds}
-  const [round, setRound] = useState(1);
-  const [resolutions, setResolutions] = useState([]);      // 累计澄清结果
+  const [cards, setCards] = useState(cart || []);
+  const [choices, setChoices] = useState([]);          // 质量问题的处理选择
   const [purpose, setPurpose] = useState("");
-  const [jobId, setJobId] = useState(null);
-  const [job, setJob] = useState(null);
+  const [audience, setAudience] = useState("");
+  const [templateMode, setTemplateMode] = useState("public"); // public/custom/manual
+  const [templateId, setTemplateId] = useState(null);
+  const [manualForm, setManualForm] = useState({ topic: "", framework: "", outline: "", conclusion: "" });
+  const [manualPrompt, setManualPrompt] = useState(null);
+  const [manualBusy, setManualBusy] = useState(false);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const pollRef = useRef(null);
 
   const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
   const secondary = darkMode ? "#aaa" : COLORS.text.secondary;
+  const inputStyle = { padding: "8px 12px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: FONT_SIZES.base, outline: "none", width: "100%", boxSizing: "border-box" };
+  const btn = (primary, disabled) => ({ padding: "8px 16px", borderRadius: BORDER_RADIUS.md, background: disabled ? "#aaa" : (primary ? COLORS.primary : "transparent"), color: primary ? "#fff" : text, fontSize: FONT_SIZES.sm, cursor: disabled ? "not-allowed" : "pointer", border: primary ? "none" : `1px solid ${border}` });
+  const tabStyle = (active) => ({ padding: "6px 14px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${active ? COLORS.primary : border}`, background: active ? COLORS.primaryLight : "transparent", color: active ? COLORS.primary : (darkMode ? "#e8e8e8" : COLORS.text.primary), fontSize: FONT_SIZES.sm, cursor: "pointer", fontWeight: active ? 600 : 400 });
 
-  const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
-  useEffect(() => stopPolling, []);
+  const cardIds = () => cards.map(c => c.id).filter(Boolean);
 
-  const cardIds = () => cart.map(c => c.id).filter(Boolean);
-
-  const pickTemplate = async (t) => {
-    setTemplateId(t.id); setBusy(true); setError(null); setRound(1); setResolutions([]);
+  const runScreening = async (ids) => {
+    setBusy(true); setError(null);
     try {
-      const res = await backendApi.screenReport(t.id, cardIds());
+      const t = templates[0];
+      const res = await backendApi.screenReport(t.id, ids);
       setScreening(res.data);
       setPurpose(res.data.purpose || "");
-      setQuestions(res.data.questions || []);
-      setAnswers((res.data.questions || []).map(q => ({ key: q.key, issue: q.issue, choice: q.suggested || (q.options || [])[0] || "", cardIds: q.cardIds || [] })));
-      setStep(res.data.questions && res.data.questions.length > 0 ? "screen" : "confirm");
-    } catch (e) { setError(e.message); }
+      setAudience(res.data.audience || "");
+      setChoices((res.data.quality || []).map(q => q.suggested || (q.options || [])[0] || ""));
+      setStep("quality");
+    } catch (e) { setError(e.message); setStep("quality"); }
     setBusy(false);
   };
 
-  const setAnswerChoice = (index, choice) => {
-    setAnswers(prev => prev.map((a, i) => i === index ? { ...a, choice } : a));
+  useEffect(() => {
+    if (templates.length > 0) runScreening(cardIds());
+    else { setStep("quality"); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const removeCard = (id) => setCards(prev => prev.filter(c => c.id !== id));
+
+  const reScreen = () => runScreening(cardIds());
+
+  const genManualPrompt = async () => {
+    setManualBusy(true); setError(null);
+    try {
+      const res = await backendApi.generateReportPrompt({ ...manualForm, language });
+      setManualPrompt(res.data.prompt);
+    } catch (e) { setError(e.message); }
+    setManualBusy(false);
   };
 
-  // 提交当前轮回答 → LLM 决定继续追问还是完成
-  const nextRound = async () => {
+  const confirmManualTemplate = async () => {
+    if (!manualPrompt) return;
     setBusy(true); setError(null);
     try {
-      const res = await backendApi.clarifyReport(templateId, cardIds(), answers);
-      setResolutions(res.data.resolutions || []);
-      setPurpose(res.data.purpose || purpose);
-      if (res.data.done || round >= MAX_ROUNDS) {
-        setStep("confirm");
-      } else {
-        setQuestions(res.data.questions || []);
-        setAnswers((res.data.questions || []).map(q => ({ key: q.key, issue: q.issue, choice: q.suggested || (q.options || [])[0] || "", cardIds: q.cardIds || [] })));
-        setRound(r => r + 1);
-      }
+      const name = manualForm.topic?.trim() || (zh ? "自定义报告" : "Custom report");
+      const created = await backendApi.createReportTemplate({ name, description: manualForm.framework || "", purpose, prompt: manualPrompt, max_cards: 10, language: zh ? "zh" : "en", is_public: 0 });
+      setTemplateId(created.data.id);
+      onTemplatesChanged?.();
+      setStep("confirm");
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
@@ -68,169 +77,224 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      const merged = resolutions.length > 0
-        ? resolutions.map(r => ({ issue: r.issue, cardIds: r.cardIds, choice: r.choice }))
-        : answers.map(a => ({ issue: a.issue, cardIds: a.cardIds, choice: a.choice }));
-      const res = await backendApi.generateReport(templateId, cardIds(), merged);
-      setJobId(res.data.id); setStep("progress");
-      pollRef.current = setInterval(async () => {
-        try {
-          const jr = await backendApi.getReportJob(res.data.id);
-          setJob(jr.data);
-          if (jr.data.status === "done" || jr.data.status === "failed") { stopPolling(); setStep("done"); }
-        } catch { /* keep polling */ }
-      }, 3000);
+      const resolutions = (screening?.quality || []).map((q, i) => ({ issue: q.issue, cardIds: q.cardIds, choice: choices[i] }));
+      await backendApi.generateReport(templateId, cardIds(), resolutions);
+      onStarted?.();
+      onClose();
     } catch (e) { setError(e.message); setBusy(false); }
   };
 
-  const retry = async () => {
-    setBusy(true); setError(null);
-    try {
-      await backendApi.retryReportJob(jobId);
-      setJob({ ...job, status: "queued", phase: "queued", progress: 0, error: null });
-      setStep("progress");
-      pollRef.current = setInterval(async () => {
-        try {
-          const jr = await backendApi.getReportJob(jobId);
-          setJob(jr.data);
-          if (jr.data.status === "done" || jr.data.status === "failed") { stopPolling(); setStep("done"); }
-        } catch { /* keep polling */ }
-      }, 3000);
-    } catch (e) { setError(e.message); }
-    setBusy(false);
-  };
-
   const modalStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 };
-  const cardStyle = { background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: 24, maxWidth: 640, width: "100%", maxHeight: "80vh", overflowY: "auto" };
-  const btn = (primary) => ({ padding: "8px 16px", borderRadius: BORDER_RADIUS.md, background: primary ? COLORS.primary : "transparent", color: primary ? "#fff" : text, fontSize: FONT_SIZES.sm, cursor: "pointer", border: primary ? "none" : `1px solid ${border}` });
-  const inputStyle = { padding: "8px 12px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: FONT_SIZES.base, outline: "none", width: "100%", boxSizing: "border-box" };
+  const cardStyle = { background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: 24, maxWidth: 680, width: "100%", maxHeight: "82vh", overflowY: "auto" };
+  const stepBar = ["quality", "purpose", "audience", "template", "confirm"];
+  const stepIndex = stepBar.indexOf(step);
+  const stepNames = zh ? ["卡片筛查", "报告用途", "读者受众", "模板", "确认"] : ["Cards", "Purpose", "Audience", "Template", "Confirm"];
+  const selTemplate = templates.find(t => t.id === templateId);
 
   return (
     <div style={modalStyle}>
       <div style={cardStyle}>
-        <h3 style={{ margin: "0 0 16px", color: text }}>{zh ? "生成报告" : "Generate Report"}</h3>
+        <h3 style={{ margin: "0 0 14px", color: text }}>{zh ? "生成报告" : "Generate Report"}</h3>
 
-        {step === "pick" && (
+        {step !== "loading" && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
+            {stepNames.map((name, i) => (
+              <span key={name} style={{
+                fontSize: FONT_SIZES.xs, padding: "3px 10px", borderRadius: 12,
+                background: i === stepIndex ? COLORS.primary : (i < stepIndex ? COLORS.primaryLight : (darkMode ? "#222" : "#f0f0f0")),
+                color: i === stepIndex ? "#fff" : (i < stepIndex ? COLORS.primary : secondary),
+                fontWeight: i === stepIndex ? 700 : 500
+              }}>{i + 1} {name}</span>
+            ))}
+          </div>
+        )}
+
+        {step === "loading" && <p style={{ color: secondary }}>{zh ? "正在筛查卡片..." : "Screening cards..."}</p>}
+
+        {step === "quality" && (
           <>
-            <p style={{ margin: "0 0 12px", fontSize: FONT_SIZES.sm, color: secondary }}>
-              {zh ? `已选 ${cart.length} 张卡片，请选择报告模板：` : `Selected ${cart.length} card(s). Choose a template:`}
+            <p style={{ margin: "0 0 8px", fontSize: FONT_SIZES.sm, color: secondary }}>
+              {zh ? "已选卡片（点击 × 移除后点「重新筛查」）：" : "Selected cards (click × to remove, then re-screen):"}
             </p>
-            {templates.filter(t => t.is_public === true).length > 0 && <SectionLabel text={zh ? "公用模板" : "Public templates"} />}
-            {templates.filter(t => t.is_public === true).map(t => (
-              <TemplateRow key={t.id} t={t} zh={zh} disabled={busy} onPick={() => pickTemplate(t)} border={border} text={text} secondary={secondary} />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+              {cards.map(c => (
+                <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: darkMode ? "#1c1f2b" : "#f0f0f0", border: `1px solid ${border}`, borderRadius: 12, padding: "2px 8px", fontSize: FONT_SIZES.xs, color: text }}>
+                  {c.title?.slice(0, 18)}{c.title?.length > 18 ? "…" : ""}
+                  <span onClick={() => removeCard(c.id)} style={{ cursor: "pointer", color: "#c00", fontWeight: 700, padding: "0 2px" }}>×</span>
+                </span>
+              ))}
+            </div>
+
+            {(screening?.quality || []).length > 0 && (
+              <div style={{ background: "#fff8e6", border: "1px solid #e6c300", borderRadius: BORDER_RADIUS.md, padding: "10px 14px", marginBottom: 12, fontSize: FONT_SIZES.sm, color: "#8a6d00" }}>
+                {zh
+                  ? "⚠️ 检测到输入卡片可能存在数据质量问题（矛盾/重复/不相关），可能影响生成效果，请确认以下处理方式："
+                  : "⚠️ Input cards may have data quality issues (conflicts/duplicates/irrelevant) that could affect the report. Please confirm how to handle them:"}
+              </div>
+            )}
+            {(screening?.quality || []).length === 0 && (
+              <p style={{ fontSize: FONT_SIZES.sm, color: secondary, margin: "0 0 12px" }}>{zh ? "未发现矛盾/重复/不相关问题。" : "No conflicts, duplicates or irrelevant cards detected."}</p>
+            )}
+            {(screening?.quality || []).map((q, i) => (
+              <div key={i} style={{ border: `1px solid ${border}`, borderRadius: BORDER_RADIUS.md, padding: 12, marginBottom: 12 }}>
+                <div style={{ fontSize: FONT_SIZES.sm, color: text, fontWeight: 600, marginBottom: 8 }}>
+                  {q.kind === "contradiction" ? (zh ? "矛盾" : "Conflict") : q.kind === "duplicate" ? (zh ? "重复" : "Duplicate") : (zh ? "不相关" : "Irrelevant")} · {q.issue}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {(q.options || []).map(opt => (
+                    <button key={opt} onClick={() => setChoices(prev => prev.map((v, j) => j === i ? opt : v))} style={tabStyle(choices[i] === opt)}>{opt}</button>
+                  ))}
+                </div>
+              </div>
             ))}
-            {templates.filter(t => t.is_public !== true).length > 0 && <SectionLabel text={zh ? "自定义模板" : "Custom templates"} />}
-            {templates.filter(t => t.is_public !== true).map(t => (
-              <TemplateRow key={t.id} t={t} zh={zh} disabled={busy} onPick={() => pickTemplate(t)} border={border} text={text} secondary={secondary} />
-            ))}
+            {screening?.exceedsLimit && (
+              <div style={{ background: "#fff8e6", border: "1px solid #e6c300", borderRadius: BORDER_RADIUS.md, padding: "10px 14px", marginBottom: 12, fontSize: FONT_SIZES.sm, color: "#8a6d00" }}>
+                {zh ? "卡片数超过模板上限，生成时将只取前若干张。" : "Card count exceeds the template limit; only the first cards will be used."}
+              </div>
+            )}
             {error && <ErrorBox text={error} />}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+              <button style={btn(false)} onClick={reScreen} disabled={busy}>{zh ? "重新筛查" : "Re-screen"}</button>
+              <button style={btn(true, cards.length === 0)} onClick={() => setStep("purpose")} disabled={busy || cards.length === 0}>{zh ? "继续" : "Continue"}</button>
+            </div>
           </>
         )}
 
-        {step === "screen" && (
+        {step === "purpose" && (
           <>
-            <p style={{ margin: "0 0 10px", fontSize: FONT_SIZES.sm, color: secondary }}>
-              {zh ? `第 ${round} 轮澄清：AI 需要你确认以下问题` : `Round ${round}: AI needs your confirmation`}
-            </p>
-            {screening?.exceedsLimit && (
-              <div style={{ background: "#fff8e6", border: "1px solid #e6c300", borderRadius: BORDER_RADIUS.md, padding: "10px 14px", marginBottom: 12, fontSize: FONT_SIZES.sm, color: "#8a6d00" }}>
-                {zh ? "卡片数超过该模板上限，生成时将只取前若干张。" : "Card count exceeds the template limit; only the first cards will be used."}
-              </div>
-            )}
-            {questions.length === 0 ? (
-              <p style={{ fontSize: FONT_SIZES.sm, color: secondary, margin: "0 0 12px" }}>{zh ? "本轮无需再澄清。" : "No further clarification needed."}</p>
-            ) : questions.map((q, i) => (
-              <div key={q.key || i} style={{ border: `1px solid ${border}`, borderRadius: BORDER_RADIUS.md, padding: 12, marginBottom: 12 }}>
-                <div style={{ fontSize: FONT_SIZES.sm, color: text, fontWeight: 600, marginBottom: 8 }}>{q.issue}</div>
-                {(q.options || []).map(opt => (
-                  <label key={opt} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: FONT_SIZES.sm, color: text, marginBottom: 4, cursor: "pointer" }}>
-                    <input type="radio" name={`q-${i}`} checked={answers[i]?.choice === opt} onChange={() => setAnswerChoice(i, opt)} style={{ width: 14, height: 14, cursor: "pointer" }} />
-                    {opt}
-                  </label>
-                ))}
-                <input
-                  style={{ ...inputStyle, marginTop: 6, fontSize: FONT_SIZES.sm }}
-                  placeholder={zh ? "或直接输入你的回答…" : "Or type your answer…"}
-                  value={answers[i]?.choice || ""}
-                  onChange={e => setAnswerChoice(i, e.target.value)}
-                />
-              </div>
-            ))}
+            <p style={{ margin: "0 0 10px", fontSize: FONT_SIZES.sm, color: secondary }}>{zh ? "根据卡片信息推测的报告用途，请确认或手动输入：" : "Inferred purpose based on cards. Confirm or type your own:"}</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              {(screening?.purposeOptions || []).map(opt => (
+                <button key={opt} onClick={() => setPurpose(opt)} style={tabStyle(purpose === opt)}>{opt}</button>
+              ))}
+            </div>
+            <input style={inputStyle} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder={zh ? "或手动输入报告用途..." : "Or type the report purpose..."} />
             {error && <ErrorBox text={error} />}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-              <button style={btn(false)} onClick={() => setStep("pick")} disabled={busy}>{zh ? "返回" : "Back"}</button>
-              <button style={btn(true)} onClick={nextRound} disabled={busy}>
-                {busy ? (zh ? "分析中..." : "Analyzing...") : (zh ? `确认并${round >= MAX_ROUNDS ? "生成" : "继续"}（第 ${Math.min(round + 1, MAX_ROUNDS)}/${MAX_ROUNDS} 轮）` : "Confirm")}
-              </button>
+              <button style={btn(false)} onClick={() => setStep("quality")}>{zh ? "上一步" : "Back"}</button>
+              <button style={btn(true, !purpose.trim())} onClick={() => setStep("audience")} disabled={!purpose.trim()}>{zh ? "下一步" : "Next"}</button>
+            </div>
+          </>
+        )}
+
+        {step === "audience" && (
+          <>
+            <p style={{ margin: "0 0 10px", fontSize: FONT_SIZES.sm, color: secondary }}>{zh ? "报告的读者/受众，请确认或手动输入：" : "Report audience. Confirm or type your own:"}</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              {(screening?.audienceOptions || []).map(opt => (
+                <button key={opt} onClick={() => setAudience(opt)} style={tabStyle(audience === opt)}>{opt}</button>
+              ))}
+            </div>
+            <input style={inputStyle} value={audience} onChange={e => setAudience(e.target.value)} placeholder={zh ? "或手动输入读者/受众..." : "Or type the audience..."} />
+            {error && <ErrorBox text={error} />}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+              <button style={btn(false)} onClick={() => setStep("purpose")}>{zh ? "上一步" : "Back"}</button>
+              <button style={btn(true, !audience.trim())} onClick={() => setStep("template")} disabled={!audience.trim()}>{zh ? "下一步" : "Next"}</button>
+            </div>
+          </>
+        )}
+
+        {step === "template" && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              <button style={tabStyle(templateMode === "public")} onClick={() => setTemplateMode("public")}>{zh ? "公用模板" : "Public"}</button>
+              <button style={tabStyle(templateMode === "custom")} onClick={() => setTemplateMode("custom")}>{zh ? "自定义模板" : "Custom"}</button>
+              <button style={tabStyle(templateMode === "manual")} onClick={() => setTemplateMode("manual")}>{zh ? "手动输入，AI 生成" : "Manual + AI prompt"}</button>
+            </div>
+
+            {templateMode !== "manual" && (
+              <div>
+                {(templateMode === "public" ? templates.filter(t => t.is_public === true) : templates.filter(t => t.is_public !== true)).map(t => (
+                  <div key={t.id} onClick={() => setTemplateId(t.id)} style={{
+                    border: `1px solid ${templateId === t.id ? COLORS.primary : border}`,
+                    background: templateId === t.id ? COLORS.primaryLight : "transparent",
+                    borderRadius: BORDER_RADIUS.md, padding: "12px 16px", marginBottom: 10, cursor: "pointer"
+                  }}>
+                    <div style={{ fontWeight: 600, color: text, fontSize: FONT_SIZES.base }}>
+                      {t.name} <span style={{ fontSize: 11, color: secondary }}>{zh ? `上限 ${t.max_cards} 张` : `max ${t.max_cards}`}</span>
+                    </div>
+                    <div style={{ fontSize: FONT_SIZES.sm, color: secondary, marginTop: 4 }}>{t.description || t.prompt.slice(0, 60)}</div>
+                  </div>
+                ))}
+                {templateId && cards.length > (selTemplate?.max_cards || 10) && (
+                  <div style={{ background: "#fff8e6", border: "1px solid #e6c300", borderRadius: BORDER_RADIUS.md, padding: "10px 14px", marginBottom: 12, fontSize: FONT_SIZES.sm, color: "#8a6d00" }}>
+                    {zh ? `已选 ${cards.length} 张卡片，超过该模板上限 ${selTemplate?.max_cards} 张，生成时只取前 ${selTemplate?.max_cards} 张。` : `Selected ${cards.length} cards exceed this template's limit of ${selTemplate?.max_cards}; only the first will be used.`}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {templateMode === "manual" && (
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: FONT_SIZES.sm, color: secondary, marginBottom: 4 }}>{zh ? "主题" : "Topic"}</label>
+                    <input style={inputStyle} value={manualForm.topic} onChange={e => setManualForm({ ...manualForm, topic: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: FONT_SIZES.sm, color: secondary, marginBottom: 4 }}>{zh ? "框架" : "Framework"}</label>
+                    <input style={inputStyle} value={manualForm.framework} onChange={e => setManualForm({ ...manualForm, framework: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: FONT_SIZES.sm, color: secondary, marginBottom: 4 }}>{zh ? "大纲" : "Outline"}</label>
+                    <input style={inputStyle} value={manualForm.outline} onChange={e => setManualForm({ ...manualForm, outline: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: FONT_SIZES.sm, color: secondary, marginBottom: 4 }}>{zh ? "核心结论" : "Core conclusion"}</label>
+                    <input style={inputStyle} value={manualForm.conclusion} onChange={e => setManualForm({ ...manualForm, conclusion: e.target.value })} />
+                  </div>
+                </div>
+                <button style={btn(true, manualBusy)} onClick={genManualPrompt} disabled={manualBusy}>
+                  {manualBusy ? (zh ? "AI 生成中..." : "Generating...") : (zh ? "AI 生成提示词模板" : "Generate prompt with AI")}
+                </button>
+                {manualPrompt && (
+                  <div style={{ marginTop: 10 }}>
+                    <textarea style={{ ...inputStyle, minHeight: 120, resize: "vertical", fontFamily: "monospace", fontSize: 13 }} value={manualPrompt} onChange={e => setManualPrompt(e.target.value)} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {error && <ErrorBox text={error} />}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+              <button style={btn(false)} onClick={() => setStep("audience")}>{zh ? "上一步" : "Back"}</button>
+              {templateMode === "manual" ? (
+                <button style={btn(true, !manualPrompt || busy)} onClick={confirmManualTemplate} disabled={!manualPrompt || busy}>
+                  {zh ? "确认并保存为模板" : "Confirm & Save Template"}
+                </button>
+              ) : (
+                <button style={btn(true, !templateId)} onClick={() => setStep("confirm")} disabled={!templateId}>{zh ? "下一步" : "Next"}</button>
+              )}
             </div>
           </>
         )}
 
         {step === "confirm" && (
           <>
-            <p style={{ margin: "0 0 8px", fontSize: FONT_SIZES.sm, color: secondary }}>{zh ? "报告用途（可修改）：" : "Report purpose (editable):"}</p>
-            <input style={{ ...inputStyle, marginBottom: 14 }} value={purpose} onChange={e => setPurpose(e.target.value)} />
-            {resolutions.length > 0 && (
-              <div style={{ border: `1px solid ${border}`, borderRadius: BORDER_RADIUS.md, padding: 12, marginBottom: 14 }}>
-                <div style={{ fontSize: FONT_SIZES.sm, fontWeight: 600, color: text, marginBottom: 6 }}>{zh ? "澄清结果" : "Clarifications"}</div>
-                {resolutions.map((r, i) => (
-                  <div key={i} style={{ fontSize: FONT_SIZES.sm, color: secondary, marginBottom: 2 }}>
-                    · {r.issue} → <strong style={{ color: text }}>{r.choice}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div style={{ border: `1px solid ${border}`, borderRadius: BORDER_RADIUS.md, padding: 14, marginBottom: 14, fontSize: FONT_SIZES.sm, color: text }}>
+              <div style={{ marginBottom: 4 }}><strong>{zh ? "报告用途：" : "Purpose: "}</strong>{purpose}</div>
+              <div style={{ marginBottom: 4 }}><strong>{zh ? "读者受众：" : "Audience: "}</strong>{audience}</div>
+              <div style={{ marginBottom: 4 }}><strong>{zh ? "模板：" : "Template: "}</strong>{templateMode === "manual" ? (manualForm.topic || zh ? "自定义（AI 生成提示词）" : "Custom (AI prompt)") : (selTemplate?.name || "")}</div>
+              <div><strong>{zh ? "卡片：" : "Cards: "}</strong>{cards.length} 张</div>
+              {(screening?.quality || []).length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <strong>{zh ? "处理决定：" : "Resolutions: "}</strong>
+                  {(screening.quality || []).map((q, i) => (
+                    <div key={i} style={{ marginTop: 2 }}>· {q.issue} → {choices[i]}</div>
+                  ))}
+                </div>
+              )}
+            </div>
             {error && <ErrorBox text={error} />}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-              <button style={btn(false)} onClick={() => setStep("screen")} disabled={busy}>{zh ? "返回" : "Back"}</button>
-              <button style={btn(true)} onClick={submit} disabled={busy}>{busy ? (zh ? "提交中..." : "Submitting...") : (zh ? "生成报告" : "Generate")}</button>
+              <button style={btn(false)} onClick={() => setStep("template")}>{zh ? "上一步" : "Back"}</button>
+              <button style={btn(true, busy)} onClick={submit} disabled={busy}>{busy ? (zh ? "提交中..." : "Submitting...") : (zh ? "开始生成" : "Generate")}</button>
             </div>
           </>
-        )}
-
-        {step === "progress" && (
-          <div>
-            <p style={{ color: text, margin: "0 0 12px" }}>
-              {zh ? `生成中：${phaseLabel(job?.phase, zh)}（${job?.progress ?? 0}%）` : `Generating: ${phaseLabel(job?.phase, false)} (${job?.progress ?? 0}%)`}
-            </p>
-            <div style={{ background: darkMode ? "#333" : "#eee", borderRadius: BORDER_RADIUS.sm, height: 8, overflow: "hidden" }}>
-              <div style={{ width: `${job?.progress ?? 0}%`, height: "100%", background: COLORS.primary, transition: "width .5s" }} />
-            </div>
-            {job?.notes && <p style={{ fontSize: FONT_SIZES.sm, color: secondary, marginTop: 8 }}>{job.notes}</p>}
-          </div>
-        )}
-
-        {step === "done" && (
-          <div>
-            {job?.status === "done" ? (
-              <p style={{ color: text, margin: "0 0 12px" }}>{zh ? "报告已生成！" : "Report generated!"}</p>
-            ) : (
-              <p style={{ color: "#c00", margin: "0 0 12px" }}>{zh ? `生成失败：${job?.error || "未知错误"}` : `Failed: ${job?.error || "unknown error"}`}</p>
-            )}
-            {error && <ErrorBox text={error} />}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button style={btn(false)} onClick={onClose}>{zh ? "关闭" : "Close"}</button>
-              {job?.status === "done" && <button style={btn(true)} onClick={() => { onDone?.(job.report_id); onOpenReports?.(); }}>{zh ? "查看报告" : "View Report"}</button>}
-              {job?.status === "failed" && <button style={btn(true)} onClick={retry} disabled={busy}>{zh ? "重试" : "Retry"}</button>}
-            </div>
-          </div>
         )}
       </div>
     </div>
   );
 }
 
-function phaseLabel(phase, zh) {
-  const map = { queued: ["排队中", "Queued"], searching: ["检索资料中", "Searching"], summarizing: ["AI 总结中", "Summarizing"], done: ["完成", "Done"], failed: ["失败", "Failed"] };
-  return (map[phase] || ["处理中", "Processing"])[zh ? 0 : 1];
-}
-function SectionLabel({ text }) { return <div style={{ fontSize: FONT_SIZES.sm, fontWeight: 700, color: "#666", margin: "10px 0 6px" }}>{text}</div>; }
 function ErrorBox({ text }) { return <div style={{ background: "#fff0f0", border: "1px solid #fcc", borderRadius: BORDER_RADIUS.md, padding: "10px 14px", color: "#c00", fontSize: FONT_SIZES.sm, marginTop: 12 }}>{text}</div>; }
-function TemplateRow({ t, zh, disabled, onPick, border, text, secondary }) {
-  return (
-    <div key={t.id} style={{ border: `1px solid ${border}`, borderRadius: BORDER_RADIUS.md, padding: "12px 16px", marginBottom: 10, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1 }} onClick={disabled ? undefined : onPick}>
-      <div style={{ fontWeight: 600, color: text, fontSize: FONT_SIZES.base }}>{t.name} <span style={{ fontSize: 11, color: secondary }}>{zh ? `上限 ${t.max_cards} 张` : `max ${t.max_cards} cards`}</span></div>
-      <div style={{ fontSize: FONT_SIZES.sm, color: secondary, marginTop: 4 }}>{t.description || "—"}</div>
-    </div>
-  );
-}

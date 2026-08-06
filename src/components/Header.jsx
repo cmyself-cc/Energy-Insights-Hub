@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { backendApi } from "../utils/backendApi";
 import TrackerProgress from "./TrackerProgress";
+import ReportProgress from "./ReportProgress";
 
 export default function Header({ darkMode, language, onLanguageToggle }) {
   const [currentModel, setCurrentModel] = useState(null);
@@ -29,6 +30,7 @@ export default function Header({ darkMode, language, onLanguageToggle }) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <TrackerProgress darkMode={darkMode} language={language} />
+        <ReportProgress darkMode={darkMode} language={language} />
         {/* 当前生效模型（只读展示，配置在设置页全局配置） */}
         <div
           title={language === "zh" ? "当前生效模型（在设置页全局配置中管理）" : "Active model (manage in Settings → Global Config)"}

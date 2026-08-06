@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../lib/llmClient.js", () => ({ callLlmJson: vi.fn() }));
+vi.mock("../lib/llmClient.js", () => ({ callLlm: vi.fn(), callLlmJson: vi.fn() }));
 
 import { screenCards, clarifyCards, generateManualPrompt } from "./reportScreening.js";
-import { callLlmJson } from "../lib/llmClient.js";
+import { callLlm, callLlmJson } from "../lib/llmClient.js";
 
 const template = { id: 1, name: "T", purpose: "日报", max_cards: 2, prompt: "p", language: "zh" };
 const insights = [
@@ -57,15 +57,15 @@ describe("reportScreening", () => {
   });
 
   it("generateManualPrompt builds a prompt with the user's outline", async () => {
-    callLlmJson.mockResolvedValue("你是报告撰写助手。请按以下框架输出：报告主题为储能行业");
+    callLlm.mockResolvedValue("你是报告撰写助手。请按以下框架输出：报告主题为储能行业");
     const result = await generateManualPrompt({ topic: "储能行业", framework: "现状/趋势/风险", outline: "1.市场规模 2.政策", conclusion: "关注钠离子电池", language: "zh" });
     expect(result.prompt).toContain("储能行业");
     expect(result.generated).toBe(true);
-    expect(callLlmJson.mock.calls[0][0][0].content).toContain("现状/趋势/风险");
+    expect(callLlm.mock.calls[0][0][0].content).toContain("现状/趋势/风险");
   });
 
   it("generateManualPrompt falls back without the LLM", async () => {
-    callLlmJson.mockRejectedValue(new Error("boom"));
+    callLlm.mockRejectedValue(new Error("boom"));
     const result = await generateManualPrompt({ topic: "氢能", language: "zh" });
     expect(result.prompt).toContain("氢能");
     expect(result.prompt).toContain("{{insights}}");

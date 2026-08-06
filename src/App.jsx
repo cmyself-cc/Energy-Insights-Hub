@@ -349,8 +349,8 @@ export default function App() {
           templates={reportTemplates}
           cart={cart}
           onClose={() => setShowReportModal(false)}
-          onDone={(reportId) => { setOpenReportId(reportId); }}
-          onOpenReports={() => { setShowReportModal(false); setActiveTab("reports"); }}
+          onStarted={() => addToast(language === "zh" ? "报告已开始生成，进度见顶部进度条" : "Report generation started — see the progress bar at the top", "info")}
+          onTemplatesChanged={() => backendApi.getReportTemplates().then(r => setReportTemplates(r.data || [])).catch(() => {})}
         />
       )}
 
