@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { marked } from "marked";
+import { Marked } from "marked";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { api } from "../utils/api";
@@ -7,8 +7,9 @@ import { backendApi } from "../utils/backendApi";
 
 const DISCLAIMER_KEY = "energy_insights_ai_disclaimer_accepted";
 
-// 自定义 markdown 渲染：标题间加大行距、列表缩进对齐、行内紧凑
-marked.use({
+// AI 解读专用的 markdown 渲染实例（避免全局 marked 被污染，影响报告页/PDF 导出）
+const aiMarked = new Marked();
+aiMarked.use({
   renderer: {
     heading({ tokens, depth }) {
       const text = this.parser.parseInline(tokens);
@@ -127,7 +128,7 @@ export default function AiDrawer({ item, darkMode, language, onClose }) {
   const renderMarkdown = (text) => {
     if (!text) return "";
     try {
-      return marked.parse(text);
+      return aiMarked.parse(text);
     } catch {
       return text;
     }
