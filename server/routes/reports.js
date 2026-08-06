@@ -1,7 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { listTemplates, createTemplate, updateTemplate, deleteTemplate } from "../services/reportTemplateService.js";
-import { screenCards, clarifyCards } from "../services/reportScreening.js";
+import { screenCards, clarifyCards, generateManualPrompt } from "../services/reportScreening.js";
 import { createReportJob, getJob, listJobs, retryJob, processQueue } from "../services/reportGenerator.js";
 
 const router = Router();
@@ -45,6 +45,21 @@ router.post("/", (req, res) => {
     ).run(title, content, itemsStr, language);
     const row = db.prepare("SELECT * FROM reports WHERE id = ?").get(result.lastInsertRowid);
     res.status(201).json({ data: parseRow(row) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put("/:id(\\d+)", (req, res) => {
+  try {
+    const { title, content } = req.body;
+    if (!title || !content) return res.status(400).json({ error: "title and content are required" });
+    const existing = db.prepare("SELECT * FROM reports WHERE id = ?").get(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Report not found" });
+    db.prepare("UPDATE reports SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(String(title), String(content), req.params.id);
+    const row = db.prepare("SELECT * FROM reports WHERE id = ?").get(req.params.id);
+    res.json({ data: parseRow(row) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -105,6 +120,20 @@ router.post("/clarify", async (req, res) => {
     const placeholders = ids.map(() => "?").join(",");
     const insights = db.prepare(`SELECT * FROM insights WHERE id IN (${placeholders}) AND hidden = 0`).all(...ids);
     const result = await clarifyCards({ template, insights, answers: answers || [] });
+    res.json({ data: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 手动输入主题/框架/大纲/核心结论 → LLM 生成提示词模板
+router.post("/generate-prompt", async (req, res) => {
+  try {
+    const { topic, framework, outline, conclusion, language } = req.body;
+    if (!topic && !framework && !outline && !conclusion) {
+      return res.status(400).json({ error: "at least one of topic/framework/outline/conclusion is required" });
+    }
+    const result = await generateManualPrompt({ topic, framework, outline, conclusion, language: language || "zh" });
     res.json({ data: result });
   } catch (e) {
     res.status(500).json({ error: e.message });

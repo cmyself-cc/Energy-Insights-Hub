@@ -6,7 +6,7 @@ import { listTemplates, seedReportTemplates } from "../services/reportTemplateSe
 import { screenCards } from "../services/reportScreening.js";
 import { createReportJob, getJob, retryJob } from "../services/reportGenerator.js";
 
-vi.mock("../services/reportScreening.js", () => ({ screenCards: vi.fn(), clarifyCards: vi.fn() }));
+vi.mock("../services/reportScreening.js", () => ({ screenCards: vi.fn(), clarifyCards: vi.fn(), generateManualPrompt: vi.fn() }));
 vi.mock("../services/reportGenerator.js", () => ({
   createReportJob: vi.fn(), getJob: vi.fn(), listJobs: vi.fn(), retryJob: vi.fn(),
   startJobRunner: vi.fn(), processQueue: vi.fn(() => Promise.resolve())
@@ -99,5 +99,22 @@ describe("reports routes", () => {
     retryJob.mockReturnValue({ id: 1, status: "queued" });
     expect((await call("/jobs/1")).body.data.status).toBe("done");
     expect((await call("/jobs/1/retry", { method: "POST" })).body.data.status).toBe("queued");
+  });
+
+  it("edits a report title and content", async () => {
+    db.prepare("DELETE FROM reports").run();
+    const result = db.prepare("INSERT INTO reports (title, content, status) VALUES ('旧标题', '旧内容', 'done')").run();
+    const { status, body } = await call(`/${result.lastInsertRowid}`, { method: "PUT", body: JSON.stringify({ title: "新标题", content: "新内容" }) });
+    expect(status).toBe(200);
+    expect(body.data.title).toBe("新标题");
+    expect(body.data.content).toBe("新内容");
+  });
+
+  it("generate-prompt returns a prompt", async () => {
+    const { generateManualPrompt: mockGp } = await import("../services/reportScreening.js");
+    mockGp.mockResolvedValue({ prompt: "生成提示词", generated: true });
+    const { status, body } = await call("/generate-prompt", { method: "POST", body: JSON.stringify({ topic: "储能", language: "zh" }) });
+    expect(status).toBe(200);
+    expect(body.data.prompt).toBe("生成提示词");
   });
 });
