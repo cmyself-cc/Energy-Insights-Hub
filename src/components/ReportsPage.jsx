@@ -6,7 +6,7 @@ import { backendApi } from "../utils/backendApi";
 
 // Markdown 渲染样式（marked 输出，无需外部依赖）
 const MARKDOWN_CSS = `
-.markdown-body { padding: 8px 12px 20px; }
+.markdown-body { padding: 0; }
 .markdown-body h1 { font-size: 20px; font-weight: 800; color: #1a6b3c; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(26,107,60,0.25); }
 .markdown-body h2 { font-size: 16px; font-weight: 700; color: #1a6b3c; margin: 16px 0 8px; }
 .markdown-body h3 { font-size: 14px; font-weight: 700; margin: 12px 0 6px; }
@@ -239,6 +239,14 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
           <div
             className="markdown-body"
             style={{
+              background: darkMode ? "#161a26" : "#fff",
+              border: `1px solid ${darkMode ? COLORS.border.dark : "#e3e3e3"}`,
+              borderRadius: BORDER_RADIUS.md,
+              boxShadow: "0 4px 18px rgba(0,0,0,0.08)",
+              maxWidth: 860,
+              margin: "0 auto",
+              // Word 标准页边距：上下 2.54cm ≈ 96px，左右 3.17cm ≈ 120px
+              padding: "96px 120px",
               fontSize: FONT_SIZES.base,
               lineHeight: 1.7,
               color: darkMode ? "#e8e8e8" : COLORS.text.primary
