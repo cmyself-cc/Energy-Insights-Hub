@@ -6,18 +6,25 @@ import { backendApi } from "../utils/backendApi";
 
 // Markdown 渲染样式（marked 输出，无需外部依赖）
 const MARKDOWN_CSS = `
-.markdown-body h1 { font-size: 20px; font-weight: 800; color: #1a6b3c; margin: 12px 0 8px; }
-.markdown-body h2 { font-size: 16px; font-weight: 700; color: #1a6b3c; margin: 10px 0 6px; }
-.markdown-body h3 { font-size: 14px; font-weight: 700; margin: 8px 0 4px; }
-.markdown-body p { margin: 6px 0; }
-.markdown-body ul, .markdown-body ol { margin: 6px 0; padding-left: 22px; }
-.markdown-body li { margin: 3px 0; }
+.markdown-body { padding: 8px 12px 20px; }
+.markdown-body h1 { font-size: 20px; font-weight: 800; color: #1a6b3c; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(26,107,60,0.25); }
+.markdown-body h2 { font-size: 16px; font-weight: 700; color: #1a6b3c; margin: 16px 0 8px; }
+.markdown-body h3 { font-size: 14px; font-weight: 700; margin: 12px 0 6px; }
+.markdown-body p { margin: 8px 0; line-height: 1.9; text-indent: 2em; }
+.markdown-body ul, .markdown-body ol { margin: 8px 0; padding-left: 2.5em; }
+.markdown-body li { margin: 4px 0; line-height: 1.8; }
+.markdown-body li p { text-indent: 0; }
 .markdown-body a { color: #1a6b3c; text-decoration: none; font-weight: 500; }
 .markdown-body strong { font-weight: 700; }
-.markdown-body table { border-collapse: collapse; margin: 8px 0; }
-.markdown-body th, .markdown-body td { border: 1px solid #ddd; padding: 5px 10px; font-size: 13px; }
+.markdown-body blockquote { border-left: 3px solid #1a6b3c; margin: 10px 0; padding: 4px 0 4px 14px; color: #666; }
+.markdown-body blockquote p { text-indent: 0; }
+.markdown-body table { border-collapse: collapse; margin: 10px 0; width: 100%; }
+.markdown-body th, .markdown-body td { border: 1px solid #ddd; padding: 6px 12px; font-size: 13px; text-align: left; }
+.markdown-body th { background: rgba(26,107,60,0.08); font-weight: 600; }
 .markdown-body code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
-.markdown-body blockquote { border-left: 3px solid #1a6b3c; margin: 6px 0; padding-left: 10px; color: #555; }
+.markdown-body pre { background: rgba(0,0,0,0.05); padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
+.markdown-body pre code { background: none; padding: 0; }
+.markdown-body hr { border: none; border-top: 1px solid rgba(0,0,0,0.12); margin: 16px 0; }
 `;
 
 function statusBadge(status, language) {
@@ -131,7 +138,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
         background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
         borderRadius: BORDER_RADIUS.xl,
         border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-        padding: "24px 28px",
+        padding: "32px 40px",
         minHeight: "60vh"
       }}>
         <div style={{
