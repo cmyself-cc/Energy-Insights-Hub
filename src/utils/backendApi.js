@@ -120,6 +120,13 @@ export const backendApi = {
   setActiveModel: (id) => request(`/models/${id}/active`, { method: "PUT" }),
   deleteModel: (id) => request(`/models/${id}`, { method: "DELETE" }),
 
+  // Search providers (browser never sees apiKey)
+  getSearchProviders: () => request("/search-providers"),
+  createSearchProvider: (data) => request("/search-providers", { method: "POST", body: JSON.stringify(data) }),
+  updateSearchProvider: (id, data) => request(`/search-providers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteSearchProvider: (id) => request(`/search-providers/${id}`, { method: "DELETE" }),
+  activateSearchProvider: (id) => request(`/search-providers/${id}/activate`, { method: "POST" }),
+
   // Industry categories
   getIndustryCategories: () => request("/industries"),
   createIndustryCategory: (data) => request("/industries", { method: "POST", body: JSON.stringify(data) }),

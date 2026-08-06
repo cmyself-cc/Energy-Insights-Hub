@@ -14,12 +14,14 @@ import filtersRouter from "./routes/filters.js";
 import feedbackRoutes from "./routes/feedback.js";
 import industriesRouter from "./routes/industries.js";
 import modelsRouter from "./routes/models.js";
+import searchProvidersRouter from "./routes/searchProviders.js";
 import aiRouter from "./routes/ai.js";
 import { startScheduler } from "./services/tracker.js";
 import { seedSources } from "./seeds/002_seed_sources.js";
 import { seedIndustryCategories } from "./seeds/seedIndustryCategories.js";
 import { seedDefaults } from "./seeds/seedDefaults.js";
 import { seedReportTemplates } from "./services/reportTemplateService.js";
+import { seedSearchProviders } from "./services/searchProviderService.js";
 import { startJobRunner } from "./services/reportGenerator.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +35,7 @@ seedSources();
 seedIndustryCategories();
 seedDefaults();
 seedReportTemplates();
+seedSearchProviders();
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
@@ -46,6 +49,7 @@ app.use("/api/filters", filtersRouter);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/industries", industriesRouter);
 app.use("/api/models", modelsRouter);
+app.use("/api/search-providers", searchProvidersRouter);
 app.use("/api/ai", aiRouter);
 
 app.get("/api/health", (_req, res) => {

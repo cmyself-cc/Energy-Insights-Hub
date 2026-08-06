@@ -31,6 +31,9 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
   const [configMessage, setConfigMessage] = useState(null);
   const [modelMessage, setModelMessage] = useState(null);
   const [modelForm, setModelForm] = useState({ name: "", baseUrl: "", modelId: "", apiKey: "" });
+  const [searchProviders, setSearchProviders] = useState([]);
+  const [searchMessage, setSearchMessage] = useState(null);
+  const [searchForm, setSearchForm] = useState({ name: "", providerType: "bocha", apiKey: "", baseUrl: "" });
   const fileInputRef = useRef(null);
 
   const loadModels = async () => {
@@ -40,8 +43,16 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
     } catch { /* ignore */ }
   };
 
+  const loadSearchProviders = async () => {
+    try {
+      const res = await backendApi.getSearchProviders();
+      setSearchProviders(res.data || []);
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     loadModels();
+    loadSearchProviders();
   }, []);
 
   useEffect(() => {
@@ -196,6 +207,53 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
       window.dispatchEvent(new Event("model-updated"));
     } catch (e) {
       setModelMessage({ type: "error", text: e.message });
+    }
+  };
+
+  // --- 搜索 API 配置 ---
+  const handleAddSearchProvider = async () => {
+    const f = searchForm;
+    if (!f.name.trim() || !f.apiKey.trim()) {
+      setSearchMessage({ type: "error", text: language === "zh" ? "名称和 API Key 必填" : "Name and API Key are required" });
+      return;
+    }
+    try {
+      const res = await backendApi.createSearchProvider({
+        name: f.name.trim(),
+        providerType: f.providerType,
+        apiKey: f.apiKey.trim(),
+        baseUrl: f.baseUrl.trim() || undefined
+      });
+      if (searchProviders.length === 0) {
+        await backendApi.activateSearchProvider(res.data.id);
+      }
+      setSearchForm({ name: "", providerType: "bocha", apiKey: "", baseUrl: "" });
+      await loadSearchProviders();
+      setSearchMessage({ type: "success", text: language === "zh" ? "搜索 API 已添加" : "Search API added" });
+    } catch (e) {
+      setSearchMessage({ type: "error", text: e.message });
+    }
+    setTimeout(() => setSearchMessage(null), 3000);
+  };
+
+  const handleActivateSearchProvider = async (id) => {
+    try {
+      await backendApi.activateSearchProvider(id);
+      await loadSearchProviders();
+      setSearchMessage({ type: "success", text: language === "zh" ? "已切换生效搜索 API" : "Active search API switched" });
+    } catch (e) {
+      setSearchMessage({ type: "error", text: e.message });
+    }
+    setTimeout(() => setSearchMessage(null), 3000);
+  };
+
+  const handleDeleteSearchProvider = async (id) => {
+    if (!confirm(language === "zh" ? "确定删除该搜索 API？" : "Delete this search API?")) return;
+    try {
+      await backendApi.deleteSearchProvider(id);
+      await loadSearchProviders();
+    } catch (e) {
+      setSearchMessage({ type: "error", text: e.message });
     }
   };
 
@@ -364,6 +422,7 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
       {tab === "feedback" && <FeedbackPage darkMode={darkMode} language={language} />}
       {tab === "tracker" && <TrackerSettingsPage darkMode={darkMode} language={language} />}
       {tab === "models" && (
+        <>
         <div style={{ background: cardBg, borderRadius: BORDER_RADIUS.lg, border: `1px solid ${border}`, padding: "24px" }}>
           <h3 style={{ fontSize: FONT_SIZES.xl, fontWeight: 700, color: text, margin: "0 0 6px" }}>
             {language === "zh" ? "全局模型配置" : "Global Model Config"}
@@ -475,6 +534,124 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
             }}>{language === "zh" ? "添加并设为生效" : "Add & Activate"}</button>
           </div>
         </div>
+
+        {/* 搜索 API 配置 */}
+        <div style={{ background: cardBg, borderRadius: BORDER_RADIUS.lg, border: `1px solid ${border}`, padding: "24px", marginTop: 20 }}>
+          <h3 style={{ fontSize: FONT_SIZES.xl, fontWeight: 700, color: text, margin: "0 0 6px" }}>
+            {language === "zh" ? "搜索 API 配置" : "Search API Config"}
+          </h3>
+          <p style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : "#999", marginBottom: 20 }}>
+            {language === "zh"
+              ? "报告生成的联网搜索使用列表中的生效搜索 API（当前支持 博查 Bocha / Tavily）。API Key 仅存服务器，不会暴露到浏览器。"
+              : "Report generation websearch uses the active provider below (Bocha / Tavily supported). API keys are stored server-side only."}
+          </p>
+
+          {searchMessage && (
+            <div style={{ padding: "10px 16px", borderRadius: 8, marginBottom: 16, background: searchMessage.type === "success" ? "#e8f5ee" : "#fff0f0", border: searchMessage.type === "success" ? "1px solid #1a6b3c" : "1px solid #fcc", color: searchMessage.type === "success" ? "#1a6b3c" : "#c00", fontSize: FONT_SIZES.sm, fontWeight: 500 }}>
+              {searchMessage.type === "success" ? "✓" : "✗"} {searchMessage.text}
+            </div>
+          )}
+
+          {/* 搜索 API 列表 */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: darkMode ? "#ccc" : COLORS.text.secondary, marginBottom: 8 }}>
+              {language === "zh" ? "已配置搜索 API" : "Configured Search APIs"} ({searchProviders.length})
+            </div>
+            {searchProviders.length === 0 ? (
+              <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#777" : "#999" }}>
+                {language === "zh" ? "暂无搜索 API，请在下方添加。" : "No search APIs yet. Add one below."}
+              </div>
+            ) : (
+              searchProviders.map(p => (
+                <div key={p.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "10px 14px", borderRadius: 8, marginBottom: 6,
+                  background: p.is_active ? COLORS.primaryLight : (darkMode ? "#1c1f2b" : "#f5f5f5"),
+                  border: `1px solid ${p.is_active ? COLORS.primary : (darkMode ? COLORS.border.dark : "#e8e8e8")}`
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: darkMode ? "#e8e8e8" : "#333" }}>{p.name}</span>
+                      {p.is_active && (
+                        <span style={{ fontSize: 10, color: "#fff", background: COLORS.primary, padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>
+                          {language === "zh" ? "生效中" : "Active"}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: darkMode ? "#888" : "#999" }}>
+                      {p.provider_type === "bocha" ? "博查 Bocha" : "Tavily"} · Key: {p.api_key_masked}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                    {!p.is_active && (
+                      <button onClick={() => handleActivateSearchProvider(p.id)} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${COLORS.primary}`, background: COLORS.primary, color: "#fff", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        {language === "zh" ? "设为生效" : "Activate"}
+                      </button>
+                    )}
+                    <button onClick={() => handleDeleteSearchProvider(p.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #c00", background: "transparent", color: "#c00", fontSize: 12, cursor: "pointer" }}>
+                      {language === "zh" ? "删除" : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 添加搜索 API 表单 */}
+          <div style={{ borderTop: `1px dashed ${border}`, paddingTop: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: darkMode ? "#ccc" : COLORS.text.secondary, marginBottom: 12 }}>
+              {language === "zh" ? "添加搜索 API" : "Add Search API"}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "#aaa" : "#666", marginBottom: 4 }}>{language === "zh" ? "名称 *" : "Name *"}</label>
+                <input
+                  value={searchForm.name}
+                  onChange={e => setSearchForm({ ...searchForm, name: e.target.value })}
+                  placeholder={language === "zh" ? "如：博查搜索" : "e.g. Bocha Search"}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "#aaa" : "#666", marginBottom: 4 }}>{language === "zh" ? "类型 *" : "Type *"}</label>
+                <select
+                  value={searchForm.providerType}
+                  onChange={e => setSearchForm({ ...searchForm, providerType: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                >
+                  <option value="bocha">博查 Bocha</option>
+                  <option value="tavily">Tavily</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "#aaa" : "#666", marginBottom: 4 }}>
+                  API Key * {language === "zh" ? "（仅存服务器）" : "(server only)"}
+                </label>
+                <input
+                  type="password"
+                  value={searchForm.apiKey}
+                  onChange={e => setSearchForm({ ...searchForm, apiKey: e.target.value })}
+                  placeholder="sk-... / api-key-..."
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "#aaa" : "#666", marginBottom: 4 }}>{language === "zh" ? "Base URL（可选）" : "Base URL (optional)"}</label>
+                <input
+                  value={searchForm.baseUrl}
+                  onChange={e => setSearchForm({ ...searchForm, baseUrl: e.target.value })}
+                  placeholder={searchForm.providerType === "bocha" ? "https://api.bochaai.com/v1/web-search" : "https://api.tavily.com/search"}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${border}`, background: darkMode ? "#1c1f2b" : "#fff", color: text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+            </div>
+            <button onClick={handleAddSearchProvider} style={{
+              padding: "10px 20px", borderRadius: BORDER_RADIUS.md, border: "none",
+              background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.md, fontWeight: 600, cursor: "pointer"
+            }}>{language === "zh" ? "添加搜索 API" : "Add Search API"}</button>
+          </div>
+        </div>
+        </>
       )}
     </div>
   );
