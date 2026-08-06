@@ -1,59 +1,149 @@
-import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType } from "docx";
 import { marked } from "marked";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
+import { MARKDOWN_CSS } from "../constants/markdownStyle.js";
+
+const GREEN = "1A6B3C";          // 网页主色
+const HEADER_BG = "E9F3EE";      // 表头浅绿底（≈ rgba(26,107,60,0.08)）
+const BORDER_COLOR = "DDDDDD";   // 表格边框
 
 export function sanitizeFilename(name) {
   return String(name || "report").replace(/[\\/:*?"<>|\s]+/g, "-").slice(0, 80) || "report";
-}
-
-// 将 Markdown 文本解析为 docx 段落结构（支持标题/列表/引用/粗体/链接）
-export function markdownToDocxSections(md) {
-  const sections = [];
-  for (const raw of String(md || "").split("\n")) {
-    const line = raw.replace(/\r$/, "");
-    const t = line.trim();
-    if (!t) { sections.push({ type: "empty" }); continue; }
-    if (/^#{1,3}\s/.test(t)) {
-      const level = t.match(/^#+/)[0].length;
-      sections.push({ type: "heading", level, text: inlineToRuns(t.replace(/^#+\s*/, "")) });
-    } else if (/^[-*•]\s+/.test(t)) {
-      sections.push({ type: "bullet", text: inlineToRuns(t.replace(/^[-*•]\s*/, "")) });
-    } else if (/^\d+[.、)]\s+/.test(t)) {
-      // 编号列表：保留编号，作为普通段落
-      sections.push({ type: "numbered", text: inlineToRuns(t) });
-    } else if (/^>\s?/.test(t)) {
-      sections.push({ type: "quote", text: inlineToRuns(t.replace(/^>\s?/, "")) });
-    } else if (/^\|.*\|/.test(t)) {
-      // Markdown 表格行（以 | 开头且含 |）：单元格用制表符分隔
-      sections.push({ type: "tableRow", cells: t.split("|").map(c => c.trim()).filter(c => c && !/^[-:]+$/.test(c)).map(stripInline) });
-    } else {
-      sections.push({ type: "para", text: inlineToRuns(t) });
-    }
-  }
-  return sections;
 }
 
 function stripInline(text) {
   return text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1（$2）");
 }
 
-function inlineToRuns(text) {
+function inlineToRuns(text, opts = {}) {
   const runs = [];
   const re = /\*\*(.+?)\*\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
   let last = 0;
   let m;
+  const push = (t, extra = {}) => {
+    if (!t) return;
+    runs.push(new TextRun({ text: t, ...(opts.color ? { color: opts.color } : {}), ...extra }));
+  };
   while ((m = re.exec(text))) {
-    if (m.index > last) runs.push(new TextRun({ text: text.slice(last, m.index) }));
-    if (m[1] !== undefined) {
-      runs.push(new TextRun({ text: m[1], bold: true }));
-    } else if (m[2] !== undefined && m[3] !== undefined) {
-      runs.push(new TextRun({ text: `${m[2]}（${m[3]}）`, underline: {} }));
-    }
+    if (m.index > last) push(text.slice(last, m.index));
+    if (m[1] !== undefined) push(m[1], { bold: true });
+    else if (m[2] !== undefined && m[3] !== undefined) push(`${m[2]}（${m[3]}）`, { underline: {} });
     last = m.index + m[0].length;
   }
-  if (last < text.length) runs.push(new TextRun({ text: text.slice(last) }));
-  return runs.length ? runs : [new TextRun({ text })];
+  if (last < text.length) push(text.slice(last));
+  if (runs.length === 0) push(text);
+  return runs;
+}
+
+function isSepRow(line) {
+  const t = String(line || "").trim();
+  if (!t.includes("|")) return false;
+  let cells = t.split("|").map(c => c.trim());
+  if (cells[0] === "") cells.shift();
+  if (cells[cells.length - 1] === "") cells.pop();
+  return cells.length >= 2 && cells.every(c => /^[-:]+$/.test(c));
+}
+
+function hasCells(line) {
+  const t = String(line || "").trim();
+  if (!t.includes("|")) return false;
+  let cells = t.split("|").map(c => c.trim());
+  if (cells[0] === "") cells.shift();
+  if (cells[cells.length - 1] === "") cells.pop();
+  return cells.filter(c => c && !/^[-:]+$/.test(c)).length >= 2;
+}
+
+function parseTableBlock(lines) {
+  const rows = [];
+  for (const raw of lines) {
+    let cells = raw.trim().split("|").map(c => c.trim());
+    if (cells[0] === "") cells.shift();
+    if (cells[cells.length - 1] === "") cells.pop();
+    if (cells.every(c => /^[-:]+$/.test(c))) continue; // 分隔行
+    rows.push(cells.map(stripInline));
+  }
+  return rows;
+}
+
+// 将 Markdown 解析为 docx 段落/表格结构（标题/列表/引用/粗体/链接/表格）
+export function markdownToDocxSections(md) {
+  const sections = [];
+  const lines = String(md || "").split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const raw = lines[i].replace(/\r$/, "");
+    const t = raw.trim();
+    if (!t) { sections.push({ type: "empty" }); i++; continue; }
+    if (/^#{1,3}\s/.test(t)) {
+      const level = t.match(/^#+/)[0].length;
+      sections.push({ type: "heading", level, text: inlineToRuns(t.replace(/^#+\s*/, ""), { color: GREEN }) });
+      i++;
+      continue;
+    }
+    // 表格块：含 | 且（下一行是分隔行 或 已连续出现表格行）
+    if (hasCells(raw)) {
+      const block = [raw];
+      let j = i + 1;
+      while (j < lines.length) {
+        const next = lines[j].replace(/\r$/, "");
+        if (hasCells(next) || isSepRow(next)) { block.push(next); j++; }
+        else break;
+      }
+      const rows = parseTableBlock(block);
+      const sawSep = isSepRow(lines[i + 1] || "");
+      if (rows.length >= 2 || (rows.length === 1 && sawSep)) {
+        sections.push({ type: "table", rows });
+        i = j;
+        continue;
+      }
+      // 不构成表格 → 按普通段落处理
+      sections.push({ type: "para", text: inlineToRuns(t) });
+      i++;
+      continue;
+    }
+    if (/^[-*•]\s+/.test(t)) {
+      sections.push({ type: "bullet", text: inlineToRuns(t.replace(/^[-*•]\s*/, "")) });
+      i++;
+    } else if (/^\d+[.、)]\s+/.test(t)) {
+      sections.push({ type: "numbered", text: inlineToRuns(t) });
+      i++;
+    } else if (/^>\s?/.test(t)) {
+      sections.push({ type: "quote", text: inlineToRuns(t.replace(/^>\s?/, "")) });
+      i++;
+    } else {
+      sections.push({ type: "para", text: inlineToRuns(t) });
+      i++;
+    }
+  }
+  return sections;
+}
+
+const cellBorder = { style: BorderStyle.SINGLE, size: 4, color: BORDER_COLOR };
+
+function mkCell(text, isHeader, colWidth) {
+  return new TableCell({
+    width: { size: colWidth, type: WidthType.PERCENTAGE },
+    shading: isHeader ? { type: ShadingType.CLEAR, fill: HEADER_BG } : undefined,
+    borders: { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder },
+    margins: { top: 80, bottom: 80, left: 120, right: 120 },
+    children: [new Paragraph({
+      children: [new TextRun({ text, bold: isHeader, color: isHeader ? GREEN : undefined })],
+      spacing: { after: 0 }
+    })]
+  });
+}
+
+function buildTable(rows) {
+  const cols = Math.max(...rows.map(r => r.length), 1);
+  const colWidth = 100 / cols;
+  const headerRow = rows[0] || [];
+  const bodyRows = rows.slice(1);
+  const tableRows = [
+    new TableRow({ tableHeader: true, children: headerRow.map(c => mkCell(c, true, colWidth)) }),
+    ...bodyRows.map(r => new TableRow({ children: r.map(c => mkCell(c, false, colWidth)) }))
+  ];
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows });
 }
 
 export async function buildDocx(markdown) {
@@ -71,8 +161,9 @@ export async function buildDocx(markdown) {
       children.push(new Paragraph({ children: s.text, spacing: { after: 60 } }));
     } else if (s.type === "quote") {
       children.push(new Paragraph({ children: s.text, indent: { left: 480 }, spacing: { after: 120 } }));
-    } else if (s.type === "tableRow" && s.cells.length > 0) {
-      children.push(new Paragraph({ children: [new TextRun({ text: s.cells.join("\t"), size: 21 })] , spacing: { after: 60 } }));
+    } else if (s.type === "table") {
+      children.push(buildTable(s.rows));
+      children.push(new Paragraph({ text: "", spacing: { after: 60 } }));
     } else if (s.type === "para") {
       children.push(new Paragraph({ children: s.text, spacing: { after: 120 } }));
     } else {
@@ -106,30 +197,18 @@ export async function exportDocx(title, content) {
   downloadBlob(blob, `${sanitizeFilename(title)}.docx`);
 }
 
-const PDF_PAGE_CSS = `
-  html, body { margin: 0; padding: 0; }
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; line-height: 1.8; color: #222; }
-  .pdf-page { width: 794px; box-sizing: border-box; padding: 96px 120px; background: #fff; }
-  .pdf-page h1 { font-size: 22px; margin: 18px 0 10px; }
-  .pdf-page h2 { font-size: 18px; margin: 16px 0 8px; }
-  .pdf-page h3 { font-size: 15px; margin: 12px 0 6px; }
-  .pdf-page p { margin: 8px 0; text-indent: 2em; }
-  .pdf-page ul, .pdf-page ol { padding-left: 2em; }
-  .pdf-page li { margin: 4px 0; }
-  .pdf-page a { color: #1a6b3c; }
-  .pdf-page table { border-collapse: collapse; width: 100%; margin: 10px 0; }
-  .pdf-page th, .pdf-page td { border: 1px solid #ccc; padding: 5px 10px; font-size: 13px; text-align: left; }
-  .pdf-page blockquote { border-left: 3px solid #1a6b3c; margin: 10px 0; padding: 4px 0 4px 14px; color: #555; }
-  .pdf-page code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
-  .pdf-page pre { background: #f5f5f5; padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
-`;
-
-// 直接生成 PDF 文件下载（jsPDF + html2canvas 渲染，中文排版无损，不弹打印窗口）
+// 直接生成 PDF 文件下载（jsPDF + html2canvas，使用与网页版完全一致的 Markdown 样式，所见即所得）
 export async function exportPdf(title, content) {
   const html = marked.parse(content || "");
   const container = document.createElement("div");
   container.style.cssText = "position:fixed;left:-12000px;top:0;width:794px;background:#fff;";
-  container.innerHTML = `<style>${PDF_PAGE_CSS}</style><div class="pdf-page">${html}</div>`;
+  container.innerHTML = `<style>
+    html, body { margin: 0; padding: 0; }
+    body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; color: #222; }
+    .pdf-page { width: 794px; box-sizing: border-box; padding: 96px 120px; background: #fff; }
+    ${MARKDOWN_CSS}
+    .pdf-page .markdown-body { padding: 0; }
+  </style><div class="pdf-page"><div class="markdown-body">${html}</div></div>`;
   document.body.appendChild(container);
   try {
     const canvas = await html2canvas(container, {
