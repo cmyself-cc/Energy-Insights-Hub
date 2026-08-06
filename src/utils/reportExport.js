@@ -234,7 +234,7 @@ function createPdfPage() {
 export async function exportPdf(title, content) {
   const html = marked.parse(content || "");
   const measure = document.createElement("div");
-  measure.style.cssText = `position:fixed;left:-12000px;top:0;width:${A4_W}px;background:#fff;`;
+  measure.style.cssText = `position:absolute;left:-9999px;top:0;width:${A4_W}px;background:#fff;`;
   measure.innerHTML = `<style>${PDF_PAGE_CSS}</style>`;
   document.body.appendChild(measure);
   try {
@@ -249,18 +249,23 @@ export async function exportPdf(title, content) {
     const pages = [];
     let page = null;
     let used = 0;
+    const newPage = () => {
+      const p = createPdfPage();
+      measure.appendChild(p); // 必须挂进 DOM，html2canvas 才能克隆到
+      pages.push(p);
+      return p;
+    };
     for (const block of blocks) {
       const h = block.getBoundingClientRect().height;
-      if (!page) { page = createPdfPage(); pages.push(page); used = 0; }
+      if (!page) { page = newPage(); used = 0; }
       if (used > 0 && used + h > contentHeight) {
-        page = createPdfPage();
-        pages.push(page);
+        page = newPage();
         used = 0;
       }
       page.querySelector(".markdown-body").appendChild(block.cloneNode(true));
       used += h;
     }
-    if (!page) { page = createPdfPage(); pages.push(page); }
+    if (!page) newPage();
     measure.removeChild(fullPage);
 
     // 3) 逐页渲染进 PDF
@@ -271,7 +276,6 @@ export async function exportPdf(title, content) {
       const canvas = await html2canvas(pages[idx], {
         scale: 2,
         backgroundColor: "#ffffff",
-        windowWidth: A4_W,
         logging: false
       });
       if (idx > 0) pdf.addPage();

@@ -193,7 +193,15 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
                 ].map(item => (
                   <button
                     key={item.key}
-                    onClick={() => { setExportOpen(false); try { item.fn(); } catch (e) { console.error("Export failed:", e); } }}
+                    onClick={() => {
+                      setExportOpen(false);
+                      Promise.resolve()
+                        .then(item.fn)
+                        .catch(e => {
+                          console.error("Export failed:", e);
+                          alert(language === "zh" ? `导出失败：${e.message || e}` : `Export failed: ${e.message || e}`);
+                        });
+                    }}
                     style={{
                       display: "block", width: "100%", textAlign: "left", padding: "10px 16px", border: "none",
                       background: "transparent", color: darkMode ? "#e8e8e8" : COLORS.text.primary,
