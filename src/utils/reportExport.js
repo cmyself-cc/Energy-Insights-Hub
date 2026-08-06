@@ -170,8 +170,16 @@ export async function buildDocx(markdown) {
       children.push(new Paragraph({ text: "" }));
     }
   }
+  const yahei = { ascii: "微软雅黑", eastAsia: "微软雅黑", hAnsi: "微软雅黑" };
   const doc = new Document({
-    styles: { default: { document: { run: { font: "宋体", size: 24 } } } },
+    styles: {
+      default: { document: { run: { font: yahei, size: 24 } } },
+      paragraphStyles: [
+        { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: yahei, size: 32, bold: true, color: GREEN } },
+        { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: yahei, size: 28, bold: true, color: GREEN } },
+        { id: "Heading3", name: "Heading 3", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: yahei, size: 26, bold: true, color: GREEN } }
+      ]
+    },
     sections: [{ children }]
   });
   return Packer.toBlob(doc);
@@ -197,44 +205,80 @@ export async function exportDocx(title, content) {
   downloadBlob(blob, `${sanitizeFilename(title)}.docx`);
 }
 
-// 直接生成 PDF 文件下载（jsPDF + html2canvas，使用与网页版完全一致的 Markdown 样式，所见即所得）
+// A4 @96dpi：794 × 1123px；Word 标准页边距 上/下 96px、左/右 120px
+const A4_W = 794;
+const A4_H = 1123;
+const PAGE_PADDING_TOP = 96;
+const PAGE_PADDING_BOTTOM = 96;
+const PAGE_CONTENT_H = A4_H - PAGE_PADDING_TOP - PAGE_PADDING_BOTTOM; // 931，留 26px 安全余量
+
+const PDF_PAGE_CSS = `
+  html, body { margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; color: #222; }
+  .pdf-page { width: ${A4_W}px; height: ${A4_H}px; box-sizing: border-box; padding: ${PAGE_PADDING_TOP}px 120px ${PAGE_PADDING_BOTTOM}px; background: #fff; overflow: hidden; }
+  ${MARKDOWN_CSS}
+  .pdf-page .markdown-body { padding: 0; }
+  .pdf-page table { break-inside: avoid; }
+`;
+
+function createPdfPage() {
+  const d = document.createElement("div");
+  d.className = "pdf-page";
+  const inner = document.createElement("div");
+  inner.className = "markdown-body";
+  d.appendChild(inner);
+  return d;
+}
+
+// 直接生成 PDF 文件下载：先按 A4 内容高度逐块分页（不切割行/表格），再逐页渲染
 export async function exportPdf(title, content) {
   const html = marked.parse(content || "");
-  const container = document.createElement("div");
-  container.style.cssText = "position:fixed;left:-12000px;top:0;width:794px;background:#fff;";
-  container.innerHTML = `<style>
-    html, body { margin: 0; padding: 0; }
-    body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; color: #222; }
-    .pdf-page { width: 794px; box-sizing: border-box; padding: 96px 120px; background: #fff; }
-    ${MARKDOWN_CSS}
-    .pdf-page .markdown-body { padding: 0; }
-  </style><div class="pdf-page"><div class="markdown-body">${html}</div></div>`;
-  document.body.appendChild(container);
+  const measure = document.createElement("div");
+  measure.style.cssText = `position:fixed;left:-12000px;top:0;width:${A4_W}px;background:#fff;`;
+  measure.innerHTML = `<style>${PDF_PAGE_CSS}</style>`;
+  document.body.appendChild(measure);
   try {
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      windowWidth: container.scrollWidth,
-      logging: false
-    });
-    const imgData = canvas.toDataURL("image/jpeg", 0.92);
+    // 1) 全部内容放入测量页，读取顶层块高度
+    const fullPage = createPdfPage();
+    fullPage.querySelector(".markdown-body").innerHTML = html;
+    measure.appendChild(fullPage);
+    const blocks = Array.from(fullPage.querySelector(".markdown-body").children);
+    const contentHeight = PAGE_CONTENT_H - 26; // 安全余量
+
+    // 2) 按块分页：块放不下当前页则换页（单块超页时允许超出一页）
+    const pages = [];
+    let page = null;
+    let used = 0;
+    for (const block of blocks) {
+      const h = block.getBoundingClientRect().height;
+      if (!page) { page = createPdfPage(); pages.push(page); used = 0; }
+      if (used > 0 && used + h > contentHeight) {
+        page = createPdfPage();
+        pages.push(page);
+        used = 0;
+      }
+      page.querySelector(".markdown-body").appendChild(block.cloneNode(true));
+      used += h;
+    }
+    if (!page) { page = createPdfPage(); pages.push(page); }
+    measure.removeChild(fullPage);
+
+    // 3) 逐页渲染进 PDF
     const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
-    const imgH = (canvas.height * pageW) / canvas.width;
-    let heightLeft = imgH;
-    let position = 0;
-    pdf.addImage(imgData, "JPEG", 0, position, pageW, imgH);
-    heightLeft -= pageH;
-    while (heightLeft > 0) {
-      position -= pageH;
-      pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, position, pageW, imgH);
-      heightLeft -= pageH;
+    for (let idx = 0; idx < pages.length; idx++) {
+      const canvas = await html2canvas(pages[idx], {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        windowWidth: A4_W,
+        logging: false
+      });
+      if (idx > 0) pdf.addPage();
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageW, pageH);
     }
     pdf.save(`${sanitizeFilename(title)}.pdf`);
   } finally {
-    document.body.removeChild(container);
+    document.body.removeChild(measure);
   }
 }
