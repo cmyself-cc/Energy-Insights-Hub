@@ -3,6 +3,7 @@ import { marked } from "marked";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
+import { exportDocx, exportMarkdown, exportPdf } from "../utils/reportExport";
 
 // Markdown 渲染样式（marked 输出，无需外部依赖）
 const MARKDOWN_CSS = `
@@ -37,7 +38,7 @@ function statusBadge(status, language) {
   return { text: "", color: "", bg: "" };
 }
 
-export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled, onViewReport }) {
+export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled }) {
   const t = i18n[language];
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
@@ -50,6 +51,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editError, setEditError] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const loadReports = async () => {
     try {
@@ -165,7 +167,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
               )}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, position: "relative" }}>
             {!editing && (
               <button
                 onClick={() => startEdit(selectedReport)}
@@ -183,7 +185,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
               </button>
             )}
             <button
-              onClick={() => onViewReport?.(selectedReport)}
+              onClick={() => setExportOpen(prev => !prev)}
               style={{
                 padding: "8px 16px",
                 borderRadius: BORDER_RADIUS.md,
@@ -195,10 +197,40 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
                 cursor: "pointer"
               }}
             >
-              {language === "zh" ? "编辑/重新生成" : "Regenerate"}
+              {language === "zh" ? "导出" : "Export"} ▾
             </button>
+            {exportOpen && (
+              <div style={{
+                position: "absolute", top: "100%", right: 0, marginTop: 4, zIndex: 20,
+                background: darkMode ? "#1a1f2e" : "#fff",
+                border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+                borderRadius: BORDER_RADIUS.md,
+                boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+                minWidth: 160, overflow: "hidden"
+              }}>
+                {[
+                  { key: "docx", label: language === "zh" ? "导出为 Word (.docx)" : "Export as Word (.docx)", fn: () => exportDocx(selectedReport.title, selectedReport.content || "") },
+                  { key: "pdf", label: language === "zh" ? "导出为 PDF" : "Export as PDF", fn: () => exportPdf(selectedReport.title, selectedReport.content || "") },
+                  { key: "md", label: language === "zh" ? "导出为 Markdown (.md)" : "Export as Markdown (.md)", fn: () => exportMarkdown(selectedReport.title, selectedReport.content || "") }
+                ].map(item => (
+                  <button
+                    key={item.key}
+                    onClick={() => { setExportOpen(false); try { item.fn(); } catch (e) { console.error("Export failed:", e); } }}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left", padding: "10px 16px", border: "none",
+                      background: "transparent", color: darkMode ? "#e8e8e8" : COLORS.text.primary,
+                      fontSize: FONT_SIZES.sm, cursor: "pointer"
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = darkMode ? "#2a3040" : "#f0f0f0"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <button
-              onClick={() => { setSelectedReport(null); setEditing(false); }}
+              onClick={() => { setSelectedReport(null); setEditing(false); setExportOpen(false); }}
               style={{
                 padding: "8px 16px",
                 borderRadius: BORDER_RADIUS.md,
