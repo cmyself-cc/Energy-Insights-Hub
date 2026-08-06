@@ -78,7 +78,7 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
     setBusy(true); setError(null);
     try {
       const resolutions = (screening?.quality || []).map((q, i) => ({ issue: q.issue, cardIds: q.cardIds, choice: choices[i] }));
-      await backendApi.generateReport(templateId, cardIds(), resolutions);
+      await backendApi.generateReport(templateId, cardIds(), resolutions, purpose, audience);
       onStarted?.();
       onClose();
     } catch (e) { setError(e.message); setBusy(false); }

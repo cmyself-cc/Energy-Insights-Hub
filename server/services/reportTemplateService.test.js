@@ -16,6 +16,24 @@ describe("reportTemplateService", () => {
     expect(listTemplates().length).toBe(first);
   });
 
+  it("adds missing default templates to an existing table without duplicating", () => {
+    db.prepare("INSERT INTO report_templates (name, prompt, is_public) VALUES ('每日能源要闻日报', '旧提示词', 1)").run();
+    seedReportTemplates();
+    const rows = listTemplates();
+    expect(rows.length).toBe(DEFAULT_TEMPLATES.length);
+    const daily = rows.find(t => t.name === "每日能源要闻日报");
+    expect(daily.prompt).not.toBe("旧提示词");
+    expect(rows.filter(t => t.name === "每日能源要闻日报")).toHaveLength(1);
+  });
+
+  it("default templates include the generic industry-interpretation template with purpose/audience placeholders", () => {
+    seedReportTemplates();
+    const generic = listTemplates().find(t => t.name.includes("专题解读"));
+    expect(generic).toBeTruthy();
+    expect(generic.prompt).toContain("{{purpose}}");
+    expect(generic.prompt).toContain("{{audience}}");
+  });
+
   it("creates, updates and deletes a custom template", () => {
     const created = createTemplate({ name: "测试模板", prompt: "编写报告", max_cards: 5, is_public: 0 });
     expect(created.id).toBeGreaterThan(0);
