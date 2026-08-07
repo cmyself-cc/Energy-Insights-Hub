@@ -1,5 +1,6 @@
 import db from "../db.js";
 import { fetchWithTimeout } from "../crawlers/utils.js";
+import { getPrompt, fillPrompt } from "./promptStore.js";
 
 function safeJson(value) {
   if (!value) return [];
@@ -49,26 +50,9 @@ export async function generateSuggestions() {
     categories: safeJson(r.categories)
   }));
 
-  const prompt = `你是一名能源情报平台的规则优化助手。请分析用户的收藏和隐藏反馈，提炼出可以用于过滤未来文章的关键词规则。
-
-反馈数据：
-${JSON.stringify(samples, null, 2)}
-
-要求：
-1. 只建议高频、明确、可执行的规则；
-2. 每个建议必须附带理由和证据（引用具体标题或关键词）；
-3. 不要过度泛化：不要因一篇具体负面反馈就排除整个企业或主题；
-4. 区分三种规则类型：enterprise（企业）、include_keyword（包含关键词）、exclude_keyword（排除关键词）；
-5. 如果反馈中多次出现某个企业/关键词被收藏，建议加入 include_keyword 或 enterprise；
-6. 如果反馈中多次出现某个企业/关键词因"不相关"或"质量差"被隐藏，建议加入 exclude_keyword；
-7. 为每个建议指定最相关的 purpose：competitor、policy、tech，如果不确定则留空字符串。
-
-返回 ONLY a valid JSON array, no markdown, no explanation. 每个对象字段：
-- type: "enterprise" | "include_keyword" | "exclude_keyword"
-- name: string
-- purpose: "competitor" | "policy" | "tech" | ""
-- reason: string
-- evidence: string[]`;
+  const prompt = fillPrompt(getPrompt("feedback_suggestions"), {
+    samples_json: JSON.stringify(samples, null, 2)
+  });
 
   const { url, headers, body } = buildRequest(config, [{ role: "user", content: prompt }]);
   const response = await fetchWithTimeout(url, { method: "POST", headers, body: JSON.stringify(body) }, 60000);

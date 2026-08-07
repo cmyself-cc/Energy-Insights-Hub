@@ -22,6 +22,7 @@ import { seedIndustryCategories } from "./seeds/seedIndustryCategories.js";
 import { seedDefaults } from "./seeds/seedDefaults.js";
 import { seedReportTemplates } from "./services/reportTemplateService.js";
 import { seedSearchProviders } from "./services/searchProviderService.js";
+import { seedLlmPrompts } from "./services/promptStore.js";
 import { startJobRunner } from "./services/reportGenerator.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,6 +37,7 @@ seedIndustryCategories();
 seedDefaults();
 seedReportTemplates();
 seedSearchProviders();
+seedLlmPrompts();
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));

@@ -1,5 +1,6 @@
 import { fetchWithTimeout, stripBoilerplate, truncateAtSentence } from "../crawlers/utils.js";
 import db from "../db.js";
+import { getPrompt, fillPrompt } from "./promptStore.js";
 
 const SUMMARY_MAX_LEN = 200;
 
@@ -94,6 +95,12 @@ function buildRequest(config, messages, maxTokens = 2000, temperature = 0.7) {
     max_tokens: maxTokens,
     temperature
   };
+  if (!isAnthropic) {
+    // Reasoning models (e.g. DeepSeek v4 flash) can burn the whole token
+    // budget on reasoning_content and return an empty answer; this task only
+    // needs a direct JSON reply, so disable thinking explicitly.
+    body.thinking = { type: "disabled" };
+  }
   return { url, headers, body };
 }
 
@@ -130,43 +137,22 @@ export async function processInsight(item, _language = "en", _filterContext = nu
   const categoryNames = (_filterContext?.categories || [])
     .map(c => c.name)
     .filter(Boolean);
-  const categoryList = categoryNames.length > 0 ? categoryNames.join("、") : "电力&氢能、储能、光伏、油气、CCS、化工、LNG/天然气、移动出行、润滑油、生物燃料、战略合作、收并购、项目";
+  const categoryList = categoryNames.length > 0 ? categoryNames.join("、") : "电力&氢能、储能、光伏、油气、CCS、化工、LNG/天然气、移动出行、润滑油、生物燃料";
 
   // Inject purpose-specific semantic prompt if available
   let semanticBlock = "";
   const semanticPrompt = _filterContext?.semanticPrompt || "";
   if (semanticPrompt) {
-    semanticBlock = `\n附加语义要求: ${semanticPrompt}\n`;
+    semanticBlock = `附加语义要求: ${semanticPrompt}`;
   }
 
-  const prompt = `你是一名能源行业分析师。请阅读以下文章并提取结构化洞察。
-
-Title: ${item.title}
-Content: ${(item.rawContent || "").slice(0, 3000) || (item.summary || "").slice(0, 3000) || ""}
-URL: ${item.url}
-${semanticBlock}
-CRITICAL RULES:
-0. SINGLE FOCUS: 如果原文包含多条独立新闻或事件，只提取最主要、篇幅最大的那一条。标题、摘要和关键字都只围绕这一条核心信息，忽略其他次要内容。
-1. title: 只概括一条核心事件，用最精简的中文（10-20字）概括核心事件。剔除来源名、日期、作者名、废话词，聚焦发生了什么、主体是谁、关键结果。
-2. summary: 清理所有噪音（作者名、来源署名、日期、填充短语、广告、无关上下文），用中文写一个信息密集的摘要，最多150字，每个字都要携带信息。
-3. keywords: 恰好3个字符串，必须是具体可搜索的关键词：公司名称、技术名称、事件名称或政策名称。不要宽泛概念。示例：宁德时代、钠离子电池、136号文、电价改革、中石化、CCUS。
-4. purposes: 根据内容判断该文章属于哪些监控类型（可多选）。必须严格符合以下定义：
-   - competitor: 涉及能源企业的投资、收购、合作、签约、合资、并购等竞争动态
-   - policy: 涉及政策、规划、通知、批复、标准、方案、意见等的发布或解读
-   - tech: 涉及技术突破、创新、研发、专利、量产、示范应用等技术进展
-   如果文章内容不符合以上任何一类，返回空数组 []，该文章将被丢弃。
-5. categories: 从以下分类中选择最相关的1-3个：${categoryList}。必须至少包含一个业务分类（电力&氢能、储能、光伏、油气、CCS、化工、LNG/天然气、移动出行、润滑油、生物燃料），可再搭配事件分类（战略合作、收并购、项目）。
-6. china_relevance: 判断这篇文章是否与中国强相关（发生在中国、涉及中国企业/机构、中国政策、中国市场或中国技术）。只返回布尔值 true 或 false。
-
-CRITICAL: 只有 china_relevance 为 true 的文章才保留。如果内容与中国无关（如仅涉及越南、美国、欧洲本地市场且与中国无关联），必须返回空数组 []，该文章将被丢弃。
-
-Return ONLY a valid JSON object (no markdown, no explanation) with exactly these fields:
-- title: string
-- summary: string (max 150 Chinese characters)
-- keywords: array of exactly 3 strings
-- purposes: array of strings (competitor, policy, tech, or empty [])
-- categories: array of strings
-- china_relevance: boolean`;
+  const prompt = fillPrompt(getPrompt("insight_extraction"), {
+    title: item.title,
+    content: (item.rawContent || "").slice(0, 3000) || (item.summary || "").slice(0, 3000) || "",
+    url: item.url,
+    semantic_block: semanticBlock,
+    category_list: categoryList
+  });
 
   const messages = [{ role: "user", content: prompt }];
   const { url, headers, body } = buildRequest(config, messages, 800, 0.5);

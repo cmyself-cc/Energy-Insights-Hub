@@ -1,6 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { fetchWithTimeout } from "../crawlers/utils.js";
+import { getPrompt } from "../services/promptStore.js";
 
 const router = Router();
 
@@ -22,9 +23,7 @@ router.post("/interpret", async (req, res) => {
     if (!model) return res.status(400).json({ error: "No model configured" });
 
     const isZh = language === "zh";
-    const systemPrompt = isZh
-      ? "你是一位能源行业分析师。请基于提供的文章信息给出专业、简洁的解读。"
-      : "You are an energy industry analyst. Provide a professional, concise interpretation based on the article information provided.";
+    const systemPrompt = getPrompt(isZh ? "ai_interpret_zh" : "ai_interpret_en");
 
     const articleContext = `Title: ${item.title}
 Summary: ${item.summary || ""}

@@ -10,7 +10,7 @@ function setJob(id, patch) {
     .run(...Object.values(patch), id);
 }
 
-export function createReportJob({ templateId, insightIds, resolutions = [], purpose = "", audience = "" }) {
+export function createReportJob({ templateId, insightIds, resolutions = [], purpose = "", audience = "", theme = "" }) {
   const template = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(templateId);
   if (!template) throw new Error("Template not found");
   const ids = (insightIds || []).map(Number).filter(Boolean);
@@ -18,7 +18,7 @@ export function createReportJob({ templateId, insightIds, resolutions = [], purp
   const reportResult = db.prepare(
     "INSERT INTO reports (title, content, items, language, template_id, status) VALUES (?, ?, ?, ?, ?, 'generating')"
   ).run("报告生成中…", "", JSON.stringify(ids), template.language || "zh", templateId);
-  const screening = JSON.stringify({ resolutions: resolutions || [], purpose: purpose || "", audience: audience || "" });
+  const screening = JSON.stringify({ resolutions: resolutions || [], purpose: purpose || "", audience: audience || "", theme: theme || "" });
   const jobResult = db.prepare(
     "INSERT INTO report_jobs (report_id, template_id, status, phase, progress, insight_ids, screening) VALUES (?, ?, 'queued', 'queued', 0, ?, ?)"
   ).run(reportResult.lastInsertRowid, templateId, JSON.stringify(ids), screening);
@@ -90,12 +90,13 @@ export async function runJob(job) {
     }));
     const date = new Date().toISOString().slice(0, 10);
     const language = template?.language || "zh";
-    // screening 兼容新格式 {resolutions,purpose,audience} 与旧数组格式
+    // screening 兼容新格式 {resolutions,purpose,audience,theme} 与旧数组格式
     let parsedScreening;
     try { parsedScreening = JSON.parse(job.screening || "{}"); } catch { parsedScreening = {}; }
     const screeningArr = Array.isArray(parsedScreening) ? parsedScreening : (parsedScreening?.resolutions || []);
     const purpose = Array.isArray(parsedScreening) ? "" : (parsedScreening?.purpose || "");
     const audience = Array.isArray(parsedScreening) ? "" : (parsedScreening?.audience || "");
+    const theme = Array.isArray(parsedScreening) ? "" : (parsedScreening?.theme || "");
     const resolutionsBlock = Array.isArray(screeningArr) && screeningArr.length > 0
       ? JSON.stringify(screeningArr, null, 2)
       : "无";
@@ -104,6 +105,7 @@ export async function runJob(job) {
       .replaceAll("{{language}}", language)
       .replaceAll("{{purpose}}", purpose || template?.purpose || "未指定")
       .replaceAll("{{audience}}", audience || "未指定")
+      .replaceAll("{{theme}}", theme || "未指定")
       .replaceAll("{{insights}}", JSON.stringify(insightsBlock, null, 2))
       .replaceAll("{{search_results}}", JSON.stringify(searchResults, null, 2))
       .replaceAll("{{resolutions}}", resolutionsBlock);

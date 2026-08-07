@@ -143,13 +143,13 @@ router.post("/generate-prompt", async (req, res) => {
 // 生成任务
 router.post("/generate", (req, res) => {
   try {
-    const { templateId, insightIds, resolutions, purpose, audience } = req.body;
+    const { templateId, insightIds, resolutions, purpose, audience, theme } = req.body;
     if (!templateId || !Array.isArray(insightIds) || insightIds.length === 0) {
       return res.status(400).json({ error: "templateId and insightIds are required" });
     }
     const job = createReportJob({
       templateId: Number(templateId), insightIds,
-      resolutions: resolutions || [], purpose: purpose || "", audience: audience || ""
+      resolutions: resolutions || [], purpose: purpose || "", audience: audience || "", theme: theme || ""
     });
     processQueue().catch(err => console.error("[report] queue processing failed:", err));
     res.status(201).json({ data: job });

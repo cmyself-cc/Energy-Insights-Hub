@@ -21,6 +21,8 @@ describe("reportScreening", () => {
       purpose: "每日要闻日报",
       audienceOptions: ["团队内部晨会", "管理层"],
       audience: "团队内部晨会",
+      themeOptions: ["光伏装机高增长下的消纳压力", "光伏产业链价格博弈", "分布式光伏政策走向"],
+      theme: "光伏装机高增长下的消纳压力",
       searchPlan: [{ cardId: 11, queries: ["光伏 装机 2026"] }],
       exceedsLimit: false
     });
@@ -29,6 +31,8 @@ describe("reportScreening", () => {
     expect(result.quality[0].kind).toBe("contradiction");
     expect(result.purposeOptions).toEqual(["每日要闻日报", "行业周报"]);
     expect(result.audience).toBe("团队内部晨会");
+    expect(result.themeOptions).toHaveLength(3);
+    expect(result.theme).toBe("光伏装机高增长下的消纳压力");
     expect(result.searchPlan[0].queries).toEqual(["光伏 装机 2026"]);
     expect(result.exceedsLimit).toBe(false);
   });
@@ -40,6 +44,8 @@ describe("reportScreening", () => {
     expect(result.purpose).toBe("日报");
     expect(result.audience).toBe("团队内部");
     expect(Array.isArray(result.purposeOptions)).toBe(true);
+    expect(Array.isArray(result.themeOptions)).toBe(true);
+    expect(result.theme).toBe("日报");
     expect(result.searchPlan[0].queries[0]).toContain("光伏");
   });
 

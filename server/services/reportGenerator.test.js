@@ -9,7 +9,7 @@ import { callLlm, callLlmJson } from "../lib/llmClient.js";
 import { webSearch } from "../lib/websearch.js";
 
 function seedTemplateAndInsight() {
-  db.prepare("INSERT INTO report_templates (id, name, prompt, max_cards, is_public, language) VALUES (1, 'T', '用卡片写报告 {{insights}} {{search_results}} {{resolutions}} {{purpose}} {{audience}}', 5, 1, 'zh')").run();
+  db.prepare("INSERT INTO report_templates (id, name, prompt, max_cards, is_public, language) VALUES (1, 'T', '用卡片写报告 {{insights}} {{search_results}} {{resolutions}} {{purpose}} {{audience}} {{theme}}', 5, 1, 'zh')").run();
   db.prepare("INSERT INTO insights (id, title, summary, url, keywords) VALUES (11, '光伏装机创新高', '50GW', 'https://a', '光伏')").run();
 }
 
@@ -31,14 +31,15 @@ describe("reportGenerator", () => {
     expect(report.status).toBe("generating");
   });
 
-  it("injects purpose and audience into the prompt", async () => {
+  it("injects purpose, audience and theme into the prompt", async () => {
     webSearch.mockResolvedValue(null);
     callLlm.mockResolvedValue("# 报告");
-    const job = createReportJob({ templateId: 1, insightIds: [11], resolutions: [], purpose: "内部学习", audience: "管理层" });
+    const job = createReportJob({ templateId: 1, insightIds: [11], resolutions: [], purpose: "内部学习", audience: "管理层", theme: "光伏消纳压力" });
     await runJob(job);
     expect(getJob(job.id).status).toBe("done");
     expect(callLlm.mock.calls[0][0][0].content).toContain("内部学习");
     expect(callLlm.mock.calls[0][0][0].content).toContain("管理层");
+    expect(callLlm.mock.calls[0][0][0].content).toContain("光伏消纳压力");
   });
 
   it("still reads legacy array-form screening (backward compatible)", async () => {

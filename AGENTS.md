@@ -94,7 +94,7 @@ npm run server
 
 1. **Fetch layer** (`server/services/tracker.js` Phase 1): `fetchArticles(source)` dispatches by source type to the appropriate crawler (`rssCrawler`, `websiteCrawler`, `wechatMcpCrawler`, `apiCrawler`). The website crawler tries RSS → sitemap → HTML list → Playwright (headless browser, incl. JSON API interception) in that order.
 2. **Filter layer** (Phases 2): industry pre-filter (`applyIndustryFilter`, uses business-domain keywords + LLM aliases) → date lookback filter → keyword gate (`applyKeywordGate`: per-purpose `enterprise` AND `include_keyword` must both match; `exclude_keyword` blocks) → dedup.
-3. **Semantic layer** (Phase 3): LLM reads each surviving article's content, generating `title`, `summary` (≤150 chars), `keywords`, `categories`, `purposes`, and `china_relevance`. The system prompt per purpose lives in `filter_config` (`type='semantic'`).
+3. **Semantic layer** (Phase 3): LLM reads each surviving article's content, generating `title`, `summary` (≤150 chars), `keywords`, `categories`, `purposes`, and `china_relevance`. The extraction system prompt lives in `llm_prompts` (key `insight_extraction`); the additional semantic prompt per purpose lives in `filter_config` (`type='semantic'`).
 4. **Storage layer**: processed items are saved to the `insights` table (the "insights pool"); feedback weights (`feedbackWeights.js`) may drop low-scoring items.
 5. **Frontend** queries `/api/insights` with filters (monitoring type, business, event, source, date, keyword) and renders insight cards.
 
@@ -106,6 +106,7 @@ npm run server
 - `insights` — processed cards: title, summary, url, publish_date, purposes, categories, keywords, source info.
 - `tracker_settings` — key/value: lookback_hours, max_per_source, dedup threshold, required industry keywords, monitoring toggles.
 - `filter_config` — semantic prompts (`type='semantic'`, per purpose) and AI interpretation presets (`type='ai_presets'`).
+- `llm_prompts` — tunable LLM system prompts keyed by use case (`insight_extraction`, `screen_cards`, `clarify_cards`, `generate_manual_prompt`, `manual_prompt_fallback`, `feedback_suggestions`, `ai_interpret_zh`, `ai_interpret_en`). Defaults live in `server/services/promptStore.js` (`DEFAULT_PROMPTS`) and are seeded once at startup — DB edits are never overwritten. Read via `getPrompt(key)` + `fillPrompt(template, vars)` (`{{var}}` placeholders).
 
 ## Code style and conventions
 

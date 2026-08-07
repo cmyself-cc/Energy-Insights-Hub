@@ -68,7 +68,7 @@ router.get("/", (req, res) => {
       search,
       purposes,
       businessCategory,
-      eventCategory
+      subjectCategory
     } = req.query;
 
     const conditions = ["1=1"];
@@ -129,10 +129,10 @@ router.get("/", (req, res) => {
       params.push(`%"${businessCategory}"%`);
     }
 
-    // Event category filter: categories JSON array contains the value
-    if (eventCategory) {
+    // Subject category filter: categories JSON array contains the value
+    if (subjectCategory) {
       conditions.push("categories LIKE ?");
-      params.push(`%"${eventCategory}"%`);
+      params.push(`%"${subjectCategory}"%`);
     }
 
     const where = conditions.join(" AND ");

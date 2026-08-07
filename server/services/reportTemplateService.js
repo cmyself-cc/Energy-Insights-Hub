@@ -15,7 +15,8 @@ export const DEFAULT_TEMPLATES = [
 4. 搜索补充的信息以「补充信息」小节单独列出，注明来源链接；
 5. 结尾给出 3-5 条趋势观察或关注建议；
 6. 使用 Markdown 排版（标题/列表/加粗），输出语言：{{language}}。
-今日日期：{{date}}`
+今日日期：{{date}}
+报告主题：{{theme}}`
   },
   {
     name: "竞争对手动态简报",
@@ -30,7 +31,8 @@ export const DEFAULT_TEMPLATES = [
 3. 明确区分「来自已选卡片」与「来自外部搜索补充」；
 4. 结尾输出竞争格局小结（3-5 条）；
 5. 使用 Markdown 排版，输出语言：{{language}}。
-日期：{{date}}`
+日期：{{date}}
+报告主题：{{theme}}`
   },
   {
     name: "政策与行业跟踪",
@@ -45,7 +47,8 @@ export const DEFAULT_TEMPLATES = [
 3. 数据冲突按用户处理决定处理并标注；
 4. 结尾给出风险提示与前瞻判断（3-5 条）；
 5. 使用 Markdown 排版，输出语言：{{language}}。
-日期：{{date}}`
+日期：{{date}}
+报告主题：{{theme}}`
   },
   {
     name: "行业专题解读（通用）",
@@ -63,6 +66,7 @@ export const DEFAULT_TEMPLATES = [
 1. 行业新闻列表：（已选卡片数据与搜索补充）
 2. 报告用途：{{purpose}}
 3. 目标受众：{{audience}}
+4. 报告主题：{{theme}}
 
 # 输出要求
 - 生成一份完整报告，遵循下方"报告模版"的大结构，但二级及以下章节可根据新闻主题灵活调整，不必强行套用固定维度。
@@ -84,6 +88,7 @@ export const DEFAULT_TEMPLATES = [
 > 报告日期：{{date}}
 > 报告用途：{{purpose}}
 > 目标受众：{{audience}}
+> 报告主题：{{theme}}
 > 新闻来源：整合自 {N} 条公开报道（详见附录）
 
 ## 一、核心洞察摘要
