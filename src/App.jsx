@@ -157,7 +157,7 @@ export default function App() {
         search: filters.query || undefined,
         sourceType: filters.sourceType !== "all" ? filters.sourceType : undefined,
         businessCategory: filters.businessCategory !== "all" ? filters.businessCategory : undefined,
-        eventCategory: filters.eventCategory !== "all" ? filters.eventCategory : undefined,
+        subjectCategory: filters.subjectCategory !== "all" ? filters.subjectCategory : undefined,
         purposes: (filters.purposes || []).length > 0 ? filters.purposes.join(",") : undefined,
         ...getDateRange(filters.dateRange)
       };

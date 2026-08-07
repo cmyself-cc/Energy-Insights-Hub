@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
-import { DATE_RANGES, PURPOSE_OPTIONS, EVENT_CATEGORIES, SOURCE_TYPES } from "../constants/taxonomy";
+import { DATE_RANGES, PURPOSE_OPTIONS, SUBJECT_CATEGORIES, SOURCE_TYPES } from "../constants/taxonomy";
 import { backendApi } from "../utils/backendApi";
 
 const PURPOSE_DOTS = {
@@ -142,13 +142,13 @@ export default function FilterBar({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={labelStyle}>{language === "zh" ? "事件" : "Event"}</span>
+          <span style={labelStyle}>{language === "zh" ? "主体" : "Subject"}</span>
           <select
-            value={filters.eventCategory}
-            onChange={(e) => onChange({ ...filters, eventCategory: e.target.value })}
+            value={filters.subjectCategory}
+            onChange={(e) => onChange({ ...filters, subjectCategory: e.target.value })}
             style={{ ...selectStyle, minWidth: 140 }}
           >
-            {renderOptions(EVENT_CATEGORIES[language])}
+            {renderOptions(SUBJECT_CATEGORIES[language])}
           </select>
         </div>
 

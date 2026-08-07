@@ -55,18 +55,22 @@ export const BUSINESS_CATEGORIES = {
   ]
 };
 
-export const EVENT_CATEGORIES = {
+export const SUBJECT_CATEGORIES = {
   en: [
     { key: "all", label: "All" },
-    { key: "战略合作", label: "Strategic Partnership" },
-    { key: "收并购", label: "M&A" },
-    { key: "项目", label: "Project" }
+    { key: "政府", label: "Government" },
+    { key: "国有企业", label: "State-Owned Enterprise" },
+    { key: "外国公司", label: "Foreign Company" },
+    { key: "私营企业", label: "Private Company" },
+    { key: "研究机构", label: "Research Institution" }
   ],
   zh: [
     { key: "all", label: "全部" },
-    { key: "战略合作", label: "战略合作" },
-    { key: "收并购", label: "收并购" },
-    { key: "项目", label: "项目" }
+    { key: "政府", label: "政府" },
+    { key: "国有企业", label: "国有企业" },
+    { key: "外国公司", label: "外国公司" },
+    { key: "私营企业", label: "私营企业" },
+    { key: "研究机构", label: "研究机构" }
   ]
 };
 
@@ -87,7 +91,7 @@ export const DEFAULT_FILTERS = {
   dateRange: "last30",
   purposes: ["competitor", "policy", "tech"],
   businessCategory: "all",
-  eventCategory: "all",
+  subjectCategory: "all",
   sourceType: "all",
   query: ""
 };

@@ -4,12 +4,13 @@ import { backendApi } from "../utils/backendApi";
 
 export default function ReportGeneratorModal({ darkMode, language, templates, cart, onClose, onStarted, onTemplatesChanged }) {
   const zh = language === "zh";
-  const [step, setStep] = useState("loading"); // loading/quality/purpose/audience/template/confirm
+  const [step, setStep] = useState("loading"); // loading/quality/purpose/audience/theme/template/confirm
   const [screening, setScreening] = useState(null);
   const [cards, setCards] = useState(cart || []);
   const [choices, setChoices] = useState([]);          // 质量问题的处理选择
   const [purpose, setPurpose] = useState("");
   const [audience, setAudience] = useState("");
+  const [theme, setTheme] = useState("");
   const [templateMode, setTemplateMode] = useState("public"); // public/custom/manual
   const [templateId, setTemplateId] = useState(null);
   const [manualForm, setManualForm] = useState({ topic: "", framework: "", outline: "", conclusion: "" });
@@ -36,6 +37,7 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
       setScreening(res.data);
       setPurpose(res.data.purpose || "");
       setAudience(res.data.audience || "");
+      setTheme(res.data.theme || "");
       setChoices((res.data.quality || []).map(q => q.suggested || (q.options || [])[0] || ""));
       setStep("quality");
     } catch (e) { setError(e.message); setStep("quality"); }
@@ -78,7 +80,7 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
     setBusy(true); setError(null);
     try {
       const resolutions = (screening?.quality || []).map((q, i) => ({ issue: q.issue, cardIds: q.cardIds, choice: choices[i] }));
-      await backendApi.generateReport(templateId, cardIds(), resolutions, purpose, audience);
+      await backendApi.generateReport(templateId, cardIds(), resolutions, purpose, audience, theme);
       onStarted?.();
       onClose();
     } catch (e) { setError(e.message); setBusy(false); }
@@ -86,9 +88,9 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
 
   const modalStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 };
   const cardStyle = { background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: 24, maxWidth: 680, width: "100%", maxHeight: "82vh", overflowY: "auto" };
-  const stepBar = ["quality", "purpose", "audience", "template", "confirm"];
+  const stepBar = ["quality", "purpose", "audience", "theme", "template", "confirm"];
   const stepIndex = stepBar.indexOf(step);
-  const stepNames = zh ? ["卡片筛查", "报告用途", "读者受众", "模板", "确认"] : ["Cards", "Purpose", "Audience", "Template", "Confirm"];
+  const stepNames = zh ? ["卡片筛查", "报告用途", "读者受众", "报告主题", "模板", "确认"] : ["Cards", "Purpose", "Audience", "Theme", "Template", "Confirm"];
   const selTemplate = templates.find(t => t.id === templateId);
 
   return (
@@ -128,17 +130,17 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
             {(screening?.quality || []).length > 0 && (
               <div style={{ background: "#fff8e6", border: "1px solid #e6c300", borderRadius: BORDER_RADIUS.md, padding: "10px 14px", marginBottom: 12, fontSize: FONT_SIZES.sm, color: "#8a6d00" }}>
                 {zh
-                  ? "⚠️ 检测到输入卡片可能存在数据质量问题（矛盾/重复/不相关），可能影响生成效果，请确认以下处理方式："
-                  : "⚠️ Input cards may have data quality issues (conflicts/duplicates/irrelevant) that could affect the report. Please confirm how to handle them:"}
+                  ? "⚠️ 检测到输入卡片可能存在数据质量问题（矛盾/重复/多主题），可能影响生成效果，请确认以下处理方式："
+                  : "⚠️ Input cards may have data quality issues (conflicts/duplicates/multiple themes) that could affect the report. Please confirm how to handle them:"}
               </div>
             )}
             {(screening?.quality || []).length === 0 && (
-              <p style={{ fontSize: FONT_SIZES.sm, color: secondary, margin: "0 0 12px" }}>{zh ? "未发现矛盾/重复/不相关问题。" : "No conflicts, duplicates or irrelevant cards detected."}</p>
+              <p style={{ fontSize: FONT_SIZES.sm, color: secondary, margin: "0 0 12px" }}>{zh ? "未发现矛盾/重复/多主题问题。" : "No conflicts, duplicates or multi-theme issues detected."}</p>
             )}
             {(screening?.quality || []).map((q, i) => (
               <div key={i} style={{ border: `1px solid ${border}`, borderRadius: BORDER_RADIUS.md, padding: 12, marginBottom: 12 }}>
                 <div style={{ fontSize: FONT_SIZES.sm, color: text, fontWeight: 600, marginBottom: 8 }}>
-                  {q.kind === "contradiction" ? (zh ? "矛盾" : "Conflict") : q.kind === "duplicate" ? (zh ? "重复" : "Duplicate") : (zh ? "不相关" : "Irrelevant")} · {q.issue}
+                  {q.kind === "contradiction" ? (zh ? "矛盾" : "Conflict") : q.kind === "duplicate" ? (zh ? "重复" : "Duplicate") : (zh ? "多主题" : "Multi-theme")} · {q.issue}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {(q.options || []).map(opt => (
@@ -189,7 +191,24 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
             {error && <ErrorBox text={error} />}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button style={btn(false)} onClick={() => setStep("purpose")}>{zh ? "上一步" : "Back"}</button>
-              <button style={btn(true, !audience.trim())} onClick={() => setStep("template")} disabled={!audience.trim()}>{zh ? "下一步" : "Next"}</button>
+              <button style={btn(true, !audience.trim())} onClick={() => setStep("theme")} disabled={!audience.trim()}>{zh ? "下一步" : "Next"}</button>
+            </div>
+          </>
+        )}
+
+        {step === "theme" && (
+          <>
+            <p style={{ margin: "0 0 10px", fontSize: FONT_SIZES.sm, color: secondary }}>{zh ? "根据卡片内容推荐的报告主题，请确认或自定义：" : "Suggested report themes based on cards. Confirm or type your own:"}</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              {(screening?.themeOptions || []).map(opt => (
+                <button key={opt} onClick={() => setTheme(opt)} style={tabStyle(theme === opt)}>{opt}</button>
+              ))}
+            </div>
+            <input style={inputStyle} value={theme} onChange={e => setTheme(e.target.value)} placeholder={zh ? "或自定义报告主题..." : "Or type your own theme..."} />
+            {error && <ErrorBox text={error} />}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+              <button style={btn(false)} onClick={() => setStep("audience")}>{zh ? "上一步" : "Back"}</button>
+              <button style={btn(true, !theme.trim())} onClick={() => setStep("template")} disabled={!theme.trim()}>{zh ? "下一步" : "Next"}</button>
             </div>
           </>
         )}
@@ -257,7 +276,7 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
 
             {error && <ErrorBox text={error} />}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-              <button style={btn(false)} onClick={() => setStep("audience")}>{zh ? "上一步" : "Back"}</button>
+              <button style={btn(false)} onClick={() => setStep("theme")}>{zh ? "上一步" : "Back"}</button>
               {templateMode === "manual" ? (
                 <button style={btn(true, !manualPrompt || busy)} onClick={confirmManualTemplate} disabled={!manualPrompt || busy}>
                   {zh ? "确认并保存为模板" : "Confirm & Save Template"}
@@ -274,6 +293,7 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
             <div style={{ border: `1px solid ${border}`, borderRadius: BORDER_RADIUS.md, padding: 14, marginBottom: 14, fontSize: FONT_SIZES.sm, color: text }}>
               <div style={{ marginBottom: 4 }}><strong>{zh ? "报告用途：" : "Purpose: "}</strong>{purpose}</div>
               <div style={{ marginBottom: 4 }}><strong>{zh ? "读者受众：" : "Audience: "}</strong>{audience}</div>
+              <div style={{ marginBottom: 4 }}><strong>{zh ? "报告主题：" : "Theme: "}</strong>{theme}</div>
               <div style={{ marginBottom: 4 }}><strong>{zh ? "模板：" : "Template: "}</strong>{templateMode === "manual" ? (manualForm.topic || zh ? "自定义（AI 生成提示词）" : "Custom (AI prompt)") : (selTemplate?.name || "")}</div>
               <div><strong>{zh ? "卡片：" : "Cards: "}</strong>{cards.length} 张</div>
               {(screening?.quality || []).length > 0 && (
