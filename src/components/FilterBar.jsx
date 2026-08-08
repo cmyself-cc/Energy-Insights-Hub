@@ -8,7 +8,8 @@ import useIsMobile from "../hooks/useIsMobile";
 const PURPOSE_DOTS = {
   competitor: "#e74c3c",
   policy: "#3498db",
-  tech: "#27ae60"
+  tech: "#27ae60",
+  industry: "#b8860b"
 };
 
 export default function FilterBar({
@@ -82,11 +83,9 @@ export default function FilterBar({
   ));
 
   const togglePurpose = (purpose) => {
-    const current = filters.purposes || [];
-    const next = current.includes(purpose)
-      ? current.filter(p => p !== purpose)
-      : [...current, purpose];
-    onChange({ ...filters, purposes: next });
+    // 单选且必选：点击已选中项不取消，点击其他项直接切换
+    if ((filters.purposes || []).includes(purpose)) return;
+    onChange({ ...filters, purposes: [purpose] });
   };
 
   const isPurposeActive = (purpose) => (filters.purposes || []).includes(purpose);

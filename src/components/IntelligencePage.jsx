@@ -37,15 +37,13 @@ function SkeletonCard({ darkMode }) {
 
 export default function IntelligencePage(props) {
   const {
-    darkMode, language, filters, onFilterChange, onSearch, loading, fetched, error,
+    darkMode, language, subTab, subjectKeywords, filters, onFilterChange, onSearch, loading, fetched, error,
     insights, bookmarks, hidden, cart, onToggleCart, onToggleBookmark, onHide, onAiInterpret,
     onClearCart, onGenerateReport, onKeywordClick
   } = props;
-  const [subTab, setSubTab] = useState("feed");
 
   const t = i18n[language];
   const sub = darkMode ? "#aaa" : COLORS.text.secondary;
-  const border = darkMode ? COLORS.border.dark : COLORS.border.light;
 
   const displayItems = subTab === "bookmarks" ? bookmarks : insights;
   const visibleItems = displayItems.filter(item => !hidden.includes(item.title));
@@ -79,23 +77,6 @@ export default function IntelligencePage(props) {
 
   return (
     <div>
-      <div style={{
-        display: "flex", gap: 4, marginBottom: 20,
-        background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
-        borderRadius: BORDER_RADIUS.lg, padding: 4, border: `1px solid ${border}`, width: "fit-content"
-      }}>
-        {["feed", "bookmarks"].map(tab => (
-          <button key={tab} onClick={() => setSubTab(tab)} style={{
-            padding: "6px 14px", borderRadius: 7, border: "none",
-            background: subTab === tab ? COLORS.primary : "transparent",
-            color: subTab === tab ? "#fff" : darkMode ? "#aaa" : sub,
-            fontWeight: subTab === tab ? 700 : 400, fontSize: FONT_SIZES.md, cursor: "pointer"
-          }}>
-            {tab === "feed" ? t.tabs.feed : `${t.tabs.bookmarks} (${bookmarks.length})`}
-          </button>
-        ))}
-      </div>
-
       {subTab === "feed" && (
         <FilterBar darkMode={darkMode} language={language} filters={filters} onChange={onFilterChange} onSearch={onSearch} loading={loading} />
       )}
@@ -188,6 +169,7 @@ export default function IntelligencePage(props) {
                         item={item}
                         darkMode={darkMode}
                         language={language}
+                        subjectKeywords={subjectKeywords}
                         bookmarked={bookmarked}
                         inCart={inCart}
                         onBookmark={(e) => { e?.stopPropagation(); onToggleBookmark(item); }}

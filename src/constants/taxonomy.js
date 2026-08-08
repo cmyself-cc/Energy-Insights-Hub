@@ -17,12 +17,14 @@ export const PURPOSE_OPTIONS = {
   en: [
     { key: "competitor", label: "Competitor" },
     { key: "policy", label: "Policy" },
-    { key: "tech", label: "Tech" }
+    { key: "tech", label: "Tech" },
+    { key: "industry", label: "Industry Trends" }
   ],
   zh: [
     { key: "competitor", label: "竞争监控" },
     { key: "policy", label: "政策监控" },
-    { key: "tech", label: "技术突破" }
+    { key: "tech", label: "技术动态" },
+    { key: "industry", label: "行业动态" }
   ]
 };
 
@@ -58,7 +60,8 @@ export const BUSINESS_CATEGORIES = {
 export const SUBJECT_CATEGORIES = {
   en: [
     { key: "all", label: "All" },
-    { key: "政府", label: "Government" },
+    { key: "中央部委", label: "Central Ministries" },
+    { key: "地方政府", label: "Local Government" },
     { key: "国有企业", label: "State-Owned Enterprise" },
     { key: "外国公司", label: "Foreign Company" },
     { key: "私营企业", label: "Private Company" },
@@ -66,7 +69,8 @@ export const SUBJECT_CATEGORIES = {
   ],
   zh: [
     { key: "all", label: "全部" },
-    { key: "政府", label: "政府" },
+    { key: "中央部委", label: "中央部委" },
+    { key: "地方政府", label: "地方政府" },
     { key: "国有企业", label: "国有企业" },
     { key: "外国公司", label: "外国公司" },
     { key: "私营企业", label: "私营企业" },
@@ -89,7 +93,7 @@ export const SOURCE_TYPES = {
 
 export const DEFAULT_FILTERS = {
   dateRange: "last30",
-  purposes: ["competitor", "policy", "tech"],
+  purposes: ["competitor"],
   businessCategory: "all",
   subjectCategory: "all",
   sourceType: "all",

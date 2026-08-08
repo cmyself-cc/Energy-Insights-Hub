@@ -6,8 +6,44 @@ import CardActions from "./CardActions";
 const PURPOSE_DOTS = {
   competitor: { color: "#e74c3c", label: "竞争" },
   policy: { color: "#3498db", label: "政策" },
-  tech: { color: "#27ae60", label: "技术" }
+  tech: { color: "#27ae60", label: "技术" },
+  industry: { color: "#b8860b", label: "行业" }
 };
+
+// 在文本中高亮配置的主体关键词：长词优先，避免重叠
+function highlightSubjectKeywords(text, keywords, markStyle) {
+  if (!text || !keywords || keywords.length === 0) return text;
+  const lower = text.toLowerCase();
+  const taken = new Array(text.length).fill(false);
+  const ranges = [];
+  for (const kw of keywords) {
+    if (!kw) continue;
+    const kwLower = kw.toLowerCase();
+    let idx = lower.indexOf(kwLower);
+    while (idx !== -1) {
+      let overlap = false;
+      for (let i = idx; i < idx + kw.length; i++) {
+        if (taken[i]) { overlap = true; break; }
+      }
+      if (!overlap) {
+        ranges.push([idx, idx + kw.length]);
+        for (let i = idx; i < idx + kw.length; i++) taken[i] = true;
+      }
+      idx = lower.indexOf(kwLower, idx + kw.length);
+    }
+  }
+  if (ranges.length === 0) return text;
+  ranges.sort((a, b) => a[0] - b[0]);
+  const out = [];
+  let pos = 0;
+  ranges.forEach(([s, e], i) => {
+    if (s > pos) out.push(text.slice(pos, s));
+    out.push(<span key={i} style={markStyle}>{text.slice(s, e)}</span>);
+    pos = e;
+  });
+  if (pos < text.length) out.push(text.slice(pos));
+  return out;
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return "";
@@ -25,10 +61,17 @@ export default function InsightCard({
   onBookmark,
   onHide,
   onAiInterpret,
-  onKeywordClick
+  onKeywordClick,
+  subjectKeywords = []
 }) {
   const t = i18n[language];
   const [copied, setCopied] = useState(false);
+
+  // 主体关键词高亮样式（标题与摘要共用）
+  const subjectMarkStyle = {
+    color: darkMode ? "#fbbf24" : "#d97706",
+    fontWeight: 700
+  };
 
   const keywordChipStyle = {
     fontSize: FONT_SIZES.xs,
@@ -104,7 +147,7 @@ export default function InsightCard({
             display: "block"
           }}
         >
-          {item.title}
+          {highlightSubjectKeywords(item.title, subjectKeywords, subjectMarkStyle)}
         </a>
       </div>
 

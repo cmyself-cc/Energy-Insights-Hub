@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { backendApi } from "../utils/backendApi";
 
+// 行业动态没有关键词规则，信源标记为 industry 会导致其文章被全部跳过，因此不提供该选项
 const PURPOSES = [
   { value: "competitor", zh: "竞争对手", en: "Competitor" },
   { value: "policy", zh: "政策动态", en: "Policy" },
-  { value: "tech", zh: "技术突破", en: "Tech" }
+  { value: "tech", zh: "技术动态", en: "Tech Trends" }
 ];
 
 export default function SourcesPage({ darkMode, language, onTrackerComplete }) {

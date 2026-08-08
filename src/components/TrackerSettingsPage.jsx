@@ -23,6 +23,7 @@ function parseJsonArray(value) {
   }
 }
 
+// 行业动态没有关键词规则（其主体词默认取行业初筛关键词），无可启停的规则，故不在此列出
 const PURPOSE_KEYS = ["competitor", "policy", "tech"];
 
 // 与后端 server/lib/trackerSettings.js 的 SOURCE_TYPES 保持一致，

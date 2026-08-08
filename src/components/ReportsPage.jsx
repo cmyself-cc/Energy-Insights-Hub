@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { marked } from "marked";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
@@ -31,7 +32,7 @@ function statusBadge(status, language) {
   return { text: "", color: "", bg: "" };
 }
 
-export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled }) {
+export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled, titleSlotEl }) {
   const t = i18n[language];
   const isMobile = useIsMobile();
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
@@ -299,44 +300,38 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
     );
   }
 
+  // 视图切换标签通过 portal 挂到 App 标题行右侧（与信息流/书签同款样式）
+  const viewTabsPortal = titleSlotEl && createPortal(
+    <div style={{
+      display: "flex", gap: 4,
+      background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+      borderRadius: BORDER_RADIUS.lg, padding: 4,
+      border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+      width: "fit-content"
+    }}>
+      {(["reports", "templates"]).map(k => (
+        <button
+          key={k}
+          onClick={() => setView(k)}
+          style={{
+            padding: "6px 14px", borderRadius: 7, border: "none",
+            background: view === k ? COLORS.primary : "transparent",
+            color: view === k ? "#fff" : darkMode ? "#aaa" : COLORS.text.secondary,
+            fontWeight: view === k ? 700 : 400, fontSize: FONT_SIZES.md, cursor: "pointer"
+          }}
+        >
+          {k === "reports"
+            ? (language === "zh" ? "我的报告" : "My Reports")
+            : `${language === "zh" ? "模板管理" : "Templates"} (${templates.length})`}
+        </button>
+      ))}
+    </div>,
+    titleSlotEl
+  );
+
   return (
     <div>
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: 20,
-        flexWrap: "wrap",
-        gap: 10
-      }}>
-        <h1 style={{
-          fontSize: FONT_SIZES["3xl"],
-          fontWeight: 700,
-          color: darkMode ? "#fff" : COLORS.text.primary,
-          margin: 0
-        }}>
-          {language === "zh" ? "报告" : "Reports"}
-        </h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["reports", "templates"]).map(k => (
-            <button
-              key={k}
-              onClick={() => setView(k)}
-              style={{
-                padding: "6px 14px",
-                borderRadius: BORDER_RADIUS.md,
-                border: `1px solid ${view === k ? COLORS.primary : (darkMode ? COLORS.border.dark : COLORS.border.light)}`,
-                background: view === k ? COLORS.primary : "transparent",
-                color: view === k ? "#fff" : (darkMode ? "#e8e8e8" : COLORS.text.primary),
-                fontSize: FONT_SIZES.sm,
-                cursor: "pointer"
-              }}
-            >
-              {k === "reports" ? (language === "zh" ? "我的报告" : "My Reports") : (language === "zh" ? "模板管理" : "Templates")}
-            </button>
-          ))}
-        </div>
-      </div>
+      {viewTabsPortal}
 
       {view === "templates" && (
         <TemplateManager

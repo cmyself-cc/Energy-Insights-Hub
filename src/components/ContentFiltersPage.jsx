@@ -4,10 +4,11 @@ import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 import KeywordList from "./KeywordList";
 
+// 行业动态不设配置项：其主体关键词默认取行业初筛中的关键词
 const PURPOSES = [
   { value: "competitor", zh: "竞争对手", en: "Competitor" },
   { value: "policy", zh: "政策动态", en: "Policy" },
-  { value: "tech", zh: "技术突破", en: "Tech" }
+  { value: "tech", zh: "技术动态", en: "Tech Trends" }
 ];
 
 export default function ContentFiltersPage({ darkMode, language }) {

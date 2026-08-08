@@ -3,7 +3,7 @@ import db from "../db.js";
 import { fetchArticles } from "../crawlers/index.js";
 import { processInsight, loadSemanticConfig } from "./llmProcessor.js";
 import { loadActiveCategories, matchesEnabledCategory } from "./businessCategories.js";
-import { loadFilterRules, groupRulesByPurpose } from "./filterRules.js";
+import { loadFilterRules, groupRulesByPurpose, collectSubjectKeywordsByPurpose, allSubjectKeywords, titleContainsSubjectKeyword, PURPOSES } from "./filterRules.js";
 import { loadSettings, buildScheduleCron, filterSourcesByType } from "../lib/trackerSettings.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 import { applyKeywordGate, applyIndustryFilter, loadIndustryKeywordsWithAliases } from "./keywordGate.js";
@@ -133,6 +133,7 @@ async function processBatch(items, language, filterContext = null) {
   const ctx = filterContext || {
     semanticPrompt: loadSemanticConfig(),
     categories: loadActiveCategories(),
+    subjectKeywords: collectSubjectKeywordsByPurpose(),
     classificationEnabled: Boolean(process.env.LLM_API_KEY)
   };
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
@@ -221,6 +222,10 @@ export async function runTracker(runId = null) {
   }
 
   const classificationEnabled = Boolean(process.env.LLM_API_KEY);
+  // 按监控类型分组的主体关键词（公司/政策/技术来自规则，行业来自行业初筛）：
+  // 用于标题强制校验与 purposes 对齐
+  const subjectKeywordsByPurpose = collectSubjectKeywordsByPurpose();
+  const subjectKeywords = allSubjectKeywords(subjectKeywordsByPurpose);
 
   let successCount = 0;
   let failedCount = 0;
@@ -417,7 +422,8 @@ export async function runTracker(runId = null) {
     const filterContext = {
       semanticPrompt: loadSemanticConfig(),
       categories: loadActiveCategories(),
-      classificationEnabled: Boolean(process.env.LLM_API_KEY)
+      subjectKeywords: subjectKeywordsByPurpose,
+      classificationEnabled
     };
 
     setPhase(runId, "processing", 60);
@@ -468,6 +474,14 @@ export async function runTracker(runId = null) {
       // Prefer LLM-decided purposes; fall back to keyword-gate purposes if LLM returned none
       const llmPurposes = Array.isArray(row.purposes) ? row.purposes : [];
       row.matchedPurposes = llmPurposes.length > 0 ? llmPurposes : (row.matchedPurposes || ["competitor"]);
+      // Purposes must correspond to subject keywords actually present in the
+      // title (竞争→公司主体、政策→政策主体、技术→技术主体、行业→行业主体).
+      // Purposes without a matching keyword in the title are removed; items
+      // left with no purpose are dropped by the post-filter below.
+      // 每篇文章只保留一个 purpose（对齐后的第一个）。
+      row.matchedPurposes = row.matchedPurposes.filter(p =>
+        PURPOSES.includes(p) && titleContainsSubjectKeyword(row.title, subjectKeywordsByPurpose[p] || [])
+      ).slice(0, 1);
       const derived = deriveFields(row, row.source);
       Object.assign(row, derived);
     }
@@ -482,6 +496,10 @@ export async function runTracker(runId = null) {
         if (insight.llmFailed) return false; // Filter out LLM-failed articles
         if (!insight.matchedPurposes || insight.matchedPurposes.length === 0) return false; // LLM did not assign a purpose
         if (insight.chinaRelevance === false) return false; // Drop non-China content
+        if (!titleContainsSubjectKeyword(insight.title, subjectKeywords)) {
+          console.log(`[tracker] DROPPED (title missing subject keyword): ${insight.title}`);
+          return false; // 标题必须包含配置中的主体关键词（或行业主体）
+        }
         return matchesEnabledCategory(insight, activeCategories);
       });
     console.log(`[tracker] After post-filter: ${kept.length} insights`);

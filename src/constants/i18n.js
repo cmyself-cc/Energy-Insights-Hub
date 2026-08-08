@@ -257,7 +257,8 @@ export const i18n = {
       semanticPrompts: "Semantic Prompts",
       competitorPrompt: "Competitor",
       policyPrompt: "Policy",
-      techPrompt: "Tech",
+      techPrompt: "Tech Trends",
+      industryPrompt: "Industry Trends",
       enterpriseLabel: "🏢 Enterprise/Entity Keywords",
       includeLabel: "➕ Include Keywords",
       excludeLabel: "➖ Exclude Keywords",
@@ -265,7 +266,8 @@ export const i18n = {
     purposeLabels: {
       competitor: "Competitor Monitoring",
       policy: "Policy Monitoring",
-      tech: "Tech Breakthrough"
+      tech: "Tech Trends",
+      industry: "Industry Trends"
     },
   },
   zh: {
@@ -526,7 +528,8 @@ export const i18n = {
       semanticPrompts: "语义处理提示词",
       competitorPrompt: "竞争对手",
       policyPrompt: "政策动态",
-      techPrompt: "技术突破",
+      techPrompt: "技术动态",
+      industryPrompt: "行业动态",
       enterpriseLabel: "🏢 企业/主体关键词",
       includeLabel: "➕ 包含关键词",
       excludeLabel: "➖ 排除关键词",
@@ -534,7 +537,8 @@ export const i18n = {
     purposeLabels: {
       competitor: "竞争监控",
       policy: "政策监控",
-      tech: "技术突破"
+      tech: "技术动态",
+      industry: "行业动态"
     },
   }
 };

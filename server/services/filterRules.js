@@ -11,7 +11,7 @@ export function loadFilterRules(purpose = null) {
     .all();
 }
 
-export const PURPOSES = ["competitor", "policy", "tech"];
+export const PURPOSES = ["competitor", "policy", "tech", "industry"];
 
 function emptyBucket() {
   return { enterprise: [], include_keyword: [], exclude_keyword: [] };
@@ -92,6 +92,79 @@ export function findMatchedKeyword(item, keywords) {
 
 export function matchesAnyKeyword(item, keywords) {
   return findMatchedKeyword(item, keywords) !== null;
+}
+
+/**
+ * Pure-ASCII aliases of ≤2 chars (e.g. "GW") collide with units/abbreviations
+ * in titles and must never be used as subject keywords. Names are exempt —
+ * they are explicit configuration.
+ */
+export function isRiskyShortAlias(term) {
+  return /^[A-Za-z]{1,2}$/.test(String(term || "").trim());
+}
+
+/**
+ * Collect active subject keywords grouped by monitoring purpose:
+ * - competitor / policy / tech: enterprise-type filter rules (per-purpose;
+ *   global rules with empty purpose count for all three). Include keywords are
+ *   action verbs (发布/合作/...), not subjects, so they are excluded.
+ * - industry: no dedicated config — defaults to all industry pre-filter
+ *   keywords (industry_categories, active only).
+ * Longer keywords first so highlighting/matching prefers the longest match.
+ */
+export function collectSubjectKeywordsByPurpose() {
+  const byPurpose = {
+    competitor: new Set(),
+    policy: new Set(),
+    tech: new Set(),
+    industry: new Set()
+  };
+  for (const r of loadFilterRules()) {
+    if (r.type !== "enterprise") continue;
+    const base = String(r.name || "").trim();
+    const terms = [
+      ...(base ? [base] : []),
+      ...parseAliases(r.aliases).filter(a => !isRiskyShortAlias(a))
+    ];
+    const targets = r.purpose && byPurpose[r.purpose] ? [r.purpose] : ["competitor", "policy", "tech"];
+    for (const t of targets) {
+      for (const term of terms) {
+        const v = String(term).trim();
+        if (v) byPurpose[t].add(v);
+      }
+    }
+  }
+  const cats = db.prepare("SELECT keywords, aliases FROM industry_categories WHERE active = 1").all();
+  for (const cat of cats) {
+    let keywords = [];
+    try { keywords = JSON.parse(cat.keywords || "[]"); } catch {}
+    let aliases = [];
+    try { aliases = JSON.parse(cat.aliases || "[]"); } catch {}
+    for (const kw of [...keywords, ...aliases]) {
+      const v = String(kw || "").trim();
+      if (v) byPurpose.industry.add(v);
+    }
+  }
+  const out = {};
+  for (const [p, set] of Object.entries(byPurpose)) {
+    out[p] = [...set].sort((a, b) => b.length - a.length);
+  }
+  return out;
+}
+
+/** Flat, de-duplicated union of all purpose subject keywords (longest first). */
+export function allSubjectKeywords(byPurpose) {
+  return [...new Set(Object.values(byPurpose || {}).flat())].sort((a, b) => b.length - a.length);
+}
+
+/**
+ * Whether the title contains at least one subject keyword (case-insensitive).
+ * An empty keyword list means no rules configured — pass through without blocking.
+ */
+export function titleContainsSubjectKeyword(title, keywords) {
+  if (!keywords || keywords.length === 0) return true;
+  const text = String(title || "").toLowerCase();
+  return keywords.some(k => text.includes(String(k).toLowerCase()));
 }
 
 // ============================================================================

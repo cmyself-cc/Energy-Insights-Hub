@@ -12,7 +12,7 @@ import { ToastContainer } from "./components/Toast";
 import { storage } from "./utils/storage";
 import { api } from "./utils/api";
 import { backendApi } from "./utils/backendApi";
-import { COLORS, FONT_SIZES, TRANSITIONS } from "./constants/theme";
+import { COLORS, FONT_SIZES, TRANSITIONS, BORDER_RADIUS } from "./constants/theme";
 import { i18n } from "./constants/i18n";
 import { DEFAULT_FILTERS } from "./constants/taxonomy";
 import useIsMobile, { isMobileViewport } from "./hooks/useIsMobile";
@@ -30,6 +30,9 @@ export default function App() {
   const [bookmarks, setBookmarks] = useState([]);
   const [hidden, setHidden] = useState([]);
   const [activeTab, setActiveTab] = useState("intelligence");
+  const [subTab, setSubTab] = useState("feed");
+  // 标题行右侧插槽：报告/配置页通过 portal 把自己的控件挂进来
+  const [titleSlotEl, setTitleSlotEl] = useState(null);
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportTemplates, setReportTemplates] = useState([]);
@@ -40,6 +43,8 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+  // 内容过滤配置中的主体关键词（企业/主体 + 包含关键词及别名），用于卡片高亮
+  const [subjectKeywords, setSubjectKeywords] = useState([]);
 
   const t = i18n[language];
 
@@ -67,6 +72,39 @@ export default function App() {
     setLanguage(isMobileViewport() ? "zh" : (savedLanguage || "en"));
     loadInsightsFromBackend();
     backendApi.getReportTemplates().then(r => setReportTemplates(r.data || [])).catch(() => {});
+    // 主体关键词：用于洞察卡片标题中突出显示主体
+    // 来源：企业/主体规则（competitor/policy/tech）+ 行业初筛关键词（industry）
+    Promise.all([backendApi.getFilterRules(), backendApi.getIndustryCategories()])
+      .then(([rulesRes, industriesRes]) => {
+        const kws = new Set();
+        for (const r of rulesRes.data || []) {
+          if (r.active === 0) continue;
+          // 仅企业/主体关键词是「主体」；include_keyword 多为动作词（发布/合作），不高亮
+          if (r.type !== "enterprise") continue;
+          if (r.name && r.name.trim()) kws.add(r.name.trim());
+          let aliases = r.aliases;
+          if (typeof aliases === "string") {
+            try { aliases = JSON.parse(aliases); } catch { aliases = []; }
+          }
+          if (Array.isArray(aliases)) {
+            // 与服务端一致：纯英文 ≤2 字符的别名（如 GW）易撞单位，不作为主体词
+            aliases.forEach(a => {
+              const v = String(a || "").trim();
+              if (v && !/^[A-Za-z]{1,2}$/.test(v)) kws.add(v);
+            });
+          }
+        }
+        for (const cat of industriesRes.data || []) {
+          if (cat.active === 0) continue;
+          for (const kw of cat.keywords || []) {
+            if (kw && String(kw).trim()) kws.add(String(kw).trim());
+          }
+          for (const a of cat.aliases || []) {
+            if (a && String(a).trim()) kws.add(String(a).trim());
+          }
+        }
+        setSubjectKeywords([...kws].sort((a, b) => b.length - a.length));
+      }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -253,23 +291,54 @@ export default function App() {
           padding: isMobile ? "16px 14px" : "24px 28px",
           minWidth: 0
         }}>
-          <h1 style={{
-            fontSize: FONT_SIZES["3xl"],
-            fontWeight: 700,
-            color: text,
-            margin: "0 0 20px"
+          {/* 标题行：左侧页面标题，右侧放页内标签（信息流/书签；报告/配置页通过 portal 挂入） */}
+          <div ref={setTitleSlotEl} style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 20
           }}>
-            {activeTab === "reports"
-              ? (language === "zh" ? "报告" : "Reports")
-              : activeTab === "configuration"
-                ? (language === "zh" ? "配置" : "Configuration")
-                : t.competitiveIntelligence.pageTitle}
-          </h1>
+            <h1 style={{
+              fontSize: FONT_SIZES["3xl"],
+              fontWeight: 700,
+              color: text,
+              margin: 0
+            }}>
+              {activeTab === "reports"
+                ? (language === "zh" ? "报告" : "Reports")
+                : activeTab === "configuration"
+                  ? (language === "zh" ? "配置" : "Configuration")
+                  : t.competitiveIntelligence.pageTitle}
+            </h1>
+              {showIntelligence && (
+                <div style={{
+                  display: "flex", gap: 4,
+                  background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+                  borderRadius: BORDER_RADIUS.lg, padding: 4, border: `1px solid ${border}`, width: "fit-content"
+                }}>
+                  {["feed", "bookmarks"].map(tab => (
+                    <button key={tab} onClick={() => setSubTab(tab)} style={{
+                      padding: "6px 14px", borderRadius: 7, border: "none",
+                      background: subTab === tab ? COLORS.primary : "transparent",
+                      color: subTab === tab ? "#fff" : darkMode ? "#aaa" : COLORS.text.secondary,
+                      fontWeight: subTab === tab ? 700 : 400, fontSize: FONT_SIZES.md, cursor: "pointer"
+                    }}>
+                      {tab === "feed" ? t.tabs.feed : `${t.tabs.bookmarks} (${bookmarks.length})`}
+                    </button>
+                  ))}
+                </div>
+              )}
+          </div>
 
           {showIntelligence && (
             <IntelligencePage
               darkMode={darkMode}
               language={language}
+              subTab={subTab}
+              onSubTabChange={setSubTab}
+              subjectKeywords={subjectKeywords}
               filters={filters}
               onFilterChange={setFilters}
               onSearch={fetchInsights}
@@ -296,6 +365,7 @@ export default function App() {
             <ReportsPage
               darkMode={darkMode}
               language={language}
+              titleSlotEl={titleSlotEl}
               openReportId={openReportId}
               onOpenReportHandled={() => setOpenReportId(null)}
               onViewReport={(report) => {
@@ -308,6 +378,7 @@ export default function App() {
             <ConfigurationPage
               darkMode={darkMode}
               language={language}
+              titleSlotEl={titleSlotEl}
               onTrackerComplete={loadInsightsFromBackend}
             />
           )}

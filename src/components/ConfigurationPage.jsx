@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import SourcesPage from "./SourcesPage";
 import ContentFiltersPage from "./ContentFiltersPage";
 import TrackerSettingsPage from "./TrackerSettingsPage";
@@ -16,7 +17,7 @@ const TABS = [
   { key: "models", icon: "⊙", labelKey: "globalConfigTab" },
 ];
 
-export default function ConfigurationPage({ darkMode, language, onTrackerComplete }) {
+export default function ConfigurationPage({ darkMode, language, onTrackerComplete, titleSlotEl }) {
   const [tab, setTab] = useState("sources");
   const t = i18n[language];
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
@@ -257,52 +258,41 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
     }
   };
 
+  // 操作按钮通过 portal 挂到 App 标题行右侧
+  const actionBtnStyle = {
+    padding: "8px 14px", borderRadius: BORDER_RADIUS.md,
+    border: `1px solid ${COLORS.primary}`, background: "transparent",
+    color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
+    cursor: "pointer"
+  };
+  const actionButtonsPortal = titleSlotEl && createPortal(
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button onClick={handleExportConfig} style={actionBtnStyle}>
+        📥 {language === "zh" ? "导出配置" : "Export Config"}
+      </button>
+      <button onClick={() => fileInputRef.current?.click()} style={actionBtnStyle}>
+        📤 {language === "zh" ? "导入配置" : "Import Config"}
+      </button>
+      <button onClick={handleClearInsights} style={actionBtnStyle}>
+        🗑 {language === "zh" ? "清空 Insights" : "Clear Insights"}
+      </button>
+      <button onClick={handleRestoreDefaults} style={actionBtnStyle}>
+        🔄 {language === "zh" ? "恢复默认配置" : "Restore Defaults"}
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        onChange={handleImportConfig}
+        style={{ display: "none" }}
+      />
+    </div>,
+    titleSlotEl
+  );
+
   return (
     <div>
-      {/* 2x2 Action Button Grid */}
-      <div style={{
-        display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20
-      }}>
-        <button onClick={handleExportConfig} style={{
-          padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
-          border: `1px solid ${COLORS.primary}`, background: "transparent",
-          color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
-          cursor: "pointer"
-        }}>
-          📥 {language === "zh" ? "导出配置" : "Export Config"}
-        </button>
-        <button onClick={() => fileInputRef.current?.click()} style={{
-          padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
-          border: `1px solid ${COLORS.primary}`, background: "transparent",
-          color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
-          cursor: "pointer"
-        }}>
-          📤 {language === "zh" ? "导入配置" : "Import Config"}
-        </button>
-        <button onClick={handleClearInsights} style={{
-          padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
-          border: `1px solid ${COLORS.primary}`, background: "transparent",
-          color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
-          cursor: "pointer"
-        }}>
-          🗑 {language === "zh" ? "清空 Insights" : "Clear Insights"}
-        </button>
-        <button onClick={handleRestoreDefaults} style={{
-          padding: "10px 16px", borderRadius: BORDER_RADIUS.md,
-          border: `1px solid ${COLORS.primary}`, background: "transparent",
-          color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: 600,
-          cursor: "pointer"
-        }}>
-          🔄 {language === "zh" ? "恢复默认配置" : "Restore Defaults"}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={handleImportConfig}
-          style={{ display: "none" }}
-        />
-      </div>
+      {actionButtonsPortal}
 
       <div style={{
         display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap"

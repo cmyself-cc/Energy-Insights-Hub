@@ -146,12 +146,25 @@ export async function processInsight(item, _language = "en", _filterContext = nu
     semanticBlock = `附加语义要求: ${semanticPrompt}`;
   }
 
+  // 主体关键词按监控类型分组注入，LLM 需让标题命中对应类别的主体词
+  const subjectByPurpose = _filterContext?.subjectKeywords || {};
+  const subjectGroups = [
+    ["公司主体（competitor）", subjectByPurpose.competitor],
+    ["政策主体（policy）", subjectByPurpose.policy],
+    ["技术主体（tech）", subjectByPurpose.tech],
+    ["行业主体（industry）", subjectByPurpose.industry]
+  ].filter(([, list]) => (list || []).length > 0);
+  const subjectKeywordList = subjectGroups.length > 0
+    ? subjectGroups.map(([label, list]) => `${label}: ${list.join("、")}`).join("\n")
+    : "未配置";
+
   const prompt = fillPrompt(getPrompt("insight_extraction"), {
     title: item.title,
     content: (item.rawContent || "").slice(0, 3000) || (item.summary || "").slice(0, 3000) || "",
     url: item.url,
     semantic_block: semanticBlock,
-    category_list: categoryList
+    category_list: categoryList,
+    subject_keywords: subjectKeywordList
   });
 
   const messages = [{ role: "user", content: prompt }];
