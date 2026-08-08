@@ -15,6 +15,7 @@ import { backendApi } from "./utils/backendApi";
 import { COLORS, FONT_SIZES, TRANSITIONS } from "./constants/theme";
 import { i18n } from "./constants/i18n";
 import { DEFAULT_FILTERS } from "./constants/taxonomy";
+import useIsMobile, { isMobileViewport } from "./hooks/useIsMobile";
 import "./styles/responsive.css";
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
   const [openReportId, setOpenReportId] = useState(null);
   const [apiConfig, setApiConfig] = useState(null);
   const [language, setLanguage] = useState("en");
+  const isMobile = useIsMobile();
   const [toasts, setToasts] = useState([]);
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
@@ -60,8 +62,9 @@ export default function App() {
     setBookmarks(storage.getBookmarks());
     setCart(storage.getCart());
     setApiConfig(storage.getApiConfig());
-    const savedLanguage = storage.getLanguage();
-    setLanguage(savedLanguage);
+    const savedLanguage = storage.getStoredLanguage();
+    // 移动端仅中文界面（语言切换已隐藏）；Web 端沿用保存值，默认英文
+    setLanguage(isMobileViewport() ? "zh" : (savedLanguage || "en"));
     loadInsightsFromBackend();
     backendApi.getReportTemplates().then(r => setReportTemplates(r.data || [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -202,9 +205,14 @@ export default function App() {
     }
   };
 
+  // 移动端不提供配置页：若正处于配置页（如桌面切到手机宽度），回退到市场洞察
+  useEffect(() => {
+    if (isMobile && activeTab === "configuration") setActiveTab("intelligence");
+  }, [isMobile, activeTab]);
+
   const showIntelligence = activeTab === "intelligence";
   const showReports = activeTab === "reports";
-  const showConfiguration = activeTab === "configuration";
+  const showConfiguration = activeTab === "configuration" && !isMobile;
 
   const bg = darkMode ? COLORS.background.dark : "#f8f8fc";
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
@@ -223,20 +231,26 @@ export default function App() {
         darkMode={darkMode}
         language={language}
         onLanguageToggle={handleLanguageToggle}
+        isMobile={isMobile}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <Sidebar
-          darkMode={darkMode}
-          language={language}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
+        {/* 移动端隐藏侧边栏，导航移至顶部，释放左侧空间 */}
+        {!isMobile && (
+          <Sidebar
+            darkMode={darkMode}
+            language={language}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
+        )}
 
         <main style={{
           flex: 1,
           overflowY: "auto",
-          padding: "24px 28px",
+          padding: isMobile ? "16px 14px" : "24px 28px",
           minWidth: 0
         }}>
           <h1 style={{

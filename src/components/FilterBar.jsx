@@ -3,6 +3,7 @@ import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/the
 import { i18n } from "../constants/i18n";
 import { DATE_RANGES, PURPOSE_OPTIONS, SUBJECT_CATEGORIES, SOURCE_TYPES } from "../constants/taxonomy";
 import { backendApi } from "../utils/backendApi";
+import useIsMobile from "../hooks/useIsMobile";
 
 const PURPOSE_DOTS = {
   competitor: "#e74c3c",
@@ -19,6 +20,7 @@ export default function FilterBar({
   loading
 }) {
   const t = i18n[language];
+  const isMobile = useIsMobile();
   const [businessCategories, setBusinessCategories] = useState([]);
 
   useEffect(() => {
@@ -51,7 +53,8 @@ export default function FilterBar({
   };
 
   const purposeBtnStyle = (active, dotColor) => ({
-    padding: "6px 14px 6px 10px",
+    // 移动端去掉圆点后用对称紧凑 padding，三个按钮保持同一行
+    padding: isMobile ? "5px 10px" : "6px 14px 6px 10px",
     borderRadius: BORDER_RADIUS.md,
     border: `1.5px solid ${active ? dotColor : darkMode ? COLORS.border.dark : COLORS.border.light}`,
     background: active ? dotColor : "transparent",
@@ -100,7 +103,7 @@ export default function FilterBar({
       marginBottom: 20
     }}>
       {/* 监控类型 - 可复选按钮 */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexWrap: isMobile ? "nowrap" : "wrap" }}>
         <span style={labelStyle}>{language === "zh" ? "监控类型" : "Monitor Type"}</span>
         {PURPOSE_OPTIONS[language].map(p => (
           <button
@@ -108,7 +111,8 @@ export default function FilterBar({
             onClick={() => togglePurpose(p.key)}
             style={purposeBtnStyle(isPurposeActive(p.key), PURPOSE_DOTS[p.key])}
           >
-            <span style={purposeDotStyle(isPurposeActive(p.key) ? "#fff" : PURPOSE_DOTS[p.key])} />
+            {/* 移动端去掉文字前的圆点，保证三个按钮同一行 */}
+            {!isMobile && <span style={purposeDotStyle(isPurposeActive(p.key) ? "#fff" : PURPOSE_DOTS[p.key])} />}
             {p.label}
           </button>
         ))}

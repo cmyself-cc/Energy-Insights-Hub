@@ -140,6 +140,16 @@ export const storage = {
     }
   },
 
+  // 未保存过语言时返回 null，由调用方决定默认值（移动端默认中文）
+  getStoredLanguage: () => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.LANGUAGE);
+    } catch (error) {
+      console.error("Failed to load language:", error);
+      return null;
+    }
+  },
+
   saveLanguage: (language) => {
     try {
       localStorage.setItem(STORAGE_KEYS.LANGUAGE, language);

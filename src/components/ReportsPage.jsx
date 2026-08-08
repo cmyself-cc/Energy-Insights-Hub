@@ -5,6 +5,21 @@ import { i18n } from "../constants/i18n";
 import { MARKDOWN_CSS } from "../constants/markdownStyle";
 import { backendApi } from "../utils/backendApi";
 import { exportDocx, exportMarkdown, exportPdf } from "../utils/reportExport";
+import useIsMobile from "../hooks/useIsMobile";
+
+// 移动端报告视图：去掉 A4 纸张效果，整体缩小字号与边距（仅影响页面显示，不影响导出）
+const MOBILE_REPORT_CSS = `
+@media (max-width: 768px) {
+  .markdown-body { font-size: 13px; }
+  .markdown-body h1 { font-size: 17px; margin: 14px 0 8px; }
+  .markdown-body h2 { font-size: 15px; margin: 12px 0 6px; }
+  .markdown-body h3 { font-size: 13.5px; margin: 10px 0 5px; }
+  .markdown-body > p:first-child { font-size: 17px; margin: 4px 0 12px; }
+  .markdown-body > p:first-child + blockquote { margin: 2px 0 16px; }
+  .markdown-body > p:first-child + blockquote p { line-height: 2; }
+  .markdown-body th, .markdown-body td { padding: 4px 6px; font-size: 12px; }
+}
+`;
 
 function statusBadge(status, language) {
   if (status === "generating") {
@@ -18,6 +33,7 @@ function statusBadge(status, language) {
 
 export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled }) {
   const t = i18n[language];
+  const isMobile = useIsMobile();
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
   const [reports, setReports] = useState([]);
@@ -115,17 +131,21 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
     const template = templates.find(t => t.id === selectedReport.template_id);
     return (
       <div style={{
-        background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
-        borderRadius: BORDER_RADIUS.xl,
-        border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-        padding: "32px 40px",
+        // 移动端移除卡片外框，边距交给页面容器（与 insight card 一致），增大显示面积
+        background: isMobile ? "transparent" : (darkMode ? COLORS.background.cardDark : COLORS.background.card),
+        borderRadius: isMobile ? 0 : BORDER_RADIUS.xl,
+        border: isMobile ? "none" : `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+        padding: isMobile ? 0 : "32px 40px",
         minHeight: "60vh"
       }}>
         <div style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
-          marginBottom: 20,
+          marginBottom: isMobile ? 12 : 20,
+          // 移动端：标题/按钮与正文之间仅用一条浅灰线分隔
+          borderBottom: isMobile ? `1px solid ${darkMode ? "#333" : "#e5e5e5"}` : "none",
+          paddingBottom: isMobile ? 12 : 0,
           flexWrap: "wrap",
           gap: 12
         }}>
@@ -257,14 +277,15 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
           <div
             className="markdown-body"
             style={{
-              background: darkMode ? "#161a26" : "#fff",
-              border: `1px solid ${darkMode ? COLORS.border.dark : "#e3e3e3"}`,
-              borderRadius: BORDER_RADIUS.md,
-              boxShadow: "0 4px 18px rgba(0,0,0,0.08)",
-              maxWidth: 860,
+              // 移动端完全去掉文章框（背景/边框/阴影），正文边距与 insight card 一致
+              background: isMobile ? "transparent" : (darkMode ? "#161a26" : "#fff"),
+              border: isMobile ? "none" : `1px solid ${darkMode ? COLORS.border.dark : "#e3e3e3"}`,
+              borderRadius: isMobile ? 0 : BORDER_RADIUS.md,
+              boxShadow: isMobile ? "none" : "0 4px 18px rgba(0,0,0,0.08)",
+              maxWidth: isMobile ? "none" : 860,
               margin: "0 auto",
-              // Word 标准页边距：上下 2.54cm ≈ 96px，左右 3.17cm ≈ 120px
-              padding: "96px 120px",
+              // Word 标准页边距：上下 2.54cm ≈ 96px，左右 3.17cm ≈ 120px（仅 Web 端）
+              padding: isMobile ? "12px 0 0" : "96px 120px",
               fontSize: FONT_SIZES.base,
               lineHeight: 1.7,
               color: darkMode ? "#e8e8e8" : COLORS.text.primary
@@ -273,6 +294,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
           />
         )}
         <style>{MARKDOWN_CSS}</style>
+        {isMobile && <style>{MOBILE_REPORT_CSS}</style>}
       </div>
     );
   }
