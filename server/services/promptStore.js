@@ -6,7 +6,7 @@ import db from "../db.js";
 // 因此模板正文里作为「报告占位符」的字面 {{date}}/{{insights}} 等不会被误伤。
 export const DEFAULT_PROMPTS = {
   insight_extraction: {
-    description: "爬取后洞察提取：标题/摘要/关键词/监控目的/业务分类/中国相关性",
+    description: "爬取后洞察提取：标题/摘要/关键词/行业动态筛查/业务分类/中国相关性",
     content: `你是一名能源行业分析师。请阅读以下文章并提取结构化洞察。
 
 Title: {{title}}
@@ -17,15 +17,11 @@ CRITICAL RULES:
 0. SINGLE FOCUS: 如果原文包含多条独立新闻或事件，只提取最主要、篇幅最大的那一条。标题、摘要和关键字都只围绕这一条核心信息，忽略其他次要内容。
 1. title: 只概括一条核心事件，用最精简的中文（10-20字）概括核心事件。剔除来源名、日期、作者名、文学修饰词、废话词，标准格式严格参考：主体+发生了什么或关键结果是什么。标题必须包含下列主体关键词列表中、与事件主体所属类别对应的一个关键词
 {{subject_keywords}}
+如果 is_general_industry_overview 为 true（事件主体是行业整体/宏观层面），标题必须以行业主体为主语（如"中国核电"、"LNG"、"钠离子电池行业"），并包含行业主体（industry）列表中的关键词，以便在卡片中高亮行业关键词。
 如果核心事件的主体不属于上述任何一类关键词，必须返回空数组 []，该文章将被丢弃。（若 {{subject_keywords}} 为"未配置"，则跳过本条检查。）
 2. summary: 清理所有噪音（作者名、来源署名、日期、填充短语、广告、无关上下文），用中文写一个信息密集的摘要，最多150字，每个字都要携带信息。
 3. keywords: 恰好3个字符串，仅限实体名称：公司名称、技术名称、政策名称、事件名称。必须是具体可搜索的关键词，不要宽泛概念，不要带数量的短语（如"50MW光伏"），不要无意义的单位或指标词（如"出货量"、"装机量"）。示例：宁德时代、钠离子电池、136号文、电价改革、中石化、CCUS。
-4. purposes: 请仅根据标题和摘要的内容判断该文章属于哪一种监控类型（只能选一个）。必须严格符合以下定义：
-   - competitor: 主体是具体的公司/企业，涉及其投资、收购、合作、签约、合资、并购、新品发布、高管变动等竞争动态
-   - policy: 涉及政策、规划、通知、批复、标准、方案、意见等的发布或解读
-   - tech: 涉及技术突破、创新、研发、专利、量产、示范应用等技术进展
-   - industry: 主体是行业整体或宏观层面（如全国/区域的装机容量、产量、消费量、市场规模、行业统计、趋势数据），不针对某一家具体企业
-   分类原则：事件主体是具体公司的归入 competitor；主体是行业整体（如"中国核电装机"、"全国天然气产量"）的归入 industry。每篇文章只能有一个purpose, purposes 必须与标题中命中的主体关键词类别一致：如果文章内容不符合以上任何一类，返回空数组 []，该文章将被丢弃。
+4. is_general_industry_overview: 判断该新闻的核心主体是"特定公司/机构的具体动作"（false）还是"行业整体的通用动态"（true）。行业整体动态指不以某家具体公司为主体、反映行业/市场/宏观层面的情况（如"中国核电在建规模""全国天然气产量""行业出货量统计"等）。此字段用于区分竞争监控与行业动态监控：针对具体公司的动作保持竞争监控，通用行业动态归入行业监控。
 5. categories: 从以下两类分类中选择最相关的1-3个：
    a) 业务方向分类：从 {{category_list}} 中选择（这是用户在“配置-内容过滤-行业初筛”中设置的业务方向关键词列表）；
    b) 主体分类：中央部委、地方政府、国有企业、外国公司、私营企业、研究机构。
@@ -38,8 +34,8 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
 - title: string
 - summary: string (max 150 Chinese characters)
 - keywords: array of exactly 3 strings
-- purposes: array of strings (exactly ONE of competitor, policy, tech, industry, or empty [])
 - categories: array of strings
+- is_general_industry_overview: boolean
 - china_relevance: boolean`
   },
   screen_cards: {

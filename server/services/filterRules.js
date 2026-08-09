@@ -167,6 +167,41 @@ export function titleContainsSubjectKeyword(title, keywords) {
   return keywords.some(k => text.includes(String(k).toLowerCase()));
 }
 
+/**
+ * 监控类型单选优先级：竞争 > 技术 > 政策 > 行业。
+ * 当标题同时命中多类主体关键词时，按此顺序取第一个。
+ */
+export const PURPOSE_PRIORITY = ["competitor", "tech", "policy", "industry"];
+
+/**
+ * 根据标题命中的主体关键词类别判定监控类型（确定性规则，不依赖 LLM）。
+ * 返回按 PURPOSE_PRIORITY 排序的命中列表（通常只取 [0] 单选）。
+ * 标题未命中任何类别的关键词 → 空数组（调用方据此淘汰该文）。
+ */
+export function resolvePurposeFromTitle(title, subjectKeywordsByPurpose) {
+  if (!subjectKeywordsByPurpose) return [];
+  return PURPOSE_PRIORITY.filter(p =>
+    titleContainsSubjectKeyword(title, subjectKeywordsByPurpose[p] || [])
+  );
+}
+
+/**
+ * 最终监控类型（单选）：
+ * 1. 主体关键词判定（确定性）：标题命中哪类主体词 → 该类别（竞争>技术>政策>行业）；
+ * 2. LLM 筛查（对所有初判生效）：若 LLM 确认该文是"行业整体的通用动态"
+ *    （isIndustryOverview=true，如"中国核电装机""LNG销量"这类不以某家企业为主体的
+ *    行业/宏观情况），且标题含行业主体关键词（保证卡片可高亮行业词），则调整为 industry；
+ * 3. 标题零命中 → 空数组（post-filter 据此淘汰）。
+ */
+export function resolveMatchedPurposes({ title, subjectKeywordsByPurpose, isIndustryOverview = false }) {
+  const base = resolvePurposeFromTitle(title, subjectKeywordsByPurpose)[0];
+  if (!base) return [];
+  if (isIndustryOverview === true && titleContainsSubjectKeyword(title, subjectKeywordsByPurpose?.industry || [])) {
+    return ["industry"];
+  }
+  return [base];
+}
+
 // ============================================================================
 // Legacy composite-filter helpers (kept for backward compatibility with tests
 // and older callers). These operate on rule objects with must_include /

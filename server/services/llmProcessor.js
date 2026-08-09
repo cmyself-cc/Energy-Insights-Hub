@@ -200,6 +200,9 @@ export async function processInsight(item, _language = "en", _filterContext = nu
       keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 3) : [],
       categories: Array.isArray(parsed.categories) ? parsed.categories : [],
       purposes: Array.isArray(parsed.purposes) ? parsed.purposes : [],
+      // LLM 仅承担 competitor→industry 的筛查：该文是"针对特定公司的动作"
+      // （false）还是"行业整体的通用动态"（true，应归入行业监控）
+      isIndustryOverview: parsed.is_general_industry_overview === true,
       chinaRelevance: parsed.china_relevance === true
     };
   } catch (e) {

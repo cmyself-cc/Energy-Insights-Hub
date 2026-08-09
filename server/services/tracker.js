@@ -3,8 +3,9 @@ import db from "../db.js";
 import { fetchArticles } from "../crawlers/index.js";
 import { processInsight, loadSemanticConfig } from "./llmProcessor.js";
 import { loadActiveCategories, matchesEnabledCategory } from "./businessCategories.js";
-import { loadFilterRules, groupRulesByPurpose, collectSubjectKeywordsByPurpose, allSubjectKeywords, titleContainsSubjectKeyword, PURPOSES } from "./filterRules.js";
+import { loadFilterRules, groupRulesByPurpose, collectSubjectKeywordsByPurpose, allSubjectKeywords, titleContainsSubjectKeyword, resolveMatchedPurposes } from "./filterRules.js";
 import { loadSettings, buildScheduleCron, filterSourcesByType } from "../lib/trackerSettings.js";
+import { buildPurposeGroups } from "../lib/purposeGroups.js";
 import { applyPreFilter, applyPostFilter } from "./trackerRules.js";
 import { applyKeywordGate, applyIndustryFilter, loadIndustryKeywordsWithAliases } from "./keywordGate.js";
 import { deduplicateItems } from "./dedup.js";
@@ -180,6 +181,7 @@ export async function runTracker(runId = null) {
     const activeCategories = loadActiveCategories();
 
     const allSources = db.prepare("SELECT * FROM sources WHERE active = 1").all();
+    const sourceById = new Map(allSources.map(s => [s.id, s]));
     const sources = filterSourcesByType(allSources, settings.enabledSourceTypes);
 
   // Check LLM API key before processing
@@ -352,16 +354,8 @@ export async function runTracker(runId = null) {
     setPhase(runId, "filtering", 50);
 
     // Group items by source's purpose combination for per-source purpose rules
-    const purposeGroups = new Map();
-    for (const item of candidates) {
-      const src = item.source;
-      const purposes = (src.purpose || "").split(",").map(s => s.trim()).filter(Boolean);
-      const key = purposes.sort().join(",") || "__none__";
-      if (!purposeGroups.has(key)) {
-        purposeGroups.set(key, { purposes, items: [] });
-      }
-      purposeGroups.get(key).items.push(item);
-    }
+    // （用 sourceId 反查源对象，item.source 已被 crawler 覆盖成展示名）
+    const purposeGroups = buildPurposeGroups(candidates, sourceById);
 
     const gated = [];
     for (const [key, group] of purposeGroups) {
@@ -471,17 +465,16 @@ export async function runTracker(runId = null) {
 
     // Derive fields for all processed items
     for (const row of allProcessed) {
-      // Prefer LLM-decided purposes; fall back to keyword-gate purposes if LLM returned none
-      const llmPurposes = Array.isArray(row.purposes) ? row.purposes : [];
-      row.matchedPurposes = llmPurposes.length > 0 ? llmPurposes : (row.matchedPurposes || ["competitor"]);
-      // Purposes must correspond to subject keywords actually present in the
-      // title (竞争→公司主体、政策→政策主体、技术→技术主体、行业→行业主体).
-      // Purposes without a matching keyword in the title are removed; items
-      // left with no purpose are dropped by the post-filter below.
-      // 每篇文章只保留一个 purpose（对齐后的第一个）。
-      row.matchedPurposes = row.matchedPurposes.filter(p =>
-        PURPOSES.includes(p) && titleContainsSubjectKeyword(row.title, subjectKeywordsByPurpose[p] || [])
-      ).slice(0, 1);
+      // 监控类型（单选）判定：唯一事实来源 = 标题命中的主体关键词类别
+      // （竞争>技术>政策>行业，确定性规则）；LLM 做行业动态筛查——
+      // 确认内容为"行业整体动态"（isIndustryOverview=true）且标题含行业主体词时，
+      // 无论初判是什么统一归入 industry。
+      // 标题未命中任何类别主体关键词 → matchedPurposes 为空 → post-filter 淘汰。
+      row.matchedPurposes = resolveMatchedPurposes({
+        title: row.title,
+        subjectKeywordsByPurpose,
+        isIndustryOverview: row.isIndustryOverview === true
+      });
       const derived = deriveFields(row, row.source);
       Object.assign(row, derived);
     }
@@ -494,7 +487,7 @@ export async function runTracker(runId = null) {
       .filter(insight => {
         if (!classificationEnabled) return true;
         if (insight.llmFailed) return false; // Filter out LLM-failed articles
-        if (!insight.matchedPurposes || insight.matchedPurposes.length === 0) return false; // LLM did not assign a purpose
+        if (!insight.matchedPurposes || insight.matchedPurposes.length === 0) return false; // 标题未命中任何主体关键词
         if (insight.chinaRelevance === false) return false; // Drop non-China content
         if (!titleContainsSubjectKeyword(insight.title, subjectKeywords)) {
           console.log(`[tracker] DROPPED (title missing subject keyword): ${insight.title}`);
