@@ -200,9 +200,9 @@ export async function processInsight(item, _language = "en", _filterContext = nu
       keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 3) : [],
       categories: Array.isArray(parsed.categories) ? parsed.categories : [],
       purposes: Array.isArray(parsed.purposes) ? parsed.purposes : [],
-      // LLM 仅承担 competitor→industry 的筛查：该文是"针对特定公司的动作"
-      // （false）还是"行业整体的通用动态"（true，应归入行业监控）
-      isIndustryOverview: parsed.is_general_industry_overview === true,
+      // LLM 判定事件性质（company_action/policy_action/tech_milestone/industry_overview），
+      // 由 tracker 映射为监控类型。空字符串 = LLM 未判出（回退主体关键词判定）。
+      eventKind: typeof parsed.event_kind === "string" ? parsed.event_kind : "",
       chinaRelevance: parsed.china_relevance === true
     };
   } catch (e) {

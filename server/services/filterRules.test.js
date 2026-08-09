@@ -106,19 +106,20 @@ describe("resolvePurposeFromTitle", () => {
     industry: ["核电", "电池", "光伏发电"]
   };
 
-  it("标题命中单一类别 → 返回该 purpose", () => {
+  it("标题命中单一类别 → 返回该 purpose（industry 不参与主体词判定）", () => {
     assert.deepStrictEqual(resolvePurposeFromTitle("宁德时代发布新品", subjects), ["competitor"]);
-    assert.deepStrictEqual(resolvePurposeFromTitle("中国核电装机全球第一", subjects), ["industry"]);
+    // industry 已不靠主体词判定（由 LLM event_kind=industry_overview 负责）
+    assert.deepStrictEqual(resolvePurposeFromTitle("中国核电装机全球第一", subjects), []);
   });
 
-  it("标题命中多类 → 有序返回，[0] 即 竞争>技术>政策>行业 单选", () => {
+  it("标题命中多类 → 有序返回，[0] 即 竞争>技术>政策 单选", () => {
     // 宁德时代(competitor) + 钠离子电池(tech) + 电池(industry) → [0]=competitor
     const r1 = resolvePurposeFromTitle("宁德时代钠离子电池量产", subjects);
-    assert.deepStrictEqual(r1, ["competitor", "tech", "industry"]);
+    assert.deepStrictEqual(r1, ["competitor", "tech"]);
     assert.strictEqual(r1[0], "competitor");
     // 上海(policy) + 光伏发电(industry) → [0]=policy
     const r2 = resolvePurposeFromTitle("上海光伏发电规划发布", subjects);
-    assert.deepStrictEqual(r2, ["policy", "industry"]);
+    assert.deepStrictEqual(r2, ["policy"]);
     assert.strictEqual(r2[0], "policy");
   });
 
@@ -126,55 +127,71 @@ describe("resolvePurposeFromTitle", () => {
     assert.deepStrictEqual(resolvePurposeFromTitle("天气晴朗适合出行", subjects), []);
   });
 
-  it("PURPOSE_PRIORITY 顺序固定为 竞争>技术>政策>行业", () => {
-    assert.deepStrictEqual(PURPOSE_PRIORITY, ["competitor", "tech", "policy", "industry"]);
+  it("PURPOSE_PRIORITY 顺序固定为 竞争>技术>政策", () => {
+    assert.deepStrictEqual(PURPOSE_PRIORITY, ["competitor", "tech", "policy"]);
   });
 });
 
 describe("resolveMatchedPurposes", () => {
   const subjects = {
-    competitor: ["解放汽车", "中国重汽"],
-    tech: ["钠离子电池"],
-    policy: ["工信部"],
-    industry: ["核电", "电池"]
+    competitor: ["解放汽车", "中国重汽", "一汽解放", "宁德时代"],
+    tech: ["钠离子电池", "共享储能", "漂浮式风机"],
+    policy: ["工信部", "国家能源局", "宁夏"],
+    industry: ["核电", "电池", "储能", "风电"]
   };
 
-  it("LLM 确认行业整体动态且标题含行业主体词 → 调整为 industry（所有初判生效）", () => {
-    // competitor 初判（解放汽车），标题含行业词"核电"，LLM 确认行业整体 → industry
+  it("EPC招标 → policy_action → policy", () => {
     assert.deepStrictEqual(
-      resolveMatchedPurposes({ title: "解放汽车领衔核电装机创新高", subjectKeywordsByPurpose: subjects, isIndustryOverview: true }),
-      ["industry"]
-    );
-    // tech 初判（钠离子电池），标题含行业词"电池"，LLM 确认行业整体 → industry
-    assert.deepStrictEqual(
-      resolveMatchedPurposes({ title: "钠离子电池行业出货量创新高", subjectKeywordsByPurpose: subjects, isIndustryOverview: true }),
-      ["industry"]
-    );
-    // policy 初判（工信部），标题含行业词"电池"，LLM 确认行业整体 → industry
-    assert.deepStrictEqual(
-      resolveMatchedPurposes({ title: "工信部公布电池行业统计数据", subjectKeywordsByPurpose: subjects, isIndustryOverview: true }),
-      ["industry"]
+      resolveMatchedPurposes({ title: "宁夏固原1.4GWh共享储能电站EPC招标", subjectKeywordsByPurpose: subjects, eventKind: "policy_action" }),
+      ["policy"]
     );
   });
 
-  it("LLM 确认行业整体但标题不含行业主体词 → 保持初判（避免无法高亮行业关键词）", () => {
-    // 标题只有"解放汽车"（competitor 词），无行业词 → 即使 LLM 说行业整体也保持 competitor
+  it("部署整治 → policy_action → policy", () => {
     assert.deepStrictEqual(
-      resolveMatchedPurposes({ title: "解放汽车销量创纪录", subjectKeywordsByPurpose: subjects, isIndustryOverview: true }),
+      resolveMatchedPurposes({ title: "国家能源局部署新型储能安全专项整治", subjectKeywordsByPurpose: subjects, eventKind: "policy_action" }),
+      ["policy"]
+    );
+  });
+
+  it("首座投运 → tech_milestone → tech（标题含行业词也可高亮）", () => {
+    assert.deepStrictEqual(
+      resolveMatchedPurposes({ title: "全球首座16兆瓦张力腿浮式风电平台投运", subjectKeywordsByPurpose: subjects, eventKind: "tech_milestone" }),
+      ["tech"]
+    );
+  });
+
+  it("企业推新车 → company_action → competitor", () => {
+    assert.deepStrictEqual(
+      resolveMatchedPurposes({ title: "一汽解放推出钠离子电池换电牵引车", subjectKeywordsByPurpose: subjects, eventKind: "company_action" }),
       ["competitor"]
     );
   });
 
-  it("LLM 确认针对企业动作 → 保持初判", () => {
+  it("行业统计 → industry_overview → industry（标题须含行业词）", () => {
     assert.deepStrictEqual(
-      resolveMatchedPurposes({ title: "解放汽车发布新重卡", subjectKeywordsByPurpose: subjects, isIndustryOverview: false }),
+      resolveMatchedPurposes({ title: "中国核电在建规模连续19年全球第一", subjectKeywordsByPurpose: subjects, eventKind: "industry_overview" }),
+      ["industry"]
+    );
+  });
+
+  it("industry_overview 但标题无行业词 → 淘汰（无法高亮/筛选）", () => {
+    assert.deepStrictEqual(
+      resolveMatchedPurposes({ title: "某企业发布最新数据", subjectKeywordsByPurpose: subjects, eventKind: "industry_overview" }),
+      []
+    );
+  });
+
+  it("LLM 未判出 eventKind → 回退主体词判定（确定性兜底）", () => {
+    assert.deepStrictEqual(
+      resolveMatchedPurposes({ title: "宁德时代发布新品", subjectKeywordsByPurpose: subjects, eventKind: "" }),
       ["competitor"]
     );
   });
 
-  it("标题无主体关键词 → 空数组（淘汰）", () => {
+  it("标题无任何主体关键词 → 空数组（淘汰）", () => {
     assert.deepStrictEqual(
-      resolveMatchedPurposes({ title: "无关内容", subjectKeywordsByPurpose: subjects, isIndustryOverview: false }),
+      resolveMatchedPurposes({ title: "天气晴朗适合出行", subjectKeywordsByPurpose: subjects, eventKind: "tech_milestone" }),
       []
     );
   });

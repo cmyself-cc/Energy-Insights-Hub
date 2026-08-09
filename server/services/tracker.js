@@ -465,15 +465,14 @@ export async function runTracker(runId = null) {
 
     // Derive fields for all processed items
     for (const row of allProcessed) {
-      // 监控类型（单选）判定：唯一事实来源 = 标题命中的主体关键词类别
-      // （竞争>技术>政策>行业，确定性规则）；LLM 做行业动态筛查——
-      // 确认内容为"行业整体动态"（isIndustryOverview=true）且标题含行业主体词时，
-      // 无论初判是什么统一归入 industry。
-      // 标题未命中任何类别主体关键词 → matchedPurposes 为空 → post-filter 淘汰。
+      // 监控类型（单选）判定：LLM 判定事件性质（event_kind）→ 映射 purpose
+      // （企业动作→竞争、政策/招标→政策、首座/突破→技术、行业统计→行业）。
+      // industry 卡须标题含行业主体词（可高亮/可筛选）；其余类型须含任一
+      // 类别主体词；LLM 未判出时回退到标题主体关键词判定。
       row.matchedPurposes = resolveMatchedPurposes({
         title: row.title,
         subjectKeywordsByPurpose,
-        isIndustryOverview: row.isIndustryOverview === true
+        eventKind: row.eventKind || ""
       });
       const derived = deriveFields(row, row.source);
       Object.assign(row, derived);

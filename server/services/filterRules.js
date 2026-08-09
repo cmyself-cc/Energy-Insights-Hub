@@ -168,15 +168,16 @@ export function titleContainsSubjectKeyword(title, keywords) {
 }
 
 /**
- * 监控类型单选优先级：竞争 > 技术 > 政策 > 行业。
- * 当标题同时命中多类主体关键词时，按此顺序取第一个。
+ * 监控类型主体词判定优先级：竞争 > 技术 > 政策。
+ * industry 不参与主体词判定（由 LLM event_kind=industry_overview 负责，
+ * 行业词仅作为 industry 卡的校验/高亮约束）。
  */
-export const PURPOSE_PRIORITY = ["competitor", "tech", "policy", "industry"];
+export const PURPOSE_PRIORITY = ["competitor", "tech", "policy"];
 
 /**
- * 根据标题命中的主体关键词类别判定监控类型（确定性规则，不依赖 LLM）。
- * 返回按 PURPOSE_PRIORITY 排序的命中列表（通常只取 [0] 单选）。
- * 标题未命中任何类别的关键词 → 空数组（调用方据此淘汰该文）。
+ * 根据标题命中的主体关键词类别判定监控类型（确定性规则，仅作 LLM 未判出
+ * event_kind 时的兜底）。返回按 PURPOSE_PRIORITY 排序的命中列表。
+ * 标题未命中任何类别的主体关键词 → 空数组（调用方据此淘汰该文）。
  */
 export function resolvePurposeFromTitle(title, subjectKeywordsByPurpose) {
   if (!subjectKeywordsByPurpose) return [];
@@ -186,20 +187,40 @@ export function resolvePurposeFromTitle(title, subjectKeywordsByPurpose) {
 }
 
 /**
- * 最终监控类型（单选）：
- * 1. 主体关键词判定（确定性）：标题命中哪类主体词 → 该类别（竞争>技术>政策>行业）；
- * 2. LLM 筛查（对所有初判生效）：若 LLM 确认该文是"行业整体的通用动态"
- *    （isIndustryOverview=true，如"中国核电装机""LNG销量"这类不以某家企业为主体的
- *    行业/宏观情况），且标题含行业主体关键词（保证卡片可高亮行业词），则调整为 industry；
- * 3. 标题零命中 → 空数组（post-filter 据此淘汰）。
+ * 事件性质（LLM 判定）→ 监控类型 映射。
+ * 事件性质是 purpose 的本质：招标/整治→政策、首座/突破→技术、
+ * 企业动作→竞争、行业统计→行业。
  */
-export function resolveMatchedPurposes({ title, subjectKeywordsByPurpose, isIndustryOverview = false }) {
-  const base = resolvePurposeFromTitle(title, subjectKeywordsByPurpose)[0];
-  if (!base) return [];
-  if (isIndustryOverview === true && titleContainsSubjectKeyword(title, subjectKeywordsByPurpose?.industry || [])) {
+export const EVENT_KIND_TO_PURPOSE = {
+  company_action: "competitor",
+  policy_action: "policy",
+  tech_milestone: "tech",
+  industry_overview: "industry"
+};
+
+/**
+ * 最终监控类型（单选）：
+ * 1. LLM 判定事件性质（event_kind）→ 映射为 purpose（事件性质说了算）；
+ * 2. 校验：
+ *    - industry_overview：标题必须含行业主体关键词（行业初筛词），保证
+ *      行业卡可高亮行业词、可被行业筛选命中，否则淘汰；
+ *    - 其他类型：标题须含任一类别的主体关键词（保证可高亮），否则淘汰；
+ * 3. LLM 未判出 event_kind（兜底）→ 回退到标题主体关键词判定
+ *    （竞争>技术>政策，确定性规则；industry 不参与兜底）。
+ */
+export function resolveMatchedPurposes({ title, subjectKeywordsByPurpose, eventKind = "" }) {
+  const purpose = EVENT_KIND_TO_PURPOSE[eventKind];
+  if (!purpose) {
+    return resolvePurposeFromTitle(title, subjectKeywordsByPurpose).slice(0, 1);
+  }
+  if (purpose === "industry") {
+    if (!titleContainsSubjectKeyword(title, subjectKeywordsByPurpose?.industry || [])) return [];
     return ["industry"];
   }
-  return [base];
+  const anySubjectHit = Object.values(subjectKeywordsByPurpose || {})
+    .some(list => titleContainsSubjectKeyword(title, list || []));
+  if (!anySubjectHit) return [];
+  return [purpose];
 }
 
 // ============================================================================

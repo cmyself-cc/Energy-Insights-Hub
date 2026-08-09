@@ -17,11 +17,15 @@ CRITICAL RULES:
 0. SINGLE FOCUS: 如果原文包含多条独立新闻或事件，只提取最主要、篇幅最大的那一条。标题、摘要和关键字都只围绕这一条核心信息，忽略其他次要内容。
 1. title: 只概括一条核心事件，用最精简的中文（10-20字）概括核心事件。剔除来源名、日期、作者名、文学修饰词、废话词，标准格式严格参考：主体+发生了什么或关键结果是什么。标题必须包含下列主体关键词列表中、与事件主体所属类别对应的一个关键词
 {{subject_keywords}}
-如果 is_general_industry_overview 为 true（事件主体是行业整体/宏观层面），标题必须以行业主体为主语（如"中国核电"、"LNG"、"钠离子电池行业"），并包含行业主体（industry）列表中的关键词，以便在卡片中高亮行业关键词。
+如果 event_kind 为 industry_overview（事件主体是行业整体/宏观层面），标题必须以行业主体为主语（如"中国核电"、"LNG"、"钠离子电池行业"），并包含行业主体（industry）列表中的关键词，以便在卡片中高亮行业关键词。
 如果核心事件的主体不属于上述任何一类关键词，必须返回空数组 []，该文章将被丢弃。（若 {{subject_keywords}} 为"未配置"，则跳过本条检查。）
 2. summary: 清理所有噪音（作者名、来源署名、日期、填充短语、广告、无关上下文），用中文写一个信息密集的摘要，最多150字，每个字都要携带信息。
 3. keywords: 恰好3个字符串，仅限实体名称：公司名称、技术名称、政策名称、事件名称。必须是具体可搜索的关键词，不要宽泛概念，不要带数量的短语（如"50MW光伏"），不要无意义的单位或指标词（如"出货量"、"装机量"）。示例：宁德时代、钠离子电池、136号文、电价改革、中石化、CCUS。
-4. is_general_industry_overview: 判断该新闻的核心主体是"特定公司/机构的具体动作"（false）还是"行业整体的通用动态"（true）。行业整体动态指不以某家具体公司为主体、反映行业/市场/宏观层面的情况（如"中国核电在建规模""全国天然气产量""行业出货量统计"等）。此字段用于区分竞争监控与行业动态监控：针对具体公司的动作保持竞争监控，通用行业动态归入行业监控。
+4. event_kind: 判断该新闻的核心事件属于哪一种类型（只能选一个），事件性质决定监控类型：
+   - company_action: 核心事件是某家具体公司/企业/机构自身的动作（发布新品、收购、合作、签约、投产、中标、成立公司、高管变动等）
+   - policy_action: 核心事件是政策/监管/政务行为（政策发布、规划、通知、部署、专项整治、标准制定、项目招标公告等），发布方通常是政府、监管机构或行业协会
+   - tech_milestone: 核心事件是技术/产品的里程碑进展（首台/首座/首个、技术突破、新专利、量产下线、示范应用、新平台投运等），强调"首次"或技术能力跃迁
+   - industry_overview: 核心事件是行业整体/宏观层面情况（全国或区域的装机、产量、销量、市场规模、统计报告、行业趋势数据），不以某家具体企业为主体
 5. categories: 从以下两类分类中选择最相关的1-3个：
    a) 业务方向分类：从 {{category_list}} 中选择（这是用户在“配置-内容过滤-行业初筛”中设置的业务方向关键词列表）；
    b) 主体分类：中央部委、地方政府、国有企业、外国公司、私营企业、研究机构。
@@ -35,7 +39,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
 - summary: string (max 150 Chinese characters)
 - keywords: array of exactly 3 strings
 - categories: array of strings
-- is_general_industry_overview: boolean
+- event_kind: one of company_action, policy_action, tech_milestone, industry_overview
 - china_relevance: boolean`
   },
   screen_cards: {
