@@ -3,7 +3,7 @@ import { loadSettings } from "../lib/trackerSettings.js";
 import { stripBoilerplate, truncateAtSentence } from "./utils.js";
 
 const DEFAULT_ARTICLE_LIMIT = 20;
-const DEFAULT_LOOKBACK_HOURS = 720; // default 30 days to match tracker lookback
+const DEFAULT_LOOKBACK_HOURS = 720; // 兜底默认；正常情况下由跟踪设置的时间窗口决定
 
 /**
  * 计算每个公众号的抓取上限。优先级：
@@ -17,6 +17,15 @@ export function resolvePerFeedLimit({ configPerFeedLimit, feedId, articleLimit, 
   if (feedId) return articleLimit;
   if (globalPerFeedLimit) return Math.max(1, Number(globalPerFeedLimit) || 1);
   return Math.max(1, Math.ceil(articleLimit / Math.max(1, feedCount)));
+}
+
+/**
+ * 计算微信源的时间窗口（小时）。与配置页-跟踪设置的 lookback_hours 保持一致；
+ * 缺失或非法时回退到默认值。
+ */
+export function resolveLookbackHours(settingsLookbackHours) {
+  const h = parseInt(settingsLookbackHours, 10);
+  return h > 0 ? h : DEFAULT_LOOKBACK_HOURS;
 }
 
 function parseConfig(source) {
@@ -246,7 +255,8 @@ export async function fetchArticles(source) {
   const sseUrl = source.url;
   const feedId = config.feedId || "";
   const articleLimit = config.articleLimit || DEFAULT_ARTICLE_LIMIT;
-  const lookbackHours = config.lookbackHours || DEFAULT_LOOKBACK_HOURS;
+  const settings = loadSettings();
+  const lookbackHours = resolveLookbackHours(settings.lookbackHours);
   if (!sseUrl) {
     throw new Error("wechat_mcp source requires an MCP SSE URL");
   }
@@ -282,7 +292,6 @@ export async function fetchArticles(source) {
 
     // 每个公众号抓取上限：优先 config.perFeedLimit，其次全局 tracker_settings，
     // 最后按 articleLimit 平均分配（resolvePerFeedLimit 统一决策）
-    const settings = loadSettings();
     const perFeedLimit = resolvePerFeedLimit({
       configPerFeedLimit: config.perFeedLimit,
       feedId,

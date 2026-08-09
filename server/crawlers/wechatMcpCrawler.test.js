@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { resolvePerFeedLimit } from "./wechatMcpCrawler.js";
+import { resolvePerFeedLimit, resolveLookbackHours } from "./wechatMcpCrawler.js";
 
 describe("resolvePerFeedLimit", () => {
   const base = { articleLimit: 20, feedCount: 25 };
@@ -49,5 +49,18 @@ describe("resolvePerFeedLimit", () => {
     const perFeed = resolvePerFeedLimit({ articleLimit: 20, feedCount: 25, globalPerFeedLimit: 15 });
     assert.strictEqual(perFeed, 15);
     assert.strictEqual(perFeed * 25, 375);
+  });
+});
+
+describe("resolveLookbackHours", () => {
+  it("与跟踪设置的时间窗口保持一致", () => {
+    assert.strictEqual(resolveLookbackHours(24), 24);
+    assert.strictEqual(resolveLookbackHours(168), 168);
+  });
+
+  it("设置缺失或非法时回退到默认值", () => {
+    assert.strictEqual(resolveLookbackHours(undefined), 720);
+    assert.strictEqual(resolveLookbackHours(0), 720);
+    assert.strictEqual(resolveLookbackHours(NaN), 720);
   });
 });
