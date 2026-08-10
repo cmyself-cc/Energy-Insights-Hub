@@ -168,7 +168,7 @@ export async function processInsight(item, _language = "en", _filterContext = nu
   });
 
   const messages = [{ role: "user", content: prompt }];
-  const { url, headers, body } = buildRequest(config, messages, 800, 0.5);
+  const { url, headers, body } = buildRequest(config, messages, 2000, 0.5);
 
   try {
     const response = await fetchWithTimeout(url, {
