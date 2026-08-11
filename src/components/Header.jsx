@@ -49,7 +49,8 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
             <button style={navTabStyle(activeTab === "reports")} onClick={() => onTabChange("reports")}>{zh ? "报告" : "Reports"}</button>
           </nav>
         )}
-        <TrackerProgress darkMode={darkMode} language={language} />
+        {/* 进度气泡：移动端悬浮在 header 上（不挤占"市场洞察/报告"导航），Web 端内联 */}
+        <TrackerProgress darkMode={darkMode} language={language} floating={isMobile} />
         <ReportProgress darkMode={darkMode} language={language} />
         {/* 当前生效模型（只读展示，配置在设置页全局配置）；移动端隐藏以节省空间 */}
         {!isMobile && (

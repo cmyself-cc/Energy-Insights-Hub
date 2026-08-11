@@ -23,6 +23,8 @@ export default function FilterBar({
   const t = i18n[language];
   const isMobile = useIsMobile();
   const [businessCategories, setBusinessCategories] = useState([]);
+  // 移动端：筛选/搜索区默认折叠，仅显示监控类型行，点箭头展开
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     backendApi.getIndustryCategories().then(res => {
@@ -95,15 +97,17 @@ export default function FilterBar({
       display: "flex",
       flexDirection: "column",
       gap: 12,
-      padding: "16px 20px",
+      padding: isMobile ? "10px 14px" : "16px 20px",
       background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
       borderRadius: BORDER_RADIUS.lg,
       border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-      marginBottom: 20
+      marginBottom: 20,
+      // 移动端：滚动时吸顶在 header 下方，方便随时切换监控类型
+      ...(isMobile ? { position: "sticky", top: 56, zIndex: 50, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" } : {})
     }}>
-      {/* 监控类型 - 可复选按钮 */}
+      {/* 监控 - 可复选按钮（移动端右侧带展开筛选的小箭头） */}
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexWrap: isMobile ? "nowrap" : "wrap" }}>
-        <span style={labelStyle}>{language === "zh" ? "监控类型" : "Monitor Type"}</span>
+        <span style={labelStyle}>{language === "zh" ? "监控" : "Monitor"}</span>
         {PURPOSE_OPTIONS[language].map(p => (
           <button
             key={p.key}
@@ -115,9 +119,31 @@ export default function FilterBar({
             {p.label}
           </button>
         ))}
+        {isMobile && (
+          <button
+            onClick={() => setSearchOpen(!searchOpen)}
+            title={language === "zh" ? (searchOpen ? "收起筛选" : "展开筛选") : (searchOpen ? "Collapse filters" : "Expand filters")}
+            style={{
+              marginLeft: "auto",
+              padding: "5px 10px",
+              borderRadius: BORDER_RADIUS.md,
+              border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+              background: "transparent",
+              color: darkMode ? "#aaa" : COLORS.text.secondary,
+              fontSize: FONT_SIZES.sm,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              transition: `all ${TRANSITIONS.fast}`
+            }}
+          >
+            {searchOpen ? "▾" : "▸"}
+          </button>
+        )}
       </div>
 
-      {/* 筛选下拉 + 搜索 */}
+      {/* 筛选下拉 + 搜索（移动端默认折叠，点箭头展开） */}
+      {(!isMobile || searchOpen) && (
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={labelStyle}>{language === "zh" ? "日期" : "Date"}</span>
@@ -203,6 +229,7 @@ export default function FilterBar({
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

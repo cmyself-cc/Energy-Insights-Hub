@@ -7,7 +7,7 @@ const PHASE_LABELS = {
   en: { fetching: "Fetching", filtering: "Filtering", processing: "Processing", storing: "Generating" }
 };
 
-export default function TrackerProgress({ darkMode, language }) {
+export default function TrackerProgress({ darkMode, language, floating = false }) {
   const [status, setStatus] = useState(null);
   const [visible, setVisible] = useState(false);
 
@@ -44,6 +44,8 @@ export default function TrackerProgress({ darkMode, language }) {
       display: "inline-flex",
       alignItems: "center",
       gap: 10,
+      // 悬浮模式（移动端）：fixed 定位在 header 下方右侧，不挤占导航/标题位置
+      ...(floating ? { position: "fixed", top: 64, right: 12, zIndex: 200 } : {}),
       background: darkMode ? "#1a1f2e" : "#fff",
       border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
       borderRadius: 20,
