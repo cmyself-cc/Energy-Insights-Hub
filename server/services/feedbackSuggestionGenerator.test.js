@@ -113,4 +113,38 @@ describe("feedbackSuggestionGenerator", () => {
     const body = JSON.parse(fetchWithTimeout.mock.calls[0][1].body);
     expect(body.thinking).toEqual({ type: "disabled" });
   });
+
+  it("passes reclassify from/to purpose to the LLM", async () => {
+    db.prepare("INSERT INTO user_feedback (action, from_purpose, to_purpose, title) VALUES (?, ?, ?, ?)")
+      .run("reclassify", "competitor", "tech", "某卡片标题");
+    mockLlmResponse({ content: "[]" });
+
+    await generateSuggestions();
+
+    const body = JSON.parse(fetchWithTimeout.mock.calls[0][1].body);
+    expect(body.messages[0].content).toContain("reclassify");
+    expect(body.messages[0].content).toContain("competitor");
+    expect(body.messages[0].content).toContain("tech");
+  });
+
+  it("skips suggestions that already exist as pending or accepted", async () => {
+    seedFeedback();
+    db.prepare("INSERT INTO feedback_rules_suggestions (type, name, purpose, status) VALUES (?, ?, ?, 'pending')")
+      .run("exclude_keyword", "测试关键词", "tech");
+    mockLlmResponse({
+      content: JSON.stringify([{
+        type: "exclude_keyword",
+        name: "测试关键词",
+        purpose: "tech",
+        reason: "重复建议",
+        evidence: ["某光伏企业动态"]
+      }])
+    });
+
+    const result = await generateSuggestions();
+    expect(result.generated).toBe(1);
+    const rows = db.prepare("SELECT * FROM feedback_rules_suggestions").all();
+    expect(rows).toHaveLength(1); // 去重：只保留原 pending 那条
+    expect(rows[0].name).toBe("测试关键词");
+  });
 });

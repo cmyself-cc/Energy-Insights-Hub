@@ -127,25 +127,34 @@ Return ONLY a valid JSON object (no markdown, no explanation) with exactly these
 用户澄清决定：{{resolutions}}`
   },
   feedback_suggestions: {
-    description: "反馈建议生成：从收藏/隐藏反馈中提炼过滤规则",
-    content: `你是一名能源情报平台的规则优化助手。请分析用户的收藏和隐藏反馈，提炼出可以用于过滤未来文章的关键词规则。
+    description: "反馈建议生成：从收藏/隐藏/归类反馈中提炼过滤规则",
+    content: `你是一名能源情报平台的规则优化助手。请分析用户的收藏、隐藏和归类反馈，提炼出可以用于过滤未来文章的关键词规则。
+
+反馈数据（每条含 action 与字段）：
+- action=bookmark：用户收藏，内容有价值
+- action=hide（reason=irrelevant/low_quality 等）：用户认为不相关/质量差
+- action=reclassify（fromPurpose/toPurpose）：用户把卡片的监控类别从 fromPurpose 重新归类到 toPurpose——这是最强的信号：
+  * 被归入 toPurpose 的内容特征 → 建议 toPurpose 的 include_keyword 或 enterprise
+  * 从 fromPurpose 被归走的内容特征 → 建议 fromPurpose 的 exclude_keyword（该类别不应再出现这类内容）
 
 反馈数据：
 {{samples_json}}
 
 要求：
-1. 只建议高频、明确、可执行的规则；
+1. 只建议高频、明确、可执行的规则（同类反馈至少出现 2 次才建议）；
 2. 每个建议必须附带理由和证据（引用具体标题或关键词）；
 3. 不要过度泛化：不要因一篇具体负面反馈就排除整个企业或主题；
-4. 区分三种规则类型：enterprise（企业）、include_keyword（包含关键词）、exclude_keyword（排除关键词）；
-5. 如果反馈中多次出现某个企业/关键词被收藏，建议加入 include_keyword 或 enterprise；
-6. 如果反馈中多次出现某个企业/关键词因"不相关"或"质量差"被隐藏，建议加入 exclude_keyword；
-7. 为每个建议指定最相关的 purpose：competitor、policy、tech，如果不确定则留空字符串。
+4. 区分三种规则类型：enterprise（企业/主体）、include_keyword（包含关键词）、exclude_keyword（排除关键词）；
+5. 如果反馈中多次出现某个企业/关键词被收藏或归入某类别，建议该类别 include_keyword 或 enterprise；
+6. 如果反馈中多次出现某个企业/关键词因"不相关"或"质量差"被隐藏，建议 exclude_keyword；
+7. 归类反馈优先于普通反馈：多个 reclassify 指向同一类别迁移时，优先给出对应建议；
+8. 为每个建议指定最相关的 purpose：competitor、policy、tech、industry，如果不确定则留空字符串；
+9. 不要重复建议已存在的规则（name+type+purpose 组合避免重复）。
 
 返回 ONLY a valid JSON array, no markdown, no explanation. 每个对象字段：
 - type: "enterprise" | "include_keyword" | "exclude_keyword"
 - name: string
-- purpose: "competitor" | "policy" | "tech" | ""
+- purpose: "competitor" | "policy" | "tech" | "industry" | ""
 - reason: string
 - evidence: string[]`
   },

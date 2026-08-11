@@ -43,6 +43,8 @@ export async function generateSuggestions() {
   const samples = rows.map(r => ({
     action: r.action,
     reason: r.reason,
+    fromPurpose: r.from_purpose,
+    toPurpose: r.to_purpose,
     title: r.title,
     summary: r.summary,
     keywords: safeJson(r.keywords),
@@ -85,9 +87,20 @@ export async function generateSuggestions() {
   const insert = db.prepare(
     "INSERT INTO feedback_rules_suggestions (type, name, purpose, reason, evidence) VALUES (?, ?, ?, ?, ?)"
   );
+  const existsSuggestion = db.prepare(
+    "SELECT 1 FROM feedback_rules_suggestions WHERE type = ? AND name = ? AND purpose = ? AND status IN ('pending', 'accepted') LIMIT 1"
+  );
+  const existsRule = db.prepare(
+    "SELECT 1 FROM filter_rules WHERE type = ? AND name = ? AND purpose = ? AND active = 1 LIMIT 1"
+  );
   const insertMany = db.transaction((list) => {
     for (const s of list) {
-      insert.run(s.type, s.name, s.purpose || "", s.reason || "", JSON.stringify(s.evidence || []));
+      if (!s || !s.type || !s.name) continue;
+      const purpose = s.purpose || "";
+      // 跳过已存在（pending/accepted 建议或已生效规则）
+      if (existsSuggestion.get(s.type, s.name, purpose)) continue;
+      if (existsRule.get(s.type, s.name, purpose)) continue;
+      insert.run(s.type, s.name, purpose, s.reason || "", JSON.stringify(s.evidence || []));
     }
   });
   insertMany(suggestions);
