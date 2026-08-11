@@ -60,6 +60,7 @@ export default function InsightCard({
   inCart,
   onBookmark,
   onHide,
+  onReclassify,
   onAiInterpret,
   onKeywordClick,
   subjectKeywords = []
@@ -127,6 +128,8 @@ export default function InsightCard({
           bookmarked={bookmarked}
           onBookmark={onBookmark}
           onHide={onHide}
+          onReclassify={onReclassify}
+          currentPurpose={Array.isArray(item.purposes) ? item.purposes[0] : "competitor"}
           onAiInterpret={() => onAiInterpret()}
         />
       </div>

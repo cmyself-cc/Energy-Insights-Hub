@@ -7,14 +7,17 @@ const router = Router();
 
 router.post("/", (req, res) => {
   try {
-    const { insightId, action, reason } = req.body;
-    if (!["bookmark", "hide"].includes(action)) {
-      return res.status(400).json({ error: "action must be 'bookmark' or 'hide'" });
+    const { insightId, action, reason, fromPurpose, toPurpose } = req.body;
+    if (!["bookmark", "hide", "reclassify"].includes(action)) {
+      return res.status(400).json({ error: "action must be 'bookmark', 'hide' or 'reclassify'" });
     }
     if (!insightId || !action) {
       return res.status(400).json({ error: "insightId and action are required" });
     }
-    const feedback = recordFeedback({ insightId, action, reason });
+    if (action === "reclassify" && (!fromPurpose || !toPurpose)) {
+      return res.status(400).json({ error: "fromPurpose and toPurpose are required for reclassify" });
+    }
+    const feedback = recordFeedback({ insightId, action, reason, fromPurpose, toPurpose });
     res.json({ data: feedback });
   } catch (e) {
     res.status(500).json({ error: e.message });

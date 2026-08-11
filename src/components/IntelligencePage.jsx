@@ -38,7 +38,7 @@ function SkeletonCard({ darkMode }) {
 export default function IntelligencePage(props) {
   const {
     darkMode, language, subTab, subjectKeywords, filters, onFilterChange, onSearch, loading, fetched, error,
-    insights, bookmarks, hidden, cart, onToggleCart, onToggleBookmark, onHide, onAiInterpret,
+    insights, bookmarks, hidden, cart, onToggleCart, onToggleBookmark, onHide, onReclassify, onAiInterpret,
     onClearCart, onGenerateReport, onKeywordClick
   } = props;
 
@@ -174,6 +174,7 @@ export default function IntelligencePage(props) {
                         inCart={inCart}
                         onBookmark={(e) => { e?.stopPropagation(); onToggleBookmark(item); }}
                         onHide={(reason) => { onHide(item, reason); }}
+                        onReclassify={(purpose) => { onReclassify(item, purpose); }}
                         onAiInterpret={(e) => { e?.stopPropagation(); onAiInterpret(item); }}
                         onKeywordClick={onKeywordClick}
                       />

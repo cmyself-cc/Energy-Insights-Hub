@@ -155,6 +155,27 @@ export default function App() {
     }
   };
 
+  // 归类：调整卡片的监控类别，立即更新前端展示，并记录反馈（自学习权重）
+  const purposeLabel = (p, lang) => {
+    const map = { competitor: "竞争", policy: "政策", tech: "技术", industry: "行业" };
+    return lang === "zh" ? (map[p] || p) : p;
+  };
+  const reclassifyItem = async (item, toPurpose) => {
+    try {
+      if (item.id) {
+        await backendApi.reclassifyInsight(item.id, toPurpose);
+      }
+      const applyPurpose = (arr) =>
+        arr.map(c => c.id === item.id ? { ...c, purposes: [toPurpose] } : c);
+      setInsights(prev => applyPurpose(prev));
+      setBookmarks(prev => applyPurpose(prev));
+      addToast(language === "zh" ? `已归为${purposeLabel(toPurpose, language)}` : `Reclassified to ${toPurpose}`, "success");
+    } catch (e) {
+      console.error("Reclassify failed:", e);
+      addToast(language === "zh" ? "归类失败" : "Reclassify failed", "error");
+    }
+  };
+
   const clearCart = () => {
     setCart([]);
     storage.saveCart([]);
@@ -352,6 +373,7 @@ export default function App() {
               onToggleCart={toggleCart}
               onToggleBookmark={toggleBookmark}
               onHide={hideItem}
+              onReclassify={reclassifyItem}
               onAiInterpret={openAiDrawer}
               onClearCart={clearCart}
               onGenerateReport={() => setShowReportModal(true)}

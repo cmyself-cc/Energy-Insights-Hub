@@ -1,5 +1,6 @@
 import { Router } from "express";
 import db from "../db.js";
+import { recordFeedback } from "../services/feedbackService.js";
 
 const router = Router();
 
@@ -180,6 +181,34 @@ router.post("/:id/unhide", (req, res) => {
   try {
     db.prepare("UPDATE insights SET hidden = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
     res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 归类：把卡片的监控类别调整到新 purpose，并记录到反馈（用于自学习权重）
+router.post("/:id/reclassify", (req, res) => {
+  try {
+    const { toPurpose } = req.body || {};
+    const valid = ["competitor", "policy", "tech", "industry"];
+    if (!valid.includes(toPurpose)) {
+      return res.status(400).json({ error: `toPurpose must be one of ${valid.join(", ")}` });
+    }
+    const row = db.prepare("SELECT * FROM insights WHERE id = ?").get(req.params.id);
+    if (!row) return res.status(404).json({ error: "Insight not found" });
+
+    const fromPurposes = safeJson(row.purpose);
+    const fromPurpose = Array.isArray(fromPurposes) && fromPurposes.length > 0 ? fromPurposes[0] : null;
+    if (fromPurpose === toPurpose) {
+      return res.json({ data: parseRow(row), unchanged: true });
+    }
+
+    db.prepare("UPDATE insights SET purpose = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(JSON.stringify([toPurpose]), req.params.id);
+    recordFeedback({ insightId: row.id, action: "reclassify", fromPurpose, toPurpose });
+
+    const updated = db.prepare("SELECT * FROM insights WHERE id = ?").get(req.params.id);
+    res.json({ data: parseRow(updated), fromPurpose });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

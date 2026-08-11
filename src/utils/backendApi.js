@@ -33,6 +33,10 @@ export const backendApi = {
   },
   hideInsight: (id) => request(`/insights/${id}/hide`, { method: "POST" }),
   unhideInsight: (id) => request(`/insights/${id}/unhide`, { method: "POST" }),
+  reclassifyInsight: (id, toPurpose) => request(`/insights/${id}/reclassify`, {
+    method: "POST",
+    body: JSON.stringify({ toPurpose })
+  }),
   recordFeedback: (insightId, action, reason) => request("/feedback", {
     method: "POST",
     body: JSON.stringify({ insightId, action, reason: reason || undefined })

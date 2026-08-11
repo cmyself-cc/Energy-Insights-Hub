@@ -507,9 +507,12 @@ export async function runTracker(runId = null) {
       });
     console.log(`[tracker] After post-filter: ${kept.length} insights`);
 
-    // Semantic weights
+    // Semantic weights（purpose 维度 + 全局）
     const semanticWeights = loadSemanticWeights();
-    const hasWeights = semanticWeights.boost.length > 0 || semanticWeights.suppress.length > 0;
+    const hasWeights =
+      Object.values(semanticWeights.byPurpose).some(w => w.boost.length > 0 || w.suppress.length > 0) ||
+      semanticWeights.global.boost.length > 0 ||
+      semanticWeights.global.suppress.length > 0;
     if (hasWeights) {
       const scored = applyUserFeedbackScore(kept, { weights: semanticWeights });
       console.log(`[tracker] ${scored.dropped.length} dropped by feedback weights, ${scored.kept.length} kept`);
