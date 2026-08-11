@@ -102,7 +102,7 @@ export default function InsightCard({
   const displaySource = item.source && String(item.source) !== String(item.sourceId) ? item.source : null;
 
   return (
-    <div style={{
+    <div className="insight-card-hover" style={{
       position: "relative",
       background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
       borderRadius: BORDER_RADIUS.xl,
@@ -264,7 +264,11 @@ export default function InsightCard({
         </div>
         )}
       </div>
-      <style>{`@keyframes fadeInOut { 0% { opacity:0; transform:translateY(5px) } 20% { opacity:1; transform:translateY(0) } 80% { opacity:1 } 100% { opacity:0 } }`}</style>
+      <style>{`
+        @keyframes fadeInOut { 0% { opacity:0; transform:translateY(5px) } 20% { opacity:1; transform:translateY(0) } 80% { opacity:1 } 100% { opacity:0 } }
+        .insight-card-hover { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+        .insight-card-hover:hover { transform: scale(1.02); box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 5; position: relative; }
+      `}</style>
     </div>
   );
 }

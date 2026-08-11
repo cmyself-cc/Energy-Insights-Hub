@@ -46,7 +46,15 @@ export default function IntelligencePage(props) {
   const sub = darkMode ? "#aaa" : COLORS.text.secondary;
 
   const displayItems = subTab === "bookmarks" ? bookmarks : insights;
-  const visibleItems = displayItems.filter(item => !hidden.includes(item.title));
+  // 按当前选中的监控类型兜底过滤（与后端保持一致；归类后不再匹配的卡片会实时从视图消失）
+  const activePurposes = filters.purposes || [];
+  const visibleItems = displayItems
+    .filter(item => !hidden.includes(item.title))
+    .filter(item => {
+      if (activePurposes.length === 0) return true;
+      const itemPurposes = Array.isArray(item.purposes) ? item.purposes : ["competitor"];
+      return itemPurposes.some(p => activePurposes.includes(p));
+    });
 
   // --- JS masonry：按容器宽度算列数，按估算高度贪心分列（跨浏览器稳定） ---
   const gridRef = useRef(null);
