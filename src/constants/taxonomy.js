@@ -21,10 +21,10 @@ export const PURPOSE_OPTIONS = {
     { key: "industry", label: "Industry Trends" }
   ],
   zh: [
-    { key: "competitor", label: "竞争监控" },
-    { key: "policy", label: "政策监控" },
-    { key: "tech", label: "技术动态" },
-    { key: "industry", label: "行业动态" }
+    { key: "competitor", label: "竞争" },
+    { key: "policy", label: "政策" },
+    { key: "tech", label: "技术" },
+    { key: "industry", label: "行业" }
   ]
 };
 

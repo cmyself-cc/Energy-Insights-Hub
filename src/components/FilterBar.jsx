@@ -56,13 +56,13 @@ export default function FilterBar({
   };
 
   const purposeBtnStyle = (active, dotColor) => ({
-    // 移动端去掉圆点后用对称紧凑 padding，三个按钮保持同一行
-    padding: isMobile ? "5px 10px" : "6px 14px 6px 10px",
+    // 移动端去掉圆点后用对称紧凑 padding，四个按钮尽量一行排列
+    padding: isMobile ? "5px 8px" : "6px 14px 6px 10px",
     borderRadius: BORDER_RADIUS.md,
     border: `1.5px solid ${active ? dotColor : darkMode ? COLORS.border.dark : COLORS.border.light}`,
     background: active ? dotColor : "transparent",
     color: active ? "#fff" : darkMode ? "#aaa" : COLORS.text.secondary,
-    fontSize: FONT_SIZES.sm,
+    fontSize: isMobile ? FONT_SIZES.xs : FONT_SIZES.sm,
     fontWeight: active ? 700 : 500,
     cursor: "pointer",
     transition: `all ${TRANSITIONS.fast}`,
@@ -102,8 +102,9 @@ export default function FilterBar({
       borderRadius: BORDER_RADIUS.lg,
       border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
       marginBottom: 20,
-      // 移动端：滚动时吸顶在 header 下方，方便随时切换监控类型
-      ...(isMobile ? { position: "sticky", top: 56, zIndex: 50, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" } : {})
+      // 移动端：滚动时吸顶（top:0 相对 main 滚动容器 → 紧贴 header 下方，
+      // 标题行滚走后 FilterBar 顶到顶部，不留中间空白）
+      ...(isMobile ? { position: "sticky", top: 0, zIndex: 50, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" } : {})
     }}>
       {/* 监控 - 可复选按钮（移动端右侧带展开筛选的小箭头） */}
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexWrap: isMobile ? "nowrap" : "wrap" }}>
