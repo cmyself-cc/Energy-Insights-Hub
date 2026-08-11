@@ -22,13 +22,24 @@ function setPhase(runId, phase, progress) {
 
 let isTrackerRunning = false;
 
-function hasRunningTrackerInDb() {
+function hasRunningTrackerInDb(excludeId = null) {
   // Only consider runs started within the last hour; older 'running' rows are stale
   // from previous crashes and should not block new runs.
+  // 用 datetime() 规范化比较（started_at 为 CURRENT_TIMESTAMP 格式、参数为 ISO 格式，
+  // 直接字符串比较在跨天时段会因 ' '(0x20) < 'T'(0x54) 误判）；排除自身（POST /run
+  // 预插入的 running 记录不应把当前 run 当成"另一个 run"）。
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const row = db
-    .prepare("SELECT id FROM tracker_runs WHERE status = 'running' AND started_at >= ? LIMIT 1")
-    .get(oneHourAgo);
+  const row = excludeId
+    ? db
+        .prepare(
+          "SELECT id FROM tracker_runs WHERE status = 'running' AND datetime(started_at) >= datetime(?) AND id != ? LIMIT 1",
+        )
+        .get(oneHourAgo, excludeId)
+    : db
+        .prepare(
+          "SELECT id FROM tracker_runs WHERE status = 'running' AND datetime(started_at) >= datetime(?) LIMIT 1",
+        )
+        .get(oneHourAgo);
   return !!row;
 }
 
@@ -159,7 +170,7 @@ async function processBatch(items, language, filterContext = null) {
 }
 
 export async function runTracker(runId = null) {
-  if (isTrackerRunning || hasRunningTrackerInDb()) {
+  if (isTrackerRunning || hasRunningTrackerInDb(runId)) {
     console.log("[tracker] Another tracker run is already in progress. Skipping.");
     if (runId) {
       db.prepare(
