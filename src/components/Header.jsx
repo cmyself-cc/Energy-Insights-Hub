@@ -32,10 +32,10 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
   }, []);
 
   return (
-    <header style={{ position: "sticky", top: 0, zIndex: 100, minHeight: 56, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: isMobile ? 6 : 0, padding: isMobile ? "8px 12px" : "0 24px", background: darkMode ? COLORS.background.cardDark : COLORS.background.card, borderBottom: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+    <header style={{ position: "sticky", top: 0, zIndex: 100, minHeight: 56, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: isMobile ? 6 : 0, padding: isMobile ? "8px 16px" : "0 28px", background: darkMode ? COLORS.background.cardDark : COLORS.background.card, borderBottom: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 16, minWidth: 0, flexShrink: isMobile ? 0 : 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 800, fontSize: FONT_SIZES.lg, color: darkMode ? "#fff" : COLORS.text.primary, minWidth: 0, flexShrink: isMobile ? 0 : 1 }}>
-          <img src="/logo.jpg" alt="logo" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+          <img src="/logo.jpg" alt="logo" style={{ width: isMobile ? 22 : 26, height: isMobile ? 22 : 26, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
           <span style={{ fontSize: isMobile ? FONT_SIZES.base : FONT_SIZES.xl, fontWeight: 700, whiteSpace: "nowrap" }}>混沌能源智库</span>
           {!isMobile && <span style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : "#999", fontWeight: 500, marginLeft: 4 }}>｜Energy Insights Hub</span>}
         </div>
