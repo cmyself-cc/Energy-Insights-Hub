@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import ApiConfig from "./components/ApiConfig";
 import InsightsGenerator from "./components/InsightsGenerator";
 import Header from "./components/Header";
@@ -38,7 +38,10 @@ export default function App() {
   const [reportTemplates, setReportTemplates] = useState([]);
   const [openReportId, setOpenReportId] = useState(null);
   const [apiConfig, setApiConfig] = useState(null);
-  const [language, setLanguage] = useState("en");
+  // 语言初始值按设备判断（手机端仅中文），避免 en→zh 切换触发重复 fetch/toast
+  const [language, setLanguage] = useState(() => (isMobileViewport() ? "zh" : "en"));
+  // 防重复 toast：记录上次成功 toast 的文案与时间
+  const lastToastRef = useRef({ key: "", ts: 0 });
   const isMobile = useIsMobile();
   const [toasts, setToasts] = useState([]);
   const [selectedArticle, setSelectedArticle] = useState(null);
@@ -227,14 +230,21 @@ export default function App() {
       setInsights(res.data || []);
       setFetched(true);
       const count = res.data?.length || 0;
-      const zh = storage.getLanguage() === "zh";
-      addToast(zh ? `成功获取 ${count} 条洞察` : `Fetched ${count} insights`, "success");
+      // 用当前 language（手机端统一中文），不用 storage（可能残留旧值）
+      const msg = language === "zh" ? `成功获取 ${count} 条洞察` : `Fetched ${count} insights`;
+      // 防重：同一结果 2s 内不重复弹（避免语言初始化等触发二次 fetch 时双 toast）
+      const now = Date.now();
+      const last = lastToastRef.current;
+      if (!(last && last.key === msg && now - last.ts < 2000)) {
+        addToast(msg, "success");
+        lastToastRef.current = { key: msg, ts: now };
+      }
     } catch (e) {
       setError(t.errors.fetchFailed + e.message);
       addToast(t.toasts.insightsFailed, "error");
     }
     setLoading(false);
-  }, [filters, t]);
+  }, [filters, t, language]);
 
   // Auto-fetch when filters change (debounced for query input)
   useEffect(() => {
