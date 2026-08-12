@@ -131,7 +131,7 @@ export default function FilterBar({
               border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
               background: "transparent",
               color: darkMode ? "#aaa" : COLORS.text.secondary,
-              fontSize: FONT_SIZES.lg,
+              fontSize: "24px",
               lineHeight: 1,
               cursor: "pointer",
               display: "flex",
