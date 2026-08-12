@@ -1,0 +1,14 @@
+{
+  "name": "混沌能源智库",
+  "short_name": "混沌能源智库",
+  "description": "能源行业市场情报洞察平台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#5DBDB6",
+  "icons": [
+    { "src": "/logo.jpg", "sizes": "192x192", "type": "image/jpeg" },
+    { "src": "/logo.jpg", "sizes": "512x512", "type": "image/jpeg" },
+    { "src": "/logo.jpg", "sizes": "691x691", "type": "image/jpeg" }
+  ]
+}
