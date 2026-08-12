@@ -126,12 +126,13 @@ export default function FilterBar({
             title={language === "zh" ? (searchOpen ? "收起筛选" : "展开筛选") : (searchOpen ? "Collapse filters" : "Expand filters")}
             style={{
               marginLeft: "auto",
-              padding: "5px 10px",
+              padding: "6px 14px",
               borderRadius: BORDER_RADIUS.md,
               border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
               background: "transparent",
               color: darkMode ? "#aaa" : COLORS.text.secondary,
-              fontSize: FONT_SIZES.sm,
+              fontSize: FONT_SIZES.lg,
+              lineHeight: 1,
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
