@@ -425,6 +425,26 @@ export default function App() {
               onViewReport={(report) => {
                 setNewsletter(report.content);
               }}
+              onGenerateDailyBriefing={() => {
+                // 获取当天的所有 insights
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
+                const todayInsights = insights.filter(item => {
+                  const itemDate = new Date(item.date || item.publishDate);
+                  return itemDate >= today && itemDate < tomorrow;
+                });
+
+                if (todayInsights.length === 0) {
+                  addToast(language === "zh" ? "今天暂无新的洞察" : "No insights today", "warning");
+                  return;
+                }
+
+                setCart(todayInsights);
+                setShowReportModal(true);
+              }}
             />
           )}
 

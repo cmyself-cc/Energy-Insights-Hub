@@ -32,7 +32,7 @@ function statusBadge(status, language) {
   return { text: "", color: "", bg: "" };
 }
 
-export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled, titleSlotEl }) {
+export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled, titleSlotEl, onViewReport, onGenerateDailyBriefing }) {
   const t = i18n[language];
   const isMobile = useIsMobile();
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
@@ -325,6 +325,19 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
             : `${language === "zh" ? "模板管理" : "Templates"} (${templates.length})`}
         </button>
       ))}
+      {onGenerateDailyBriefing && (
+        <button
+          onClick={onGenerateDailyBriefing}
+          style={{
+            padding: "6px 14px", borderRadius: 7, border: "none",
+            background: "transparent",
+            color: darkMode ? "#aaa" : COLORS.text.secondary,
+            fontWeight: 400, fontSize: FONT_SIZES.md, cursor: "pointer"
+          }}
+        >
+          {language === "zh" ? "每日简报" : "Daily Briefing"}
+        </button>
+      )}
     </div>,
     titleSlotEl
   );
@@ -456,6 +469,7 @@ function TemplateManager({ darkMode, language, templates, onChanged }) {
   const [form, setForm] = useState({ name: "", description: "", purpose: "", prompt: "", max_cards: 10, language: "zh" });
   const [editingId, setEditingId] = useState(null);
   const [message, setMessage] = useState(null);
+  const [showEditor, setShowEditor] = useState(false);
 
   const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
@@ -478,6 +492,19 @@ function TemplateManager({ darkMode, language, templates, onChanged }) {
   const startEdit = (t) => {
     setEditingId(t.id);
     setForm({ name: t.name, description: t.description || "", purpose: t.purpose || "", prompt: t.prompt, max_cards: t.max_cards, language: t.language || "zh" });
+    setShowEditor(true);
+  };
+
+  const startNew = () => {
+    setEditingId(null);
+    setForm({ name: "", description: "", purpose: "", prompt: "", max_cards: 10, language: "zh" });
+    setShowEditor(true);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({ name: "", description: "", purpose: "", prompt: "", max_cards: 10, language: "zh" });
+    setShowEditor(false);
   };
 
   const save = async () => {
@@ -489,6 +516,7 @@ function TemplateManager({ darkMode, language, templates, onChanged }) {
       }
       setEditingId(null);
       setForm({ name: "", description: "", purpose: "", prompt: "", max_cards: 10, language: "zh" });
+      setShowEditor(false);
       setMessage({ type: "success", text: zh ? "已保存" : "Saved" });
       onChanged();
     } catch (e) {
@@ -520,87 +548,101 @@ function TemplateManager({ darkMode, language, templates, onChanged }) {
         }}>{message.text}</div>
       )}
 
-      <div style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: "16px 20px", marginBottom: 20 }}>
-        <h3 style={{ margin: "0 0 4px", color: text }}>
-          {editingId ? (zh ? "编辑自定义模板" : "Edit custom template") : (zh ? "新建自定义模板" : "New custom template")}
-        </h3>
-        <p style={{ margin: "0 0 12px", fontSize: FONT_SIZES.sm, color: secondary }}>
-          {zh ? "提示词支持占位符：{{date}} {{language}} {{insights}} {{search_results}} {{resolutions}}" : "Prompt placeholders: {{date}} {{language}} {{insights}} {{search_results}} {{resolutions}}"}
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 200px" }}>
-              <label style={labelStyle}>{zh ? "名称" : "Name"}</label>
-              <input style={inputStyle} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+      {showEditor ? (
+        <div style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: "16px 20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, color: text }}>
+              {editingId ? (zh ? "编辑自定义模板" : "Edit custom template") : (zh ? "新建自定义模板" : "New custom template")}
+            </h3>
+            <button onClick={cancelEdit} style={{
+              padding: "6px 14px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${border}`,
+              background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
+            }}>{zh ? "返回列表" : "Back to list"}</button>
+          </div>
+          <p style={{ margin: "0 0 12px", fontSize: FONT_SIZES.sm, color: secondary }}>
+            {zh ? "提示词支持占位符：{{date}} {{language}} {{insights}} {{search_results}} {{resolutions}}" : "Prompt placeholders: {{date}} {{language}} {{insights}} {{search_results}} {{resolutions}}"}
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 200px" }}>
+                <label style={labelStyle}>{zh ? "名称" : "Name"}</label>
+                <input style={inputStyle} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div style={{ flex: "0 0 140px" }}>
+                <label style={labelStyle}>{zh ? "卡片上限" : "Max cards"}</label>
+                <input style={inputStyle} type="number" min={1} max={50} value={form.max_cards} onChange={e => setForm({ ...form, max_cards: Number(e.target.value) || 10 })} />
+              </div>
+              <div style={{ flex: "0 0 120px" }}>
+                <label style={labelStyle}>{zh ? "语言" : "Language"}</label>
+                <select style={inputStyle} value={form.language} onChange={e => setForm({ ...form, language: e.target.value })}>
+                  <option value="zh">中文</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
             </div>
-            <div style={{ flex: "0 0 140px" }}>
-              <label style={labelStyle}>{zh ? "卡片上限" : "Max cards"}</label>
-              <input style={inputStyle} type="number" min={1} max={50} value={form.max_cards} onChange={e => setForm({ ...form, max_cards: Number(e.target.value) || 10 })} />
+            <div>
+              <label style={labelStyle}>{zh ? "用途说明" : "Purpose"}</label>
+              <input style={inputStyle} value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} />
             </div>
-            <div style={{ flex: "0 0 120px" }}>
-              <label style={labelStyle}>{zh ? "语言" : "Language"}</label>
-              <select style={inputStyle} value={form.language} onChange={e => setForm({ ...form, language: e.target.value })}>
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </select>
+            <div>
+              <label style={labelStyle}>{zh ? "描述" : "Description"}</label>
+              <input style={inputStyle} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
             </div>
-          </div>
-          <div>
-            <label style={labelStyle}>{zh ? "用途说明" : "Purpose"}</label>
-            <input style={inputStyle} value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>{zh ? "描述" : "Description"}</label>
-            <input style={inputStyle} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>{zh ? "提示词" : "Prompt"}</label>
-            <textarea style={{ ...inputStyle, minHeight: 120, resize: "vertical", fontFamily: "monospace", fontSize: 13 }} value={form.prompt} onChange={e => setForm({ ...form, prompt: e.target.value })} />
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={save} style={{
-              padding: "8px 16px", borderRadius: BORDER_RADIUS.md, border: "none",
-              background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.sm, cursor: "pointer"
-            }}>{zh ? "保存模板" : "Save Template"}</button>
-            {editingId && (
-              <button onClick={() => { setEditingId(null); setForm({ name: "", description: "", purpose: "", prompt: "", max_cards: 10, language: "zh" }); }} style={{
+            <div>
+              <label style={labelStyle}>{zh ? "提示词" : "Prompt"}</label>
+              <textarea style={{ ...inputStyle, minHeight: 120, resize: "vertical", fontFamily: "monospace", fontSize: 13 }} value={form.prompt} onChange={e => setForm({ ...form, prompt: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={save} style={{
+                padding: "8px 16px", borderRadius: BORDER_RADIUS.md, border: "none",
+                background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.sm, cursor: "pointer"
+              }}>{zh ? "保存模板" : "Save Template"}</button>
+              <button onClick={cancelEdit} style={{
                 padding: "8px 16px", borderRadius: BORDER_RADIUS.md, border: `1px solid ${border}`,
                 background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
-              }}>{zh ? "取消编辑" : "Cancel"}</button>
-            )}
+              }}>{zh ? "取消" : "Cancel"}</button>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <button onClick={startNew} style={{
+            padding: "10px 20px", borderRadius: BORDER_RADIUS.md, border: "none",
+            background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.base, cursor: "pointer",
+            marginBottom: 20, fontWeight: 600
+          }}>{zh ? "+ 新建自定义模板" : "+ New custom template"}</button>
 
-      {templates.map(t => {
-        const isPublic = t.is_public === true;
-        return (
-          <div key={t.id} style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: "14px 18px", marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <div>
-                <span style={{ fontWeight: 700, color: text, fontSize: FONT_SIZES.base }}>{t.name}</span>
-                <span style={{ fontSize: 11, color: secondary, marginLeft: 8 }}>
-                  {isPublic ? (zh ? "公用" : "Public") : (zh ? "自定义" : "Custom")} · {zh ? `上限 ${t.max_cards} 张` : `max ${t.max_cards}`} · {t.language}
-                </span>
+          {templates.map(t => {
+            const isPublic = t.is_public === true;
+            return (
+              <div key={t.id} style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: "14px 18px", marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: text, fontSize: FONT_SIZES.base }}>{t.name}</span>
+                    <span style={{ fontSize: 11, color: secondary, marginLeft: 8 }}>
+                      {isPublic ? (zh ? "公用" : "Public") : (zh ? "自定义" : "Custom")} · {zh ? `上限 ${t.max_cards} 张` : `max ${t.max_cards}`} · {t.language}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => startEdit(t)} style={{
+                      padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: `1px solid ${border}`,
+                      background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
+                    }}>{zh ? "编辑" : "Edit"}</button>
+                    {!isPublic && (
+                      <button onClick={() => remove(t.id)} style={{
+                        padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: "1px solid #c00",
+                        background: "transparent", color: "#c00", fontSize: FONT_SIZES.sm, cursor: "pointer"
+                      }}>{zh ? "删除" : "Delete"}</button>
+                    )}
+                  </div>
+                </div>
+                {t.description && <div style={{ fontSize: FONT_SIZES.sm, color: secondary, marginTop: 4 }}>{t.description}</div>}
+                <div style={{ fontSize: 12, color: secondary, marginTop: 6, fontFamily: "monospace", whiteSpace: "pre-wrap", maxHeight: 90, overflow: "hidden" }}>{t.prompt.slice(0, 200)}{t.prompt.length > 200 ? "…" : ""}</div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => startEdit(t)} style={{
-                  padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: `1px solid ${border}`,
-                  background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
-                }}>{zh ? "编辑" : "Edit"}</button>
-                {!isPublic && (
-                  <button onClick={() => remove(t.id)} style={{
-                    padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: "1px solid #c00",
-                    background: "transparent", color: "#c00", fontSize: FONT_SIZES.sm, cursor: "pointer"
-                  }}>{zh ? "删除" : "Delete"}</button>
-                )}
-              </div>
-            </div>
-            {t.description && <div style={{ fontSize: FONT_SIZES.sm, color: secondary, marginTop: 4 }}>{t.description}</div>}
-            <div style={{ fontSize: 12, color: secondary, marginTop: 6, fontFamily: "monospace", whiteSpace: "pre-wrap", maxHeight: 90, overflow: "hidden" }}>{t.prompt.slice(0, 200)}{t.prompt.length > 200 ? "…" : ""}</div>
-          </div>
-        );
-      })}
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

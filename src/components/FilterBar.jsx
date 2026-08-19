@@ -140,7 +140,7 @@ export default function FilterBar({
             width: 8,
             height: 8,
             borderRadius: "50%",
-            border: "1.5px solid #666",
+            border: `1.5px solid ${isPurposeActive("all") ? "#fff" : "#666"}`,
             background: "transparent",
             marginRight: 4,
             verticalAlign: "middle"
