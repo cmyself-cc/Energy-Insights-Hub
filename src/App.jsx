@@ -224,7 +224,7 @@ export default function App() {
     try {
       const params = {
         page: append ? page + 1 : 1,
-        pageSize: 150,
+        pageSize: 100,
         search: filters.query || undefined,
         sourceType: filters.sourceType !== "all" ? filters.sourceType : undefined,
         businessCategory: filters.businessCategory !== "all" ? filters.businessCategory : undefined,

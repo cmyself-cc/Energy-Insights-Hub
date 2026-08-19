@@ -135,6 +135,16 @@ export default function FilterBar({
           onClick={() => togglePurpose("all")}
           style={purposeBtnStyle(isPurposeActive("all"), "#666")}
         >
+          {!isMobile && <span style={{
+            display: "inline-block",
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            border: "1.5px solid #666",
+            background: "transparent",
+            marginRight: 4,
+            verticalAlign: "middle"
+          }} />}
           {language === "zh" ? "全部" : "All"}
         </button>
         {isMobile && (
