@@ -46,8 +46,16 @@ export default function IntelligencePage(props) {
   const sub = darkMode ? "#aaa" : COLORS.text.secondary;
 
   const displayItems = subTab === "bookmarks" ? bookmarks : insights;
-  // 后端已经按监控类型过滤，这里只过滤隐藏的卡片
-  const visibleItems = displayItems.filter(item => !hidden.includes(item.title));
+  // 按当前选中的监控类型兜底过滤（与后端保持一致；归类后不再匹配的卡片会实时从视图消失）
+  const activePurposes = filters.purposes || [];
+  const visibleItems = displayItems
+    .filter(item => !hidden.includes(item.title))
+    .filter(item => {
+      // 如果没有选择任何purpose（即"全部"），显示所有
+      if (activePurposes.length === 0) return true;
+      const itemPurposes = Array.isArray(item.purposes) ? item.purposes : ["competitor"];
+      return itemPurposes.some(p => activePurposes.includes(p));
+    });
 
   // 无限滚动：监听滚动事件，接近底部时触发 loadMore
   useEffect(() => {

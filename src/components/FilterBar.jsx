@@ -85,15 +85,22 @@ export default function FilterBar({
   ));
 
   const togglePurpose = (purpose) => {
-    // 多选：点击已选中项取消选中，点击未选中项添加选中
-    const current = filters.purposes || [];
-    const newPurposes = current.includes(purpose)
-      ? current.filter(p => p !== purpose)
-      : [...current, purpose];
-    onChange({ ...filters, purposes: newPurposes });
+    // 单选逻辑：点击已选中项不取消，点击其他项直接切换
+    // "all"表示显示全部，purposes设为空数组
+    if (purpose === "all") {
+      onChange({ ...filters, purposes: [] });
+    } else {
+      if ((filters.purposes || []).includes(purpose)) return;
+      onChange({ ...filters, purposes: [purpose] });
+    }
   };
 
-  const isPurposeActive = (purpose) => (filters.purposes || []).includes(purpose);
+  const isPurposeActive = (purpose) => {
+    if (purpose === "all") {
+      return !filters.purposes || filters.purposes.length === 0;
+    }
+    return (filters.purposes || []).includes(purpose);
+  };
 
   return (
     <div style={{
@@ -109,7 +116,7 @@ export default function FilterBar({
       // 标题行滚走后 FilterBar 顶到顶部，不留中间空白）
       ...(isMobile ? { position: "sticky", top: 0, zIndex: 50, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" } : {})
     }}>
-      {/* 监控 - 可复选按钮（移动端右侧带展开筛选的小箭头） */}
+      {/* 监控 - 单选按钮（移动端右侧带展开筛选的小箭头） */}
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexWrap: isMobile ? "nowrap" : "wrap" }}>
         <span style={labelStyle}>{language === "zh" ? "监控" : "Monitor"}</span>
         {PURPOSE_OPTIONS[language].map(p => (
@@ -118,11 +125,18 @@ export default function FilterBar({
             onClick={() => togglePurpose(p.key)}
             style={purposeBtnStyle(isPurposeActive(p.key), PURPOSE_DOTS[p.key])}
           >
-            {/* 移动端去掉文字前的圆点，保证三个按钮同一行 */}
+            {/* 移动端去掉文字前的圆点，保证按钮同一行 */}
             {!isMobile && <span style={purposeDotStyle(isPurposeActive(p.key) ? "#fff" : PURPOSE_DOTS[p.key])} />}
             {p.label}
           </button>
         ))}
+        {/* 全部按钮 */}
+        <button
+          onClick={() => togglePurpose("all")}
+          style={purposeBtnStyle(isPurposeActive("all"), "#666")}
+        >
+          {language === "zh" ? "全部" : "All"}
+        </button>
         {isMobile && (
           <button
             onClick={() => setSearchOpen(!searchOpen)}
