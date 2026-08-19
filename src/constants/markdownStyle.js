@@ -12,7 +12,7 @@ export const MARKDOWN_CSS = `
 .markdown-body > p:first-child + blockquote p { margin: 0; line-height: 2.4; }
 .markdown-body p { margin: 8px 0; line-height: 1.8; text-indent: 2em; }
 .markdown-body ul { margin: 8px 0; padding-left: 2em; }
-.markdown-body ol { margin: 8px 0; padding-left: 0; list-style-position: inside; }
+.markdown-body ol { margin: 8px 0; padding-left: 2em; list-style-position: outside; }
 .markdown-body li { margin: 4px 0; line-height: 1.8; }
 .markdown-body li p { text-indent: 0; }
 .markdown-body a { color: #1a6b3c; text-decoration: none; font-weight: 500; }

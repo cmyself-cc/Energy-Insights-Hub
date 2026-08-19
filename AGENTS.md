@@ -124,9 +124,37 @@ npm run server
 
 ## Deployment
 
+### 环境架构（重要）
+
+本项目有两个完全独立的环境，**使用不同的数据库**：
+
+#### 测试环境（本地开发）
+- **地址：** http://192.168.5.245:5177
+- **启动方式：** `npm run dev`（同时启动前端和后端）
+- **后端：** 本地 Node.js 进程，端口 3001
+- **数据库：** `./data/energy_insights.db`（项目目录下的本地文件）
+- **Vite 代理：** `/api` → `http://localhost:3001`
+- **用途：** 开发、测试、调试，数据可随时修改和重置
+
+#### 生产环境（Docker 容器）
+- **地址：** eih.cmyself.cc
+- **部署方式：** Docker 容器，端口映射 3006:3001
+- **后端：** Docker 容器内的 Node.js 进程
+- **数据库：** Docker volume `eih_data`（独立持久化存储）
+- **CI/CD：** 推送到 `main` 分支自动部署（Mac Mini runner）
+- **用途：** 正式生产环境，数据需要谨慎处理
+
+**⚠️ 关键区别：**
+- 测试环境后端运行在 **localhost:3001**（本地进程）
+- 生产环境后端运行在 **localhost:3006**（Docker 容器）
+- 两个环境**绝对不能混用**，否则会导致测试数据污染生产数据库
+- `vite.config.js` 中的代理必须指向 `localhost:3001`（测试环境）
+
+### 部署流程
+
 - Production image: `Dockerfile` (builds frontend, runs `node server/index.js` with `NODE_ENV=production`).
 - CI: `.github/workflows/` auto-deploys on push to `main` (Mac Mini runner pulls and does `docker compose up -d --force-recreate energy-insights-hub`).
-- Live site: `eih.cmyself.cc`.
+- Docker Compose 配置位于 `~/homelab/compose/docker-compose.yml`
 
 ## Security considerations
 

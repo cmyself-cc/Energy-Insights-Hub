@@ -39,22 +39,34 @@ export default function IntelligencePage(props) {
   const {
     darkMode, language, subTab, subjectKeywords, filters, onFilterChange, onSearch, loading, fetched, error,
     insights, bookmarks, hidden, cart, onToggleCart, onToggleBookmark, onHide, onReclassify, onAiInterpret,
-    onClearCart, onGenerateReport, onKeywordClick
+    onClearCart, onGenerateReport, onKeywordClick, loadMore, hasMore
   } = props;
 
   const t = i18n[language];
   const sub = darkMode ? "#aaa" : COLORS.text.secondary;
 
   const displayItems = subTab === "bookmarks" ? bookmarks : insights;
-  // 按当前选中的监控类型兜底过滤（与后端保持一致；归类后不再匹配的卡片会实时从视图消失）
-  const activePurposes = filters.purposes || [];
-  const visibleItems = displayItems
-    .filter(item => !hidden.includes(item.title))
-    .filter(item => {
-      if (activePurposes.length === 0) return true;
-      const itemPurposes = Array.isArray(item.purposes) ? item.purposes : ["competitor"];
-      return itemPurposes.some(p => activePurposes.includes(p));
-    });
+  // 后端已经按监控类型过滤，这里只过滤隐藏的卡片
+  const visibleItems = displayItems.filter(item => !hidden.includes(item.title));
+
+  // 无限滚动：监听滚动事件，接近底部时触发 loadMore
+  useEffect(() => {
+    if (!loadMore || !hasMore) return;
+    
+    const handleScroll = () => {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const windowHeight = window.innerHeight;
+      const documentHeight = document.documentElement.scrollHeight;
+      
+      // 距离底部 300px 时触发加载
+      if (scrollTop + windowHeight >= documentHeight - 300) {
+        loadMore();
+      }
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loadMore, hasMore]);
 
   // --- JS masonry：按容器宽度算列数，按估算高度贪心分列（跨浏览器稳定） ---
   const gridRef = useRef(null);
@@ -192,6 +204,22 @@ export default function IntelligencePage(props) {
               </div>
             ))}
           </div>
+          
+          {/* 无限滚动加载指示器 */}
+          {hasMore && (
+            <div style={{ textAlign: "center", padding: "20px 0", color: "#888", fontSize: 14 }}>
+              {loading ? (
+                <span>{language === "zh" ? "加载中..." : "Loading..."}</span>
+              ) : (
+                <span>{language === "zh" ? "向下滚动加载更多" : "Scroll down to load more"}</span>
+              )}
+            </div>
+          )}
+          {!hasMore && visibleItems.length > 0 && (
+            <div style={{ textAlign: "center", padding: "20px 0", color: "#aaa", fontSize: 14 }}>
+              {language === "zh" ? "已加载全部数据" : "All data loaded"}
+            </div>
+          )}
         </>
       )}
 

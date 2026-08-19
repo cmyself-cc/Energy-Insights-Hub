@@ -85,9 +85,12 @@ export default function FilterBar({
   ));
 
   const togglePurpose = (purpose) => {
-    // 单选且必选：点击已选中项不取消，点击其他项直接切换
-    if ((filters.purposes || []).includes(purpose)) return;
-    onChange({ ...filters, purposes: [purpose] });
+    // 多选：点击已选中项取消选中，点击未选中项添加选中
+    const current = filters.purposes || [];
+    const newPurposes = current.includes(purpose)
+      ? current.filter(p => p !== purpose)
+      : [...current, purpose];
+    onChange({ ...filters, purposes: newPurposes });
   };
 
   const isPurposeActive = (purpose) => (filters.purposes || []).includes(purpose);

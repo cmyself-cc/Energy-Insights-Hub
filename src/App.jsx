@@ -24,6 +24,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fetched, setFetched] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [cart, setCart] = useState([]);
   const [newsletter, setNewsletter] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
@@ -212,13 +214,17 @@ export default function App() {
     return { dateFrom: date.toISOString().split("T")[0] };
   }
 
-  const fetchInsights = useCallback(async () => {
-    setLoading(true);
+  const fetchInsights = useCallback(async (append = false) => {
+    if (!append) {
+      setLoading(true);
+      setPage(1);
+    }
     setError(null);
 
     try {
       const params = {
-        pageSize: 100,
+        page: append ? page + 1 : 1,
+        pageSize: 150,
         search: filters.query || undefined,
         sourceType: filters.sourceType !== "all" ? filters.sourceType : undefined,
         businessCategory: filters.businessCategory !== "all" ? filters.businessCategory : undefined,
@@ -227,32 +233,46 @@ export default function App() {
         ...getDateRange(filters.dateRange)
       };
       const res = await backendApi.getInsights(params);
-      setInsights(res.data || []);
-      setFetched(true);
-      const count = res.data?.length || 0;
-      // 用当前 language（手机端统一中文），不用 storage（可能残留旧值）
-      const msg = language === "zh" ? `成功获取 ${count} 条洞察` : `Fetched ${count} insights`;
-      // 防重：同一结果 2s 内不重复弹（避免语言初始化等触发二次 fetch 时双 toast）
-      const now = Date.now();
-      const last = lastToastRef.current;
-      if (!(last && last.key === msg && now - last.ts < 2000)) {
-        addToast(msg, "success");
-        lastToastRef.current = { key: msg, ts: now };
+      const newData = res.data || [];
+      
+      if (append) {
+        setInsights(prev => [...prev, ...newData]);
+        setPage(page + 1);
+      } else {
+        setInsights(newData);
+        setFetched(true);
+        const count = newData.length;
+        const msg = language === "zh" ? `成功获取 ${count} 条洞察` : `Fetched ${count} insights`;
+        const now = Date.now();
+        const last = lastToastRef.current;
+        if (!(last && last.key === msg && now - last.ts < 2000)) {
+          addToast(msg, "success");
+          lastToastRef.current = { key: msg, ts: now };
+        }
       }
+      
+      setHasMore(newData.length === 150);
     } catch (e) {
       setError(t.errors.fetchFailed + e.message);
       addToast(t.toasts.insightsFailed, "error");
     }
     setLoading(false);
-  }, [filters, t, language]);
+  }, [filters, t, language, page]);
 
-  // Auto-fetch when filters change (debounced for query input)
+  // Auto-fetch when filters change (debounced for query input) - reset pagination
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchInsights();
+      fetchInsights(false);
     }, filters.query ? 500 : 0);
     return () => clearTimeout(timer);
-  }, [filters, fetchInsights]);
+  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load more function for infinite scroll
+  const loadMore = useCallback(() => {
+    if (!loading && hasMore) {
+      fetchInsights(true);
+    }
+  }, [loading, hasMore, fetchInsights]);
 
   const openAiDrawer = (item) => {
     setSelectedArticle(item);
@@ -390,6 +410,8 @@ export default function App() {
               onKeywordClick={(keyword) => {
                 setFilters(prev => ({ ...prev, query: keyword }));
               }}
+              loadMore={loadMore}
+              hasMore={hasMore}
             />
           )}
 
