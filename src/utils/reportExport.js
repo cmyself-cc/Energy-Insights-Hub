@@ -313,6 +313,21 @@ export async function exportPdf(title, content) {
     if (!page) newPage();
     measure.removeChild(fullPage);
 
+    // 2.5) 修复分页后 p:first-child 被误应用标题样式的问题：
+    //     第2页起，若首个子元素是 <p> 或 <blockquote>，用内联样式强制重置
+    const normalP = "font-size:14px;font-weight:normal;color:#222;text-align:left;text-indent:2em;margin:8px 0;line-height:1.8;";
+    for (let idx = 1; idx < pages.length; idx++) {
+      const mb = pages[idx].querySelector(".markdown-body");
+      const first = mb.firstElementChild;
+      if (!first) continue;
+      if (first.tagName === "P") {
+        first.style.cssText = normalP;
+      }
+      if (first.tagName === "BLOCKQUOTE") {
+        first.style.cssText = "border-left:3px solid #1a6b3c;margin:10px 0;padding:4px 0 4px 14px;color:#666;";
+      }
+    }
+
     // 3) 逐页渲染进 PDF
     const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
     const pageW = pdf.internal.pageSize.getWidth();
