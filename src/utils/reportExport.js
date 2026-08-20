@@ -252,6 +252,7 @@ const PDF_PAGE_CSS = `
   .pdf-page { width: ${A4_W}px; height: ${A4_H}px; box-sizing: border-box; padding: ${PAGE_PADDING_TOP}px 120px ${PAGE_PADDING_BOTTOM}px; background: #fff; overflow: hidden; }
   ${MARKDOWN_CSS}
   .pdf-page .markdown-body { padding: 0; }
+  .pdf-page .markdown-body > p:first-child { font-size: 14px; font-weight: normal; color: #222; text-align: left; text-indent: 2em; margin: 8px 0; line-height: 1.8; }
   .pdf-page table { break-inside: avoid; page-break-inside: avoid; }
   .pdf-page tr { break-inside: avoid; page-break-inside: avoid; }
   .pdf-page h1, .pdf-page h2, .pdf-page h3 { break-after: avoid; page-break-after: avoid; }
@@ -268,6 +269,14 @@ function createPdfPage() {
 
 // 直接生成 PDF 文件下载：先按 A4 内容高度逐块分页（不切割行/表格），再逐页渲染
 export async function exportPdf(title, content) {
+  // 配置 marked 选项
+  marked.setOptions({
+    breaks: false,
+    gfm: true,
+    headerIds: false,
+    mangle: false
+  });
+  
   const html = marked.parse(content || "");
   const measure = document.createElement("div");
   measure.style.cssText = `position:absolute;left:-9999px;top:0;width:${A4_W}px;background:#fff;`;
