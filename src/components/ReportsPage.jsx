@@ -602,7 +602,7 @@ function TemplateManager({ darkMode, language, templates, onChanged, onGenerateD
 
           {templates.map(t => {
             const isPublic = t.is_public === true;
-            const isDailyBriefing = t.name === "每日能源要闻" || t.name === "Daily Energy Briefing";
+            const isDailyBriefing = t.name.includes("每日能源要闻") || t.name === "Daily Energy Briefing";
             return (
               <div key={t.id} style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: "14px 18px", marginBottom: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
