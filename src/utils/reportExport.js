@@ -58,10 +58,15 @@ function parseTableBlock(lines) {
   const rows = [];
   for (const raw of lines) {
     let cells = raw.trim().split("|").map(c => c.trim());
+    // 移除首尾空单元格
     if (cells[0] === "") cells.shift();
-    if (cells[cells.length - 1] === "") cells.pop();
-    if (cells.every(c => /^[-:]+$/.test(c))) continue; // 分隔行
-    rows.push(cells.map(stripInline));
+    if (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+    // 跳过分隔行
+    if (cells.every(c => /^[-:]+$/.test(c))) continue;
+    // 只添加有内容的行
+    if (cells.length > 0 && cells.some(c => c.trim())) {
+      rows.push(cells.map(stripInline));
+    }
   }
   return rows;
 }
@@ -103,7 +108,7 @@ export function markdownToDocxSections(md) {
       continue;
     }
     if (/^[-*•]\s+/.test(t)) {
-      sections.push({ type: "bullet", text: inlineToRuns(t.replace(/^[-*•]\s*/, "")) });
+      sections.push({ type: "bullet", text: inlineToRuns(t.replace(/^[-*•]\s+/, "")) });
       i++;
     } else if (/^\d+[.、)]\s+/.test(t)) {
       sections.push({ type: "numbered", text: inlineToRuns(t) });
@@ -135,15 +140,27 @@ function mkCell(text, isHeader, colWidth) {
 }
 
 function buildTable(rows) {
+  if (!rows || rows.length === 0) return null;
+  
   const cols = Math.max(...rows.map(r => r.length), 1);
-  const colWidth = 100 / cols;
+  const colWidth = Math.floor(100 / cols);
   const headerRow = rows[0] || [];
   const bodyRows = rows.slice(1);
+  
   const tableRows = [
-    new TableRow({ tableHeader: true, children: headerRow.map(c => mkCell(c, true, colWidth)) }),
-    ...bodyRows.map(r => new TableRow({ children: r.map(c => mkCell(c, false, colWidth)) }))
+    new TableRow({ 
+      tableHeader: true, 
+      children: headerRow.map(c => mkCell(c, true, colWidth)) 
+    }),
+    ...bodyRows.map(r => new TableRow({ 
+      children: r.map(c => mkCell(c, false, colWidth)) 
+    }))
   ];
-  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows });
+  
+  return new Table({ 
+    width: { size: 100, type: WidthType.PERCENTAGE }, 
+    rows: tableRows 
+  });
 }
 
 export async function buildDocx(markdown) {
@@ -156,16 +173,33 @@ export async function buildDocx(markdown) {
         spacing: { before: 240, after: 120 }
       }));
     } else if (s.type === "bullet") {
-      children.push(new Paragraph({ children: s.text, bullet: { level: 0 }, spacing: { after: 60 } }));
+      children.push(new Paragraph({ 
+        children: s.text, 
+        bullet: { level: 0 }, 
+        spacing: { before: 60, after: 60 } 
+      }));
     } else if (s.type === "numbered") {
-      children.push(new Paragraph({ children: s.text, spacing: { after: 60 } }));
+      children.push(new Paragraph({ 
+        children: s.text, 
+        spacing: { before: 60, after: 60 } 
+      }));
     } else if (s.type === "quote") {
-      children.push(new Paragraph({ children: s.text, indent: { left: 480 }, spacing: { after: 120 } }));
+      children.push(new Paragraph({ 
+        children: s.text, 
+        indent: { left: 480 }, 
+        spacing: { before: 120, after: 120 } 
+      }));
     } else if (s.type === "table") {
-      children.push(buildTable(s.rows));
-      children.push(new Paragraph({ text: "", spacing: { after: 60 } }));
+      const table = buildTable(s.rows);
+      if (table) {
+        children.push(table);
+        children.push(new Paragraph({ text: "", spacing: { after: 60 } }));
+      }
     } else if (s.type === "para") {
-      children.push(new Paragraph({ children: s.text, spacing: { after: 120 } }));
+      children.push(new Paragraph({ 
+        children: s.text, 
+        spacing: { before: 60, after: 120 } 
+      }));
     } else {
       children.push(new Paragraph({ text: "" }));
     }
@@ -218,7 +252,9 @@ const PDF_PAGE_CSS = `
   .pdf-page { width: ${A4_W}px; height: ${A4_H}px; box-sizing: border-box; padding: ${PAGE_PADDING_TOP}px 120px ${PAGE_PADDING_BOTTOM}px; background: #fff; overflow: hidden; }
   ${MARKDOWN_CSS}
   .pdf-page .markdown-body { padding: 0; }
-  .pdf-page table { break-inside: avoid; }
+  .pdf-page table { break-inside: avoid; page-break-inside: avoid; }
+  .pdf-page tr { break-inside: avoid; page-break-inside: avoid; }
+  .pdf-page h1, .pdf-page h2, .pdf-page h3 { break-after: avoid; page-break-after: avoid; }
 `;
 
 function createPdfPage() {
