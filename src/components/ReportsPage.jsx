@@ -325,19 +325,6 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
             : `${language === "zh" ? "模板管理" : "Templates"} (${templates.length})`}
         </button>
       ))}
-      {onGenerateDailyBriefing && (
-        <button
-          onClick={onGenerateDailyBriefing}
-          style={{
-            padding: "6px 14px", borderRadius: 7, border: "none",
-            background: "transparent",
-            color: darkMode ? "#aaa" : COLORS.text.secondary,
-            fontWeight: 400, fontSize: FONT_SIZES.md, cursor: "pointer"
-          }}
-        >
-          {language === "zh" ? "每日简报" : "Daily Briefing"}
-        </button>
-      )}
     </div>,
     titleSlotEl
   );
@@ -352,6 +339,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
           language={language}
           templates={templates}
           onChanged={loadTemplates}
+          onGenerateDailyBriefing={onGenerateDailyBriefing}
         />
       )}
 
@@ -464,7 +452,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
   );
 }
 
-function TemplateManager({ darkMode, language, templates, onChanged }) {
+function TemplateManager({ darkMode, language, templates, onChanged, onGenerateDailyBriefing }) {
   const zh = language === "zh";
   const [form, setForm] = useState({ name: "", description: "", purpose: "", prompt: "", max_cards: 10, language: "zh" });
   const [editingId, setEditingId] = useState(null);
@@ -614,6 +602,7 @@ function TemplateManager({ darkMode, language, templates, onChanged }) {
 
           {templates.map(t => {
             const isPublic = t.is_public === true;
+            const isDailyBriefing = t.name === "每日能源要闻" || t.name === "Daily Energy Briefing";
             return (
               <div key={t.id} style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: "14px 18px", marginBottom: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -624,11 +613,18 @@ function TemplateManager({ darkMode, language, templates, onChanged }) {
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
+                    {isDailyBriefing && onGenerateDailyBriefing && (
+                      <button onClick={onGenerateDailyBriefing} style={{
+                        padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: "none",
+                        background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.sm, cursor: "pointer",
+                        fontWeight: 600
+                      }}>{zh ? "生成今日简报" : "Generate Today's Briefing"}</button>
+                    )}
                     <button onClick={() => startEdit(t)} style={{
                       padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: `1px solid ${border}`,
                       background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
                     }}>{zh ? "编辑" : "Edit"}</button>
-                    {!isPublic && (
+                    {!isPublic && !isDailyBriefing && (
                       <button onClick={() => remove(t.id)} style={{
                         padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: "1px solid #c00",
                         background: "transparent", color: "#c00", fontSize: FONT_SIZES.sm, cursor: "pointer"
