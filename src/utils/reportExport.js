@@ -291,22 +291,37 @@ export async function exportPdf(title, content) {
     const contentHeight = PAGE_CONTENT_H - 26; // 安全余量
 
     // 2) 按块分页：块放不下当前页则换页（单块超页时允许超出一页）
+    //    标题需要和后面的内容保持在同一页，避免标题在页底、内容在下页
     const pages = [];
     let page = null;
     let used = 0;
+    const MIN_CONTENT_AFTER_HEADING = 120; // 标题后至少预留的内容高度（px）
     const newPage = () => {
       const p = createPdfPage();
       measure.appendChild(p); // 必须挂进 DOM，html2canvas 才能克隆到
       pages.push(p);
       return p;
     };
-    for (const block of blocks) {
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
       const h = block.getBoundingClientRect().height;
+      const isHeading = /^H[1-3]$/.test(block.tagName);
+      
       if (!page) { page = newPage(); used = 0; }
-      if (used > 0 && used + h > contentHeight) {
+      
+      // 如果是标题，检查是否需要和后面的内容一起放
+      if (isHeading && used > 0) {
+        // 如果当前页剩余空间不足以放下标题+最小内容高度，就换页
+        if (used + h + MIN_CONTENT_AFTER_HEADING > contentHeight) {
+          page = newPage();
+          used = 0;
+        }
+      } else if (used > 0 && used + h > contentHeight) {
+        // 普通块：放不下就换页
         page = newPage();
         used = 0;
       }
+      
       page.querySelector(".markdown-body").appendChild(block.cloneNode(true));
       used += h;
     }
