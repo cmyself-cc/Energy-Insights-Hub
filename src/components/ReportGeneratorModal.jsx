@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { backendApi } from "../utils/backendApi";
 
-export default function ReportGeneratorModal({ darkMode, language, templates, cart, onClose, onStarted, onTemplatesChanged }) {
+export default function ReportGeneratorModal({ darkMode, language, templates, cart, autoMode, onClose, onStarted, onTemplatesChanged }) {
   const zh = language === "zh";
   const [step, setStep] = useState("loading"); // loading/quality/purpose/audience/theme/template/confirm
   const [screening, setScreening] = useState(null);
@@ -45,10 +45,44 @@ export default function ReportGeneratorModal({ darkMode, language, templates, ca
   };
 
   useEffect(() => {
-    if (templates.length > 0) runScreening(cardIds());
-    else { setStep("quality"); }
+    if (templates.length === 0) {
+      setStep("quality");
+      return;
+    }
+
+    // 自动模式：跳过所有步骤，直接生成
+    if (autoMode) {
+      const dailyTemplate = templates.find(t => t.name.includes("每日能源要闻"));
+      if (dailyTemplate) {
+        setTemplateId(dailyTemplate.id);
+        setPurpose(zh ? "面向团队日常晨会，快速掌握当日行业动态" : "Daily team briefing");
+        setAudience(zh ? "团队内部" : "Internal team");
+        setTheme(zh ? "每日能源要闻简报" : "Daily Energy Briefing");
+        // 直接提交
+        setTimeout(() => {
+          submitWithTemplate(dailyTemplate.id);
+        }, 100);
+      }
+      return;
+    }
+
+    // 正常模式：执行筛查流程
+    runScreening(cardIds());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const submitWithTemplate = async (tId) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await backendApi.generateReport(tId, cardIds(), [], purpose, audience, theme);
+      onStarted?.();
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  };
 
   const removeCard = (id) => setCards(prev => prev.filter(c => c.id !== id));
 

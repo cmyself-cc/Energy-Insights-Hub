@@ -37,6 +37,7 @@ export default function App() {
   const [titleSlotEl, setTitleSlotEl] = useState(null);
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [dailyBriefingMode, setDailyBriefingMode] = useState(false);
   const [reportTemplates, setReportTemplates] = useState([]);
   const [openReportId, setOpenReportId] = useState(null);
   const [apiConfig, setApiConfig] = useState(null);
@@ -445,6 +446,7 @@ export default function App() {
                 }
 
                 setCart(recentInsights);
+                setDailyBriefingMode(true);
                 setShowReportModal(true);
               }}
             />
@@ -509,7 +511,8 @@ export default function App() {
           language={language}
           templates={reportTemplates}
           cart={cart}
-          onClose={() => setShowReportModal(false)}
+          autoMode={dailyBriefingMode}
+          onClose={() => { setShowReportModal(false); setDailyBriefingMode(false); }}
           onStarted={() => addToast(language === "zh" ? "报告已开始生成，进度见顶部进度条" : "Report generation started — see the progress bar at the top", "info")}
           onTemplatesChanged={() => backendApi.getReportTemplates().then(r => setReportTemplates(r.data || [])).catch(() => {})}
         />
