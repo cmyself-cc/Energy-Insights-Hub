@@ -426,23 +426,25 @@ export default function App() {
                 setNewsletter(report.content);
               }}
               onGenerateDailyBriefing={() => {
-                // 获取当天的所有 insights
+                // 获取昨天和今天的所有 insights
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
                 const tomorrow = new Date(today);
                 tomorrow.setDate(tomorrow.getDate() + 1);
 
-                const todayInsights = insights.filter(item => {
+                const recentInsights = insights.filter(item => {
                   const itemDate = new Date(item.date || item.publishDate);
-                  return itemDate >= today && itemDate < tomorrow;
+                  return itemDate >= yesterday && itemDate < tomorrow;
                 });
 
-                if (todayInsights.length === 0) {
-                  addToast(language === "zh" ? "今天暂无新的洞察" : "No insights today", "warning");
+                if (recentInsights.length === 0) {
+                  addToast(language === "zh" ? "暂无新的洞察" : "No recent insights", "warning");
                   return;
                 }
 
-                setCart(todayInsights);
+                setCart(recentInsights);
                 setShowReportModal(true);
               }}
             />
