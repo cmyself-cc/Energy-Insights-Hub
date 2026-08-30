@@ -214,4 +214,17 @@ router.post("/:id/reclassify", (req, res) => {
   }
 });
 
+// 删除单个insight
+router.delete("/:id", (req, res) => {
+  try {
+    const result = db.prepare("DELETE FROM insights WHERE id = ?").run(req.params.id);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: "Insight not found" });
+    }
+    res.json({ success: true, message: "Insight deleted" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
