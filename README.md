@@ -100,6 +100,10 @@ Energy-Insights-Hub/
 │   ├── components/      # React组件
 │   ├── pages/           # 页面
 │   └── App.jsx          # 主应用
+├── wechat-mcp/          # 微信公众号MCP服务器
+│   ├── src/             # MCP服务器源码
+│   ├── README.md        # 微信MCP配置说明
+│   └── package.json     # 依赖配置
 ├── data/                # 数据库文件
 ├── docker-compose.yml   # Docker配置
 └── package.json         # 项目依赖
@@ -109,9 +113,44 @@ Energy-Insights-Hub/
 
 在管理界面中添加数据源：
 
-1. **RSS源**：直接输入RSS URL
-2. **网站爬虫**：配置URL和CSS选择器
-3. **微信MCP**：配置MCP服务器地址
+### 1. RSS源
+直接输入RSS URL即可。
+
+### 2. 网站爬虫
+配置URL和CSS选择器，支持自动发现子页面。
+
+### 3. 微信公众号（需要额外部署）
+
+微信公众号数据需要通过 MCP 服务接入。本项目提供了 MCP 服务器代码（位于 `wechat-mcp/` 目录），但需要先部署第三方微信 RSS 服务。
+
+**推荐方案：**
+
+#### 方案一：wechat-rss（推荐）
+- **项目地址**：https://wechat2rss.xlab.app/
+- **特点**：商业服务，稳定可靠，约 15 元/月，无封号风险
+- **部署**：访问官网注册，添加公众号后获取 RSS 地址
+
+#### 方案二：wewe-rss（开源免费）
+- **项目地址**：https://github.com/cooderl/wewe-rss
+- **特点**：开源免费，基于微信读书 API，需要微信扫码登录
+- **风险**：可能存在账号风险，建议用小号
+
+**配置步骤：**
+
+1. 部署微信 RSS 服务（wechat-rss 或 wewe-rss）
+2. 启动 MCP 服务器：
+   ```bash
+   cd wechat-mcp
+   npm install
+   cp .env.example .env
+   # 编辑 .env，配置 WEWE_BASE_URL 指向你的微信 RSS 服务
+   npm start
+   ```
+3. 在 Energy Insights Hub 管理界面添加数据源：
+   - 类型：`wechat_mcp`
+   - URL：`http://localhost:4001/sse`
+
+详细说明请参考 `wechat-mcp/README.md`。
 
 ## API文档
 
