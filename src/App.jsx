@@ -235,6 +235,7 @@ export default function App() {
       };
       const res = await backendApi.getInsights(params);
       const newData = res.data || [];
+      const pagination = res.pagination || {};
       
       if (append) {
         setInsights(prev => [...prev, ...newData]);
@@ -252,7 +253,10 @@ export default function App() {
         }
       }
       
-      setHasMore(newData.length === 150);
+      // 使用后端返回的pagination信息判断是否还有更多数据
+      const currentPage = append ? page + 1 : 1;
+      const loadedCount = append ? (insights.length + newData.length) : newData.length;
+      setHasMore(loadedCount < (pagination.total || 0));
     } catch (e) {
       setError(t.errors.fetchFailed + e.message);
       addToast(t.toasts.insightsFailed, "error");
