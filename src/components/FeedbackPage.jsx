@@ -12,6 +12,7 @@ export default function FeedbackPage({ darkMode, language }) {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
 
   const load = async () => {
     try {
@@ -32,12 +33,16 @@ export default function FeedbackPage({ darkMode, language }) {
 
   const handleGenerate = async () => {
     setLoading(true);
+    setError(null);
     try {
       await backendApi.generateFeedbackSuggestions();
       await load();
+      setMessage({ type: "success", text: language === "zh" ? "建议已生成" : "Suggestions generated" });
+      setTimeout(() => setMessage(null), 3000);
     } catch (e) {
       console.error("Generate suggestions failed:", e);
-      setError(e.message);
+      setMessage({ type: "error", text: `${language === "zh" ? "生成失败" : "Generate failed"}: ${e.message}` });
+      setTimeout(() => setMessage(null), 4000);
     }
     setLoading(false);
   };
@@ -83,6 +88,21 @@ export default function FeedbackPage({ darkMode, language }) {
           marginBottom: 20
         }}>
           {error}
+        </div>
+      )}
+
+      {message && (
+        <div style={{
+          padding: "12px 16px",
+          borderRadius: BORDER_RADIUS.md,
+          background: message.type === "success" ? "#e8f5ee" : "#fff0f0",
+          border: `1px solid ${message.type === "success" ? COLORS.primary : "#c00"}`,
+          color: message.type === "success" ? COLORS.primary : "#c00",
+          marginBottom: 16,
+          fontSize: FONT_SIZES.sm,
+          fontWeight: 500
+        }}>
+          {message.text}
         </div>
       )}
 
