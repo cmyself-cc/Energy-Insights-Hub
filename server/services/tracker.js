@@ -424,46 +424,74 @@ export async function runTracker(runId = null) {
   let allProcessed = [];
 
   if (candidates.length > 0) {
-    const filterContext = {
-      semanticPrompt: loadSemanticConfig(),
-      categories: loadActiveCategories(),
-      subjectKeywords: subjectKeywordsByPurpose,
-      classificationEnabled
-    };
+    // Group candidates by purpose for per-purpose semantic prompts
+    // 每篇文章在 Phase 2 的 applyKeywordGate 中已被标记 matchedPurposes
+    const purposeToItems = new Map();
+    for (const item of candidates) {
+      // 使用第一个 matchedPurpose，如果没有则归入 "__none__" 组
+      const purpose = (item.matchedPurposes && item.matchedPurposes.length > 0)
+        ? item.matchedPurposes[0]
+        : "__none__";
+      if (!purposeToItems.has(purpose)) {
+        purposeToItems.set(purpose, []);
+      }
+      purposeToItems.get(purpose).push(item);
+    }
 
     setPhase(runId, "processing", 60);
+    let processedCount = 0;
 
-    // Process in batches with per-batch stop check and progress tracking
-    for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
-      // Check stop flag between LLM batches
-      const stopReq = db.prepare("SELECT stop_requested FROM tracker_runs WHERE id = ?").get(runId);
-      if (stopReq && stopReq.stop_requested) {
-        console.log("[tracker] Stop requested during LLM processing");
-        break;
+    // Process each purpose group with its own semantic prompt
+    for (const [purpose, items] of purposeToItems) {
+      const semanticPrompt = purpose === "__none__" ? "" : loadSemanticConfig(purpose);
+      const filterContext = {
+        semanticPrompt,
+        categories: loadActiveCategories(),
+        subjectKeywords: subjectKeywordsByPurpose,
+        classificationEnabled,
+        itemPurpose: purpose === "__none__" ? null : purpose
+      };
+
+      if (semanticPrompt) {
+        console.log(`[tracker] Processing ${items.length} items with purpose "${purpose}" semantic prompt`);
+      } else {
+        console.log(`[tracker] Processing ${items.length} items without semantic prompt (purpose: ${purpose})`);
       }
 
-      const batch = candidates.slice(i, i + BATCH_SIZE);
-      const settled = await Promise.allSettled(
-        batch.map(item => processInsight(item, LANGUAGE, filterContext))
-      );
-      for (let j = 0; j < settled.length; j++) {
-        const result = settled[j];
-        if (result.status === "fulfilled") {
-          allProcessed.push(result.value);
-        } else {
-          console.error(`[tracker] processInsight failed for batch item ${i + j}:`, result.reason?.message || result.reason);
+      // Process in batches with per-batch stop check and progress tracking
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        // Check stop flag between LLM batches
+        const stopReq = db.prepare("SELECT stop_requested FROM tracker_runs WHERE id = ?").get(runId);
+        if (stopReq && stopReq.stop_requested) {
+          console.log("[tracker] Stop requested during LLM processing");
+          break;
         }
+
+        const batch = items.slice(i, i + BATCH_SIZE);
+        const settled = await Promise.allSettled(
+          batch.map(item => processInsight(item, LANGUAGE, filterContext))
+        );
+        for (let j = 0; j < settled.length; j++) {
+          const result = settled[j];
+          if (result.status === "fulfilled") {
+            allProcessed.push(result.value);
+          } else {
+            console.error(`[tracker] processInsight failed for batch item ${i + j}:`, result.reason?.message || result.reason);
+          }
+        }
+
+        processedCount += batch.length;
+
+        if (allProcessed.length === 0 && processedCount >= BATCH_SIZE && candidates.length > 0) {
+          throw new Error(`All articles in first batch failed LLM processing`);
+        }
+
+        // Progress: 60 + (processed / total * 30)
+        const progress = Math.min(90, 60 + Math.round((processedCount / candidates.length) * 30));
+        setPhase(runId, "processing", progress);
+
+        if (i + BATCH_SIZE < items.length) await sleep(2000);
       }
-
-      if (allProcessed.length === 0 && batch.length > 0 && candidates.length > 0) {
-        throw new Error(`All ${batch.length} articles in first batch failed LLM processing`);
-      }
-
-      // Progress: 60 + (processed / total * 30)
-      const progress = Math.min(90, 60 + Math.round((allProcessed.length / candidates.length) * 30));
-      setPhase(runId, "processing", progress);
-
-      if (i + BATCH_SIZE < candidates.length) await sleep(2000);
     }
     console.log(`[tracker] LLM processing complete: ${allProcessed.length} items processed`);
   }

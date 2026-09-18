@@ -141,7 +141,9 @@ export async function processInsight(item, _language = "en", _filterContext = nu
   const categoryList = categoryNames.length > 0 ? categoryNames.join("、") : "电力&氢能、储能、光伏、油气、CCS、化工、LNG/天然气、移动出行、润滑油、生物燃料";
 
   // Inject purpose-specific semantic prompt if available
+  // 优先使用传入的 itemPurpose，否则回退到通用的 semanticPrompt
   let semanticBlock = "";
+  const itemPurpose = _filterContext?.itemPurpose;
   const semanticPrompt = _filterContext?.semanticPrompt || "";
   if (semanticPrompt) {
     semanticBlock = `附加语义要求: ${semanticPrompt}`;
@@ -159,12 +161,26 @@ export async function processInsight(item, _language = "en", _filterContext = nu
     ? subjectGroups.map(([label, list]) => `${label}: ${list.join("、")}`).join("\n")
     : "未配置";
 
+  // 构建分类提示：包含业务分类和主体分类，每条 insight 可以有多个分类
+  const categories = _filterContext?.categories || [];
+  const categoryPromptParts = categories.map(c => {
+    // 如果有 inclusion_prompt，使用它作为分类的详细说明
+    if (c.inclusion_prompt) {
+      return `- ${c.name}: ${c.inclusion_prompt}`;
+    }
+    return `- ${c.name}`;
+  });
+  const categoryPrompt = categoryPromptParts.length > 0
+    ? categoryPromptParts.join("\n")
+    : `从以下分类中选择最相关的1-3个：${categoryList}`;
+
   const prompt = fillPrompt(getPrompt("insight_extraction"), {
     title: item.title,
     content: (item.rawContent || "").slice(0, 3000) || (item.summary || "").slice(0, 3000) || "",
     url: item.url,
     semantic_block: semanticBlock,
     category_list: categoryList,
+    category_prompt: categoryPrompt,
     subject_keywords: subjectKeywordList
   });
 
