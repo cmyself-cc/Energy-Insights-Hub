@@ -53,7 +53,10 @@ export async function exchangeIdentityWechat(code) {
   };
 }
 
-export function exchangeIdentity({ code, devUnionid } = {}) {
+// 两个分支一律返回 Promise，调用方必须 await。若 mock 分支同步返回对象、真实微信返回
+// Promise，漏掉的 await 只会在生产（真实微信）暴露：mock 下测试全绿，线上 identity.unionid
+// 读到 undefined，登录静默失败。
+export async function exchangeIdentity({ code, devUnionid } = {}) {
   if (isMockMode()) {
     const unionid = String(devUnionid || "").trim();
     if (!unionid) return { error: "dev_unionid_required" };
@@ -64,5 +67,5 @@ export function exchangeIdentity({ code, devUnionid } = {}) {
       avatar_url: ""
     };
   }
-  return exchangeIdentityWechat(code); // caller awaits
+  return exchangeIdentityWechat(code);
 }

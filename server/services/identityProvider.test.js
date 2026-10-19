@@ -38,14 +38,16 @@ describe("identityProvider mock mode", () => {
     process.env.NODE_ENV = "test";
   });
 
-  it("mock exchangeIdentity returns deterministic identity", () => {
-    const id = exchangeIdentity({ devUnionid: "dev-u1" });
+  it("mock exchangeIdentity returns deterministic identity", async () => {
+    const pending = exchangeIdentity({ devUnionid: "dev-u1" });
+    expect(pending).toBeInstanceOf(Promise);   // mock 分支也必须是 Promise，await 才是统一强制的
+    const id = await pending;
     expect(id.unionid).toBe("dev-u1");
     expect(id.nickname).toMatch(/^dev-/);
   });
 
-  it("mock exchangeIdentity rejects empty unionid", () => {
-    expect(exchangeIdentity({ devUnionid: "" }).error).toBeTruthy();
+  it("mock exchangeIdentity rejects empty unionid", async () => {
+    expect((await exchangeIdentity({ devUnionid: "" })).error).toBeTruthy();
   });
 
   it("getAuthorizeUrl returns null in mock mode", () => {
@@ -128,15 +130,27 @@ describe("identityProvider wechat path", () => {
     expect(out.error).toContain("wechat_unionid_missing");
   });
 
+  it("null token body returns {error} instead of throwing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(null)));
+
+    const out = await exchangeIdentity({ code: "c1" });
+    expect(out.error).toMatch(/^wechat_exchange_failed: |^wechat_unionid_missing/);
+  });
+
   it("userinfo is best-effort: any failure still yields an identity with the wx- fallback", async () => {
     const failing = {
       rejects: () => Promise.reject(new Error("profile endpoint down")),
-      "non-2xx": async () => jsonResponse({}, { ok: false, status: 500 }),
+      // 故意带内容的 500：若 infoRes.ok 守卫被删，这个 nickname/avatar 就会泄漏进返回值
+      "non-2xx": async () => jsonResponse(
+        { nickname: "SHOULD_NOT_BE_USED", headimgurl: "https://bad.example" },
+        { ok: false, status: 500 }
+      ),
       "non-JSON body": async () => ({
         ok: true,
         status: 200,
         json: async () => { throw new SyntaxError("Unexpected token '<'"); }
-      })
+      }),
+      "null body": async () => jsonResponse(null)
     };
     for (const [label, impl] of Object.entries(failing)) {
       vi.stubGlobal("fetch", vi.fn(async (url) => (isTokenCall(url) ? jsonResponse(TOKEN_BODY) : impl())));
@@ -158,5 +172,17 @@ describe("identityProvider wechat path", () => {
     );
     delete process.env.WECHAT_REDIRECT_URI;
     expect(getAuthorizeUrl("s1")).toBeNull();
+  });
+
+  it("missing credentials return wechat_not_configured without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    for (const key of ["WECHAT_APP_ID", "WECHAT_APP_SECRET"]) {
+      const saved = process.env[key];
+      delete process.env[key];
+      expect(await exchangeIdentity({ code: "c1" }), key).toEqual({ error: "wechat_not_configured" });
+      process.env[key] = saved;
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
