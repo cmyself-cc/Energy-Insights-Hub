@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import crypto from "node:crypto";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import express from "express";
 import db from "../db.js";
 import authRouter, { __resetInviteLimiter } from "./auth.js";
@@ -14,6 +15,20 @@ function buildApp() {
 // 模块级 cookie jar：同一用例的所有请求共享（模拟浏览器），全程携带并吸收 Set-Cookie
 let jar;
 
+// 真 fetch 必须在任何 vi.stubGlobal 之前捕获：桩只负责拦微信上游，测试客户端打到本地服务的
+// 请求仍要放行给真 fetch，否则 api() 会被自己装的桩吃掉。
+const realFetch = globalThis.fetch;
+
+function jsonResponse(body, { ok = true, status = 200 } = {}) {
+  return { ok, status, json: async () => body };
+}
+
+const isTokenCall = (url) => String(url).includes("/sns/oauth2/access_token");
+
+// 微信 token 载荷由用例改写、fetch 桩在调用时读取：GET 回调没有携带 unionid 的入参，
+// 「这次回跳带回的是谁」只能由桩决定。
+let tokenBody = null;
+
 async function api(port, path, { method = "POST", body } = {}) {
   const res = await fetch(`http://127.0.0.1:${port}${path}`, {
     method,
@@ -25,9 +40,10 @@ async function api(port, path, { method = "POST", body } = {}) {
   return { status: res.status, location: res.headers.get("location"), body: await res.json().catch(() => null) };
 }
 
-// 本文件会按用例改写 AUTH_DEV_MODE / NODE_ENV / ADMIN_UNIONID，所以必须成对快照-还原：
-// 少了还原，上一个用例设的 ADMIN_UNIONID 会让下一个用例的「普通用户」静默变成 seed admin。
-const ENV_KEYS = ["AUTH_DEV_MODE", "NODE_ENV", "ADMIN_UNIONID"];
+// 本文件会按用例改写 AUTH_DEV_MODE / NODE_ENV / ADMIN_UNIONID / 微信凭证，所以必须成对快照-还原：
+// 少了还原，上一个用例设的 ADMIN_UNIONID 会让下一个用例的「普通用户」静默变成 seed admin，
+// 而泄漏的 WECHAT_APP_ID 会让本该走 mock 的用例走进真实微信分支。
+const ENV_KEYS = ["AUTH_DEV_MODE", "NODE_ENV", "ADMIN_UNIONID", "WECHAT_APP_ID", "WECHAT_APP_SECRET"];
 let envSnapshot = [];
 
 describe("auth flow (mock mode)", () => {
@@ -43,6 +59,8 @@ describe("auth flow (mock mode)", () => {
   });
 
   afterEach(() => {
+    // 即便本 describe 不装桩也要复位：fetch 桩一旦泄漏到后续用例，真 HTTP 请求会被静默吃掉
+    vi.unstubAllGlobals();
     for (const [k, v] of envSnapshot) {
       // 未设置的键必须 delete：process.env[k] = undefined 会写入字面量字符串 "undefined"
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
@@ -123,7 +141,7 @@ describe("auth flow (mock mode)", () => {
       expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(200);
       const out = await api(port, "/api/auth/logout", {});
       expect(out.status).toBe(200);
-      expect(out.body).toEqual({ success: true });
+      expect(out.body).toEqual({ data: { success: true } });
       expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
     } finally { await close(); }
   });
@@ -140,6 +158,87 @@ describe("auth flow (mock mode)", () => {
       const sixth = await api(port, "/api/auth/register", { body: { ticket: "nope", code: "nope" } });
       expect(sixth.status).toBe(429);
       expect(sixth.body.error).toMatch(/too many/i);
+    } finally { await close(); }
+  });
+});
+
+// GET /api/auth/wechat/callback 的三条 302 分支（handleIdentity 的 json:false 路径）在 mock
+// 模式下不可达：mock 分支只认 devUnionid、忽略 code。所以这里走真实微信分支——只桩掉打向
+// 微信上游的 fetch，HTTP 请求本身、SQLite、cookie 往返全是真的。
+describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)", () => {
+  const APPID = "wx_appid_test";
+  const SECRET = "super_secret_do_not_leak";
+
+  beforeEach(() => {
+    envSnapshot = ENV_KEYS.map((k) => [k, process.env[k]]);
+    // 必须非 mock：否则 exchangeIdentity({code}) 会短路进 mock 分支，测到错的代码
+    delete process.env.AUTH_DEV_MODE;
+    process.env.NODE_ENV = "test";
+    // 必须清掉：否则新身份可能撞上 ADMIN_UNIONID 被 seed 成 admin，测不到 need_invite 分支
+    delete process.env.ADMIN_UNIONID;
+    process.env.WECHAT_APP_ID = APPID;
+    process.env.WECHAT_APP_SECRET = SECRET;
+    __resetInviteLimiter();
+    clearAuthTables();
+    jar = makeCookieJar();
+    tokenBody = null;
+    vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+      const u = String(url);
+      // 放行测试客户端自己打到本地服务的请求，只拦微信上游
+      if (u.startsWith("http://127.0.0.1:")) return realFetch(url, init);
+      return isTokenCall(u)
+        ? jsonResponse(tokenBody)
+        : jsonResponse({ nickname: "张三", headimgurl: "https://wx.example/a.png" });
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    for (const [k, v] of envSnapshot) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+
+  it("already-registered active user is logged in and redirected to /", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      insertTestUser({ unionid: "wx-active" });
+      tokenBody = { access_token: "at_1", openid: "op_1", unionid: "wx-active" };
+      const r = await api(port, "/api/auth/wechat/callback?code=c1", { method: "GET" });
+      expect(r.status).toBe(302);
+      expect(r.location).toBe("/");
+      // 302 之前必须已经写好 session cookie，否则浏览器跳回首页仍是未登录态
+      const me = await api(port, "/api/auth/me", { method: "GET" });
+      expect(me.status).toBe(200);
+      expect(me.body.data.user.unionid).toBe("wx-active");
+    } finally { await close(); }
+  });
+
+  it("unknown identity is redirected to /login#invite=<ticket> with a pending row", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      tokenBody = { access_token: "at_1", openid: "op_new", unionid: "wx-new" };
+      const r = await api(port, "/api/auth/wechat/callback?code=c1", { method: "GET" });
+      expect(r.status).toBe(302);
+      // 票据是 crypto.randomBytes(32).toString("hex")，即 64 位十六进制
+      expect(r.location).toMatch(/^\/login#invite=[0-9a-f]{64}$/);
+      const ticket = r.location.slice("/login#invite=".length);
+      const tokenHash = crypto.createHash("sha256").update(ticket).digest("hex");
+      const pending = db.prepare("SELECT * FROM pending_identities WHERE token_hash = ?").get(tokenHash);
+      // 库里只存 sha256：明文票据一旦入库，读到库就等于能劫持这个待开通身份
+      expect(pending, "pending_identities 里找不到 sha256(ticket) 对应的行").toBeTruthy();
+      expect(pending.unionid).toBe("wx-new");
+    } finally { await close(); }
+  });
+
+  it("disabled user is redirected to /login#disabled", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      insertTestUser({ unionid: "wx-off", status: "disabled" });
+      tokenBody = { access_token: "at_1", openid: "op_1", unionid: "wx-off" };
+      const r = await api(port, "/api/auth/wechat/callback?code=c1", { method: "GET" });
+      expect(r.status).toBe(302);
+      expect(r.location).toBe("/login#disabled");
     } finally { await close(); }
   });
 });

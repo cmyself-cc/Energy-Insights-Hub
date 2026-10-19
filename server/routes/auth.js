@@ -93,14 +93,25 @@ router.get("/config", (_req, res) => {
 });
 
 // 微信回跳（GET，浏览器带 ?code=&state=）
+// exchangeIdentity 的契约是 total 的、不会 reject，所以 catch 目前不可达；但本仓 express 是
+// 4.x，async handler 里逃逸的 rejected promise 不会被转给 next(err)，会变成进程级
+// unhandled rejection。handleIdentity 保持同步，兜底包在它的调用方。
 router.get("/wechat/callback", async (req, res) => {
-  const identity = await exchangeIdentity({ code: req.query.code });
-  handleIdentity(req, res, identity, { json: false });
+  try {
+    const identity = await exchangeIdentity({ code: req.query.code });
+    handleIdentity(req, res, identity, { json: false });
+  } catch {
+    res.status(500).json({ error: "login failed" });
+  }
 });
 router.post("/wechat/callback", async (req, res) => {
   const { code } = req.body || {};
-  const identity = await exchangeIdentity({ code });
-  handleIdentity(req, res, identity, { json: true });
+  try {
+    const identity = await exchangeIdentity({ code });
+    handleIdentity(req, res, identity, { json: true });
+  } catch {
+    res.status(500).json({ error: "login failed" });
+  }
 });
 
 // 仅 mock 模式的本地登录入口（联调/测试；生产自动 404）
@@ -142,7 +153,15 @@ router.post("/register", (req, res) => {
     return findUserByUnionid(pending.unionid);
   });
   let user;
-  try { user = register(); } catch (e) { return res.status(400).json({ error: "register failed: " + e.message }); }
+  try {
+    user = register();
+  } catch (e) {
+    // 不回显 e.message：/register 匿名可达，better-sqlite3 的原始消息会带出 schema 内部信息
+    // （如 "UNIQUE constraint failed: users.unionid"）。详情只落服务端日志。
+    // 注意这是刻意的 res.json 而非抛出，Task 6 的全局错误中间件管不到这里。
+    console.error("[auth] register failed:", e?.message || e);
+    return res.status(400).json({ error: "register failed" });
+  }
   applyInviteDefaults(user.id, invite);   // 邀请码默认视角落为首个 user_view（Task 5 提供实现）
   const pu = loginExisting(res, user);
   res.json({ data: { user: pu } });
@@ -153,7 +172,7 @@ router.get("/me", requireAuth, (req, res) => res.json({ data: { user: req.user }
 router.post("/logout", requireAuth, (req, res) => {
   destroySession(parseCookieValue(req, SESSION_COOKIE));
   clearSessionCookie(res, PROD);
-  res.json({ success: true });
+  res.json({ data: { success: true } });
 });
 
 export default router;
