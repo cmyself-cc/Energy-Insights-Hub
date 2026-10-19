@@ -16,7 +16,7 @@ import industriesRouter from "./routes/industries.js";
 import modelsRouter from "./routes/models.js";
 import searchProvidersRouter from "./routes/searchProviders.js";
 import aiRouter from "./routes/ai.js";
-import { startScheduler } from "./services/tracker.js";
+import { startScheduler, reconcileStaleRuns } from "./services/tracker.js";
 import { seedSources } from "./seeds/002_seed_sources.js";
 import { seedIndustryCategories } from "./seeds/seedIndustryCategories.js";
 import { seedDefaults } from "./seeds/seedDefaults.js";
@@ -32,6 +32,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 initDb();
+// 上一次进程若被强杀（SIGTERM/OOM/断电），会留下 status='running' 的僵尸运行记录，
+// 在 1 小时窗口内把之后每次抓取都秒跳过。启动时对账，任何崩溃都能自愈。
+reconcileStaleRuns();
 seedSources();
 seedIndustryCategories();
 seedDefaults();

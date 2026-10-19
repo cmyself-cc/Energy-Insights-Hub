@@ -43,6 +43,35 @@ function hasRunningTrackerInDb(excludeId = null) {
   return !!row;
 }
 
+export function reconcileStaleRuns() {
+  // 本进程刚启动，isTrackerRunning 必为 false，因此库里所有 status='running'
+  // 的行都来自上一次未正常结束的进程（被 SIGTERM/OOM/断电杀死，没走到收尾）。
+  // 留着它们的后果：1 小时窗口内 hasRunningTrackerInDb 会把每次新抓取秒跳过
+  // （成功 0 / 失败 0 / 新增 0），且这些行在运行历史里永远显示"进行中"。
+  // 保留原 message，避免丢掉上次抓取积累的失败原因。
+  const stale = db
+    .prepare("SELECT id, message FROM tracker_runs WHERE status = 'running'")
+    .all();
+  const note = "服务启动时标记为中断：上一次进程未正常结束";
+  const update = db.prepare(
+    `UPDATE tracker_runs SET
+       status = 'completed_with_errors',
+       finished_at = CURRENT_TIMESTAMP,
+       message = ?
+     WHERE id = ?`,
+  );
+  for (const row of stale) {
+    update.run(
+      row.message ? `${note}；原抓取信息: ${row.message}`.slice(0, 2000) : note,
+      row.id,
+    );
+  }
+  if (stale.length) {
+    console.log(`[tracker] Reconciled ${stale.length} stale run(s) left over from a previous process.`);
+  }
+  return stale.length;
+}
+
 const SOURCE_TYPE_MAP = {
   rss: "新闻门户",
   website: "新闻门户",
