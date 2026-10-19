@@ -31,10 +31,16 @@ describe("identityProvider mock mode", () => {
     vi.unstubAllGlobals();
   });
 
-  it("mock mode active only outside production", () => {
+  it("mock mode active only outside production", async () => {
     expect(isMockMode()).toBe(true);
     process.env.NODE_ENV = "production";
     expect(isMockMode()).toBe(false);
+    // 端到端钉死生产门禁：production 下即便带着 AUTH_DEV_MODE=wechat-mock 和 devUnionid，
+    // 也绝不能铸出身份——否则 devUnionid=ADMIN_UNIONID 就能直接换到 admin 会话。
+    // 只断言「没有身份被铸出」（.error 为真），不钉具体文案，避免与未配置分支的措辞耦合。
+    const out = await exchangeIdentity({ devUnionid: "attacker" });
+    expect(out.unionid).toBeUndefined();
+    expect(out.error).toBeTruthy();
     process.env.NODE_ENV = "test";
   });
 
@@ -177,11 +183,14 @@ describe("identityProvider wechat path", () => {
   it("missing credentials return wechat_not_configured without calling fetch", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    for (const key of ["WECHAT_APP_ID", "WECHAT_APP_SECRET"]) {
-      const saved = process.env[key];
+    const creds = { WECHAT_APP_ID: APPID, WECHAT_APP_SECRET: SECRET };
+    for (const key of Object.keys(creds)) {
+      // 每轮先回到已知良态再抽掉一个键：这样两个键各自被单独验证。
+      // 不手写 process.env[key] = saved —— saved 为 undefined 时会写入字符串 "undefined"；
+      // 复原交给 afterEach → restoreEnv()。
+      Object.assign(process.env, creds);
       delete process.env[key];
       expect(await exchangeIdentity({ code: "c1" }), key).toEqual({ error: "wechat_not_configured" });
-      process.env[key] = saved;
     }
     expect(fetchMock).not.toHaveBeenCalled();
   });
