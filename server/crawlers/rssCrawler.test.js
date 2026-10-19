@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
-import assert from "node:assert";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Parser from "rss-parser";
 import { fetchArticles } from "./rssCrawler.js";
 
@@ -26,9 +25,9 @@ describe("fetchArticles", () => {
 
     const config = JSON.stringify({ articleLimit: 2 });
     const articles = await fetchArticles({ url: "https://example.com/rss", type: "rss", config });
-    assert.strictEqual(articles.length, 2);
-    assert.strictEqual(articles[0].title, "Article 1");
-    assert.strictEqual(articles[1].title, "Article 2");
+    expect(articles.length).toBe(2);
+    expect(articles[0].title).toBe("Article 1");
+    expect(articles[1].title).toBe("Article 2");
   });
 
   it("falls back to default limit when config is not provided", async () => {
@@ -41,6 +40,6 @@ describe("fetchArticles", () => {
     });
 
     const articles = await fetchArticles({ url: "https://example.com/rss", type: "rss" });
-    assert.strictEqual(articles.length, 20);
+    expect(articles.length).toBe(20);
   });
 });

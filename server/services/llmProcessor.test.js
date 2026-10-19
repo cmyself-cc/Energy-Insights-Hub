@@ -1,16 +1,15 @@
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { processInsight } from "./llmProcessor.js";
 
 describe("llmProcessor", () => {
   const originalApiKey = process.env.LLM_API_KEY;
   const originalFetch = global.fetch;
 
-  before(() => {
+  beforeAll(() => {
     delete process.env.LLM_API_KEY;
   });
 
-  after(() => {
+  afterAll(() => {
     process.env.LLM_API_KEY = originalApiKey;
     global.fetch = originalFetch;
   });
@@ -27,12 +26,12 @@ describe("llmProcessor", () => {
       categories: [{ name: "化工", inclusion_prompt: "Chemicals" }]
     });
 
-    assert.strictEqual(result.title, item.title);
-    assert.strictEqual(result.summary, item.summary);
-    assert.deepStrictEqual(result.categories, []);
+    expect(result.title).toBe(item.title);
+    expect(result.summary).toBe(item.summary);
+    expect(result.categories).toEqual([]);
   });
 
-  it("includes filtering instructions when filterContext is provided", async () => {
+  it("fills semantic and category placeholders from filterContext", async () => {
     process.env.LLM_API_KEY = "test-key";
     let capturedPrompt = "";
 
@@ -76,15 +75,12 @@ describe("llmProcessor", () => {
 
     const result = await processInsight(item, "en", filterContext);
 
-    assert.ok(capturedPrompt.includes("--- Filtering instructions ---"));
-    assert.ok(capturedPrompt.includes("Semantic exclusions"));
-    assert.ok(capturedPrompt.includes("exclude solar"));
-    assert.ok(capturedPrompt.includes("Business categories"));
-    assert.ok(capturedPrompt.includes("化工"));
-    assert.deepStrictEqual(result.categories, ["化工"]);
+    expect(capturedPrompt).toContain("附加语义要求: exclude solar");
+    expect(capturedPrompt).toContain("- 化工: Chemicals");
+    expect(result.categories).toEqual(["化工"]);
   });
 
-  it("omits filtering instructions when filterContext is empty", async () => {
+  it("omits the semantic block when filterContext is empty", async () => {
     process.env.LLM_API_KEY = "test-key";
     let capturedPrompt = "";
 
@@ -107,7 +103,8 @@ describe("llmProcessor", () => {
     };
 
     await processInsight(item, "en");
-    assert.ok(!capturedPrompt.includes("--- Filtering instructions ---"));
+    expect(capturedPrompt.length).toBeGreaterThan(0);
+    expect(capturedPrompt).not.toContain("附加语义要求");
   });
 
   it("normalizes non-array categories to an empty array", async () => {
@@ -138,6 +135,6 @@ describe("llmProcessor", () => {
     };
 
     const result = await processInsight(item, "en");
-    assert.deepStrictEqual(result.categories, []);
+    expect(result.categories).toEqual([]);
   });
 });

@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert";
+import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -9,55 +8,64 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.resolve(__dirname, "fixtures/test-config.xlsx");
 
 describe("configParser", () => {
-  it("parses JSON config", () => {
+  it("parses JSON config into the three-layer keyword structure", () => {
     const payload = {
       excludeKeywords: ["培训班"],
-      compositeRules: [{ mustInclude: ["中石油", "开业"], mustNotInclude: ["指数"] }],
+      enterpriseKeywords: ["中石油"],
+      includeKeywords: ["开业"],
       semanticPrompt: "排除会议资讯",
       categories: [{ name: "移动出行", description: "desc", inclusionPrompt: "prompt" }],
       sources: [{ name: "嘉实多", type: "wechat", identifier: "castrolchina" }]
     };
     const result = parseJsonConfig(payload);
-    assert.strictEqual(result.excludeKeywords.length, 1);
-    assert.strictEqual(result.compositeRules[0].must_include, JSON.stringify(["中石油", "开业"]));
-    assert.strictEqual(result.compositeRules[0].must_exclude, JSON.stringify(["指数"]));
-    assert.strictEqual(result.semanticPrompt, "排除会议资讯");
-    assert.strictEqual(result.categories[0].name, "移动出行");
-    assert.strictEqual(result.categories[0].inclusion_prompt, "prompt");
-    assert.strictEqual(result.sources[0].type, "wechat");
-    assert.strictEqual(result.sources[0].identifier, "castrolchina");
+    expect(result.excludeKeywords).toEqual(["培训班"]);
+    expect(result.enterpriseKeywords).toEqual(["中石油"]);
+    expect(result.includeKeywords).toEqual(["开业"]);
+    expect(result.semanticPrompt).toBe("排除会议资讯");
+    expect(result.categories[0].name).toBe("移动出行");
+    expect(result.categories[0].inclusion_prompt).toBe("prompt");
+    expect(result.sources[0].type).toBe("wechat_mcp");
+    expect(result.sources[0].identifier).toBe("castrolchina");
   });
 
-  it("parses a JSON config file", () => {
+  it("parses a JSON config file, splitting comma-separated keyword strings", () => {
     const payload = JSON.stringify({
       excludeKeywords: "培训班, 总裁班",
-      compositeRules: [{ must_include: ["中石化"], must_exclude: ["售楼"] }]
+      enterpriseKeywords: ["中石化"],
+      includeKeywords: ["合作"]
     });
     const result = parseConfigFile(Buffer.from(payload), "config.json");
-    assert.deepStrictEqual(result.excludeKeywords, ["培训班", "总裁班"]);
-    assert.strictEqual(result.compositeRules[0].must_include, JSON.stringify(["中石化"]));
+    expect(result.excludeKeywords).toEqual(["培训班", "总裁班"]);
+    expect(result.enterpriseKeywords).toEqual(["中石化"]);
+    expect(result.includeKeywords).toEqual(["合作"]);
   });
 
-  it("parses the fixture Excel file", () => {
+  it("merges exclude keywords from both the 关键词过滤 and 底层过滤关键词 sheets", () => {
     const buffer = fs.readFileSync(fixturePath);
     const result = parseConfigFile(buffer, "test-config.xlsx");
 
-    assert.ok(result.excludeKeywords.includes("培训班"));
-    assert.ok(!result.excludeKeywords.includes("不包含"));
+    // 关键词过滤 sheet contributes 培训班 / 总裁班 / 公开课
+    expect(result.excludeKeywords).toContain("培训班");
+    // 底层过滤关键词 sheet's 排除词 column contributes 指数 / 售楼
+    expect(result.excludeKeywords).toContain("指数");
+    expect(result.excludeKeywords).toContain("售楼");
+    // header row must be skipped, not treated as a keyword
+    expect(result.excludeKeywords).not.toContain("关键词");
+    expect(result.excludeKeywords).not.toContain("不包含");
+  });
 
-    const composite = result.compositeRules.find(r =>
-      JSON.parse(r.must_include).includes("中石油")
-    );
-    assert.ok(composite);
-    assert.ok(JSON.parse(composite.must_include).includes("开业"));
-    assert.ok(JSON.parse(composite.must_exclude).includes("指数"));
+  it("parses the remaining sheets of the fixture Excel file", () => {
+    const buffer = fs.readFileSync(fixturePath);
+    const result = parseConfigFile(buffer, "test-config.xlsx");
 
-    assert.ok(result.semanticPrompt.length > 0);
-    assert.ok(result.categories.some(c => c.name === "移动出行"));
-    assert.ok(
+    expect(result.enterpriseKeywords).toEqual(expect.arrayContaining(["中石油", "中石化"]));
+    expect(result.includeKeywords).toContain("开业");
+    expect(result.semanticPrompt.length).toBeGreaterThan(0);
+    expect(result.categories.some(c => c.name === "移动出行")).toBe(true);
+    expect(
       result.sources.some(
-        s => s.name === "嘉实多" && s.type === "wechat" && s.identifier === "castrolchina"
+        s => s.name === "嘉实多" && s.type === "wechat_mcp" && s.identifier === "castrolchina"
       )
-    );
+    ).toBe(true);
   });
 });

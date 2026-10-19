@@ -51,6 +51,7 @@ describe("searchProviderService", () => {
     const b = createSearchProvider({ name: "B", providerType: "tavily", apiKey: "key-b" });
     deleteSearchProvider(a.id);
     expect(listSearchProviders().some(p => p.id === a.id)).toBe(false);
+    expect(listSearchProviders().some(p => p.id === b.id)).toBe(true);
   });
 
   it("seeds bocha and tavily providers once from env keys", () => {

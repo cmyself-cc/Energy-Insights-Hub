@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert";
+import { describe, it, expect } from "vitest";
 import { parseMarkdown } from "./sourcesMdLoader.js";
 
 const sample = `
@@ -15,15 +14,15 @@ const sample = `
 describe("parseMarkdown", () => {
   it("parses website and wechat sources", () => {
     const sources = parseMarkdown(sample);
-    assert.strictEqual(sources.length, 4);
-    assert.deepStrictEqual(sources[0], {
+    expect(sources.length).toBe(4);
+    expect(sources[0]).toEqual({
       name: "国际能源署",
       url: "https://www.iea.org",
       type: "website",
       active: 1,
       config: JSON.stringify({})
     });
-    assert.deepStrictEqual(sources[2], {
+    expect(sources[2]).toEqual({
       name: "光伏们",
       url: "",
       type: "wechat",

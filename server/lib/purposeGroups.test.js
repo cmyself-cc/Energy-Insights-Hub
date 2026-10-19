@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert";
+import { describe, it, expect } from "vitest";
 import { buildPurposeGroups } from "./purposeGroups.js";
 
 describe("buildPurposeGroups", () => {
@@ -18,20 +17,20 @@ describe("buildPurposeGroups", () => {
       sourceById
     );
     const keys = [...groups.keys()].sort();
-    assert.deepStrictEqual(keys, ["competitor,policy,tech", "tech"]);
-    assert.strictEqual(groups.get("competitor,policy,tech").items.length, 1);
-    assert.strictEqual(groups.get("tech").items.length, 2);
-    assert.deepStrictEqual(groups.get("tech").purposes, ["tech"]);
+    expect(keys).toEqual(["competitor,policy,tech", "tech"]);
+    expect(groups.get("competitor,policy,tech").items.length).toBe(1);
+    expect(groups.get("tech").items.length).toBe(2);
+    expect(groups.get("tech").purposes).toEqual(["tech"]);
   });
 
   it("purpose 为空的源归入 __none__ 组", () => {
     const groups = buildPurposeGroups([item(3, "D")], sourceById);
-    assert.ok(groups.has("__none__"));
-    assert.deepStrictEqual(groups.get("__none__").purposes, []);
+    expect(groups.has("__none__")).toBeTruthy();
+    expect(groups.get("__none__").purposes).toEqual([]);
   });
 
   it("sourceId 找不到源对象时兜底为 __none__", () => {
     const groups = buildPurposeGroups([item(999, "E")], sourceById);
-    assert.ok(groups.has("__none__"));
+    expect(groups.has("__none__")).toBeTruthy();
   });
 });
