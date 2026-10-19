@@ -35,6 +35,23 @@ describe("auth middleware", () => {
     } finally { await close(); }
   });
 
+  it("malformed cookie value yields 401 JSON, never a 500", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      for (const bad of ["%", "%zz", "%E0%A4%A"]) {
+        // call() would throw on Express's HTML error page; read the raw body so a
+        // 500 shows up as an assertion failure instead of a JSON parse error.
+        const res = await fetch(`http://127.0.0.1:${port}/api/locked`, {
+          headers: { Cookie: `${SESSION_COOKIE}=${bad}` }
+        });
+        const text = await res.text();
+        expect(res.status, `cookie="${bad}" body=${text.slice(0, 120)}`).toBe(401);
+        expect(res.headers.get("content-type")).toContain("application/json");
+        expect(JSON.parse(text)).toEqual({ error: "unauthorized" });
+      }
+    } finally { await close(); }
+  });
+
   it("requireAdmin blocks user role with 403", async () => {
     const { port, close } = await listen(buildApp());
     try {

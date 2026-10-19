@@ -14,6 +14,14 @@ describe("sessions", () => {
     const row = db.prepare("SELECT * FROM sessions WHERE user_id=?").get(u.id);
     expect(row.token_hash).not.toBe(token);            // 只存哈希
     expect(row.token_hash).toBe(require("node:crypto").createHash("sha256").update(token).digest("hex"));
+    // 滑动续期：把有效期压到 +3 天，一次 resolveSession 应把它推回 +7 天（SQL 侧比较，不用 JS 时间串）
+    db.prepare("UPDATE sessions SET expires_at = datetime('now','+3 days') WHERE user_id=?").run(u.id);
+    expect(resolveSession(token)).not.toBeNull();
+    const daysLeft = db.prepare(
+      "SELECT (julianday(expires_at) - julianday('now')) AS d FROM sessions WHERE user_id=?"
+    ).get(u.id).d;
+    expect(daysLeft).toBeGreaterThan(6.9);
+    expect(daysLeft).toBeLessThan(7.1);
   });
 
   it("rejects unknown token and expired session", () => {

@@ -1,4 +1,4 @@
-import { resolveSession } from "./sessions.js";
+import { resolveSession, SESSION_TTL_DAYS } from "./sessions.js";
 
 export const SESSION_COOKIE = "eih_session";
 
@@ -6,7 +6,11 @@ export function parseCookieValue(req, name) {
   const raw = req.headers.cookie || "";
   for (const part of raw.split(";")) {
     const [k, ...rest] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(rest.join("="));
+    if (k === name) {
+      // 畸形百分号编码（如 "%"、"%zz"）会让 decodeURIComponent 抛 URIError；
+      // 返回 undefined 走 resolveSession 的空值分支，保证匿名请求恒为 401 JSON 而非 500 HTML。
+      try { return decodeURIComponent(rest.join("=")); } catch { return undefined; }
+    }
   }
   return undefined;
 }
@@ -26,7 +30,7 @@ export function requireAdmin(req, res, next) {
 export function setSessionCookie(res, token, production) {
   const attrs = [
     `${SESSION_COOKIE}=${token}`,
-    "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=604800"
+    "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${SESSION_TTL_DAYS * 86400}`
   ];
   if (production) attrs.push("Secure");
   res.setHeader("Set-Cookie", attrs.join("; "));
