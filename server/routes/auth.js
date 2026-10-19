@@ -7,26 +7,56 @@ import { exchangeIdentity, getAuthorizeUrl, isMockMode } from "../services/ident
 import { applyInviteDefaults } from "../services/viewService.js";
 
 const router = Router();
+// ⚠️ PROD 在**模块加载时**就固化了，之后改 process.env.NODE_ENV 不会重新求值。
+// 测试正是在 beforeEach 里才设 NODE_ENV（晚于 import），所以测试里 PROD 恒为 false，
+// session cookie 的 Secure 位也恒为 false。这目前无害（测试跑在 http://127.0.0.1 上，
+// 加了 Secure 反而浏览器不发），但将来谁把 NODE_ENV 的设置挪到 import 之后，
+// cookie 行为就会静默与生产分叉，而没有任何测试会红。改这里之前先读一遍这条。
 const PROD = process.env.NODE_ENV === "production";
 const sha256 = (t) => crypto.createHash("sha256").update(t).digest("hex");
 
 // —— 邀请码校验限速：5/min/IP（内存桶即可，重启清零可接受）——
+const LIMIT_WINDOW_MS = 60_000;
+const LIMIT_MAX = 5;
+const MAX_BUCKETS = 10_000;
 const buckets = new Map();
+
+// 逐桶按 ts 过期，取代原来的「size > 10_000 就 buckets.clear()」。
+// 全清是一个外部可触发的复位开关：apiRoutes.js 设了 trust proxy 之后 req.ip 是真实客户端 IP，
+// 轮换来源 IP 就能把 map 撑过上限，把**所有人**的限速一起清零——原本用来防内存无界的兜底，
+// 反倒成了绕过限速的手段。现在上界不变，但淘汰的是已经出窗口、本来就不该再计数的桶。
+function evictExpired(now) {
+  for (const [ip, b] of buckets) {
+    if (now - b.ts > LIMIT_WINDOW_MS) buckets.delete(ip);
+  }
+}
+
 function rateLimited(ip) {
   const now = Date.now();
-  const b = buckets.get(ip) || { count: 0, ts: now };
-  if (now - b.ts > 60_000) { b.count = 0; b.ts = now; }
+  let b = buckets.get(ip);
+  if (!b || now - b.ts > LIMIT_WINDOW_MS) {
+    if (buckets.size >= MAX_BUCKETS) {
+      evictExpired(now);
+      // 扫完还满，说明窗口内真有上万个不同 IP 在打注册：按插入顺序淘汰最老的（Map 保序），
+      // 而不是把活跃桶一起扔掉。淘汰只影响被轮换出来的那一个 IP，不波及别人。
+      while (buckets.size >= MAX_BUCKETS) {
+        const oldest = buckets.keys().next();
+        if (oldest.done) break;
+        buckets.delete(oldest.value);
+      }
+    }
+    b = { count: 0, ts: now };
+    buckets.set(ip, b);
+  }
   b.count += 1;
-  buckets.set(ip, b);
-  if (buckets.size > 10_000) buckets.clear();
-  return b.count > 5;
+  return b.count > LIMIT_MAX;
 }
 
 // 限速键的取值集中在这里，将来改口径只需动这一个函数。
-// 现状：生产部署在反向代理（Caddy）之后，而 server/index.js 未设 `trust proxy`，
-// 所以 req.ip 拿到的是代理地址而非真实客户端 IP，限速实际退化为「全局 5 次/分钟」。
-// 这个方向是偏严不偏松（fail-safe），修正需要结合线上部署确认代理跳数，属 Task 6 范围。
-// 不要在这里自行读 X-Forwarded-For：未设 trust proxy 时该头可被客户端任意伪造，比现状更糟。
+// server/apiRoutes.js 已设 app.set("trust proxy", 1)（生产是单跳 Caddy），
+// 所以 req.ip 拿到的是真实客户端 IP，限速是真正的 per-IP。
+// 不要在这里自行读 X-Forwarded-For：express 已经按跳数处理过了，
+// 手读等于把最左边那个客户端可任意伪造的值当成真相。
 function clientKey(req) {
   return req.ip;
 }
