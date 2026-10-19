@@ -49,9 +49,15 @@ function adminUser(u) {
 // 比较会静默出错——实测「当天午夜、其实早已过期」会被判成 ok=1（未过期），邀请码于是永不过期。
 // 这是本仓踩过的同一个坑（server/services/tracker.js 的 reconcileStaleRuns、
 // auth.js 的 issuePending 上方注释都有记录；这里刻意不写行号，行号会随改动漂移）。
-// datetime() 顺带把带时区偏移的串转成 UTC、把纯日期补成当天午夜，并对无法解析的输入返回 null。
+// datetime() 顺带把带时区偏移的串转成 UTC、把纯日期补成当天午夜。
+// ⚠️ 但它只对**字符串**「白送」非法值拒绝（无法解析的串返回 null）。对数字它按儒略日解释：
+// 实测 datetime(2500000) -> "2132-08-31 12:00:00"、datetime(5) -> "-4713-11-29 12:00:00"，
+// 都是「合法」输出，于是一张垃圾输入建出的邀请码会拿到永不过期的 expires_at（fail-open）；
+// 而 true / {n:5} 会让 better-sqlite3 抛 TypeError / RangeError -> 500，本该是 400。
+// 所以类型检查必须在进 SQL 之前做，口径与 C4 对 max_uses 的显式拒绝保持一致。
 function normalizeExpiresAt(raw) {
   if (raw == null) return { value: null };            // NULL = 长期有效
+  if (typeof raw !== "string") return { error: "bad expires_at" };
   const d = db.prepare("SELECT datetime(?) AS d").get(raw).d;
   return d == null ? { error: "bad expires_at" } : { value: d };
 }
@@ -121,11 +127,27 @@ router.post("/invite-codes", (req, res) => {
   const ex = normalizeExpiresAt(b.expires_at);
   if (ex.error) return res.status(400).json({ error: ex.error });
 
+  // 所有校验都在任何写入之前完成，口径与 PATCH /users/:id 一致：
+  // null / 省略 = 用默认值，非法值 = 400，绝不静默改写管理员的输入。
+  // brief 原来是 `["admin","user"].includes(b.role) ? b.role : "user"`，于是 role:"Admin"
+  // （大小写打错）会静默发出一张**普通用户**邀请码，管理员只能从响应体里发现。
+  // 方向仍是 fail-closed（最小权限），所以这不是安全洞，是一致性 + 可发现性问题。
+  if (b.role != null && !["admin", "user"].includes(b.role)) {
+    return res.status(400).json({ error: "bad role" });
+  }
+  // default_view 必须是对象。数组也是 typeof "object"，而 applyInviteDefaults 对数组走的是
+  // **静默 return**：实测 default_view="[]" 会建出 0 个 user_views、不抛异常、连一行
+  // console.error 都没有——管理员以为这张码带着默认视角，用它注册的每个用户都拿不到，
+  // 事后也无从追查。在这里拒绝而不是去 viewService.js 兜底：此刻管理员还在场，能立刻看到 400。
+  if (b.default_view != null && (typeof b.default_view !== "object" || Array.isArray(b.default_view))) {
+    return res.status(400).json({ error: "bad default_view" });
+  }
+
   const dv = b.default_view ? JSON.stringify(b.default_view) : null;
   const info = db.prepare(
     `INSERT INTO invite_codes (code, label, role, default_view, max_uses, expires_at, note, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(code, String(b.label || ""), ["admin", "user"].includes(b.role) ? b.role : "user", dv,
+  ).run(code, String(b.label || ""), b.role || "user", dv,
         mu.value, ex.value, String(b.note || ""), req.user.id);
   res.json({ data: db.prepare("SELECT * FROM invite_codes WHERE id=?").get(info.lastInsertRowid) });
 });

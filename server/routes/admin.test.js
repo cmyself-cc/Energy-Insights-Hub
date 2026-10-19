@@ -9,7 +9,8 @@ import { clearAuthTables, insertTestUser, listen, makeCookieJar } from "../testU
 function buildApp() {
   const app = express();
   app.use(express.json());
-  // 挂载形状照抄 views.test.js:13：中间件写在 router 之前。
+  // 挂载形状与 views.test.js 的宿主 app 一致：中间件写在 router 之前（apiRoutes.js 里
+  // 「挂载形状是硬约束」那段注释说明了为什么）。刻意不引用行号——行号会随改动漂移。
   app.use("/api/admin", requireAuth, requireAdmin, adminRouter);
   return app;
 }
@@ -162,9 +163,23 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
       expect((await api(port, "/api/admin/invite-codes/999999", admin.id, { method: "PATCH", body: { active: 0 } })).status).toBe(404);
 
       // usages：谁用这个码注册的（此时还没人注册）
+      const u0 = await api(port, `/api/admin/invite-codes/${c.body.data.id}/usages`, admin.id);
+      expect(u0.status).toBe(200);
+      expect(u0.body.data).toEqual([]);
+
+      // Minor 4：空列表**结构性地**证明不了投影是白名单——把
+      // `SELECT id, unionid, nickname, created_at` 改成 `SELECT *`，上面那条照样绿，
+      // 而它会向管理员泄漏每个用过该码的用户的 openid_web / openid_mp。
+      // 所以先造一个真实使用者，再钉住字段集合**恰好**是这 4 个。
+      const usedBy = insertTestUser({ unionid: "used-by-new01" });
+      db.prepare("UPDATE users SET invited_by_code_id=? WHERE id=?").run(c.body.data.id, usedBy.id);
       const u = await api(port, `/api/admin/invite-codes/${c.body.data.id}/usages`, admin.id);
       expect(u.status).toBe(200);
-      expect(u.body.data).toEqual([]);
+      expect(u.body.data.map((r) => r.unionid)).toEqual(["used-by-new01"]);
+      expect(Object.keys(u.body.data[0]).sort(), "usages 的投影必须恰好是这 4 个字段，不许 SELECT *")
+        .toEqual(["created_at", "id", "nickname", "unionid"]);
+      expect(u.body.data[0]).not.toHaveProperty("openid_web");
+      expect(u.body.data[0]).not.toHaveProperty("openid_mp");
     } finally { await close(); }
   });
 
@@ -192,11 +207,37 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
       expect((await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code: "EXP03", expires_at: "2026-12-31" } })).status).toBe(200);
       expect(codeRow("EXP03").expires_at).toBe("2026-12-31 00:00:00");
 
-      // 垃圾输入 -> 400 且不落库（datetime() 对无法解析的串返回 null）
+      // 垃圾**字符串** -> 400 且不落库（datetime() 对无法解析的串返回 null）
       const bad = await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code: "EXP04", expires_at: "garbage" } });
       expect(bad.status).toBe(400);
       expect(bad.body).toEqual({ error: "bad expires_at" });
       expect(codeRow("EXP04")).toBeUndefined();
+
+      // I3：非字符串一律 400。SQLite 的 datetime() 只对**字符串**「白送」非法值拒绝，
+      // 对数字它按儒略日解释（实测 `SELECT datetime(?)`）：
+      //   2500000 -> "2132-08-31 12:00:00"   HTTP 200，一张实际永不过期的邀请码
+      //   2460000 -> "2023-02-24 12:00:00"   HTTP 200
+      //   5 / [5] -> "-4713-11-29 12:00:00"  HTTP 200（数组被 better-sqlite3 当绑定参数列表）
+      //   true -> TypeError、{n:5} -> RangeError，都是 HTTP 500（本该 400）
+      // 失败方向是 fail-open，与 C4 在**同一个 handler 里**对 max_uses 的显式拒绝直接矛盾。
+      // 放大因素：PATCH /invite-codes/:id 只支持 active/note，误建之后**无法改正**
+      // expires_at，只能停用重建。
+      const badTypes = [
+        ["数字（被当儒略日 -> 永不过期）", 2500000],
+        ["小数", 2460000.5],
+        ["布尔", true],
+        ["数组", [5]],
+        ["对象", { n: 5 }]
+      ];
+      for (let i = 0; i < badTypes.length; i += 1) {
+        const [label, v] = badTypes[i];
+        const code = `EXP-BAD${i}`;
+        const r = await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code, expires_at: v } });
+        expect(r.status, `expires_at=${label} 应被 400 拒绝（不是 200、也不是 500）`).toBe(400);
+        expect(r.body, `expires_at=${label}`).toEqual({ error: "bad expires_at" });
+      }
+      // 被拒绝的一个都没落库
+      expect(db.prepare("SELECT COUNT(*) c FROM invite_codes WHERE code LIKE 'EXP-BAD%'").get().c).toBe(0);
 
       // 不传 / null -> NULL（长期有效）
       expect((await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code: "EXP05" } })).status).toBe(200);
@@ -283,6 +324,26 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
       expect((await api(port, `/api/admin/users/${second.id}`, admin.id, { method: "PATCH", body: { role: "admin" } })).status).toBe(200);
       expect(adminCount()).toBe(2);
 
+      // I2：C5 的计数**必须**带 `AND status='active'`，否则这颗守卫在条件上没有齿。
+      // 场景是真实会发生的：管理员停用了一个同事管理员，之后想降级自己。
+      // 此时 active admin 只剩 adm 一个，但 role='admin' 的行有 2 个——
+      // 少了 status 条件的计数会算出 2、放行，于是 active admin 归零、
+      // 整个管理面永久失联，只能直接改库恢复。这正是 C5 存在的唯一理由。
+      // （上面 :280 那条 409 抓不到这个变异：那时 second 的 role 已经变成 'user'，
+      //   role='admin' 的行本来就只剩 1 个，带不带 status 条件结果一样。）
+      expect((await api(port, `/api/admin/users/${second.id}`, admin.id, { method: "PATCH", body: { status: "disabled" } })).status).toBe(200);
+      expect(adminCount(), "停用之后 active admin 只剩 adm").toBe(1);
+      expect(db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin'").get().c,
+        "但 role='admin' 的行仍有 2 个（含被停用的那个）").toBe(2);
+      expect((await api(port, `/api/admin/users/${admin.id}`, admin.id, { method: "PATCH", body: { role: "user" } })).status,
+        "1 active + 1 disabled admin 时降级自己必须 409").toBe(409);
+      expect((await api(port, `/api/admin/users/${admin.id}`, admin.id, { method: "PATCH", body: { status: "disabled" } })).status,
+        "1 active + 1 disabled admin 时停用自己必须 409").toBe(409);
+      expect(userRow(admin.id), "两次拒绝之后 adm 分毫未动").toEqual({ role: "admin", status: "active" });
+      // 恢复：下面的步骤依赖「adm 不是最后一个 active admin」
+      expect((await api(port, `/api/admin/users/${second.id}`, admin.id, { method: "PATCH", body: { status: "active" } })).status).toBe(200);
+      expect(adminCount()).toBe(2);
+
       // 普通用户不受这个守卫影响
       expect((await api(port, `/api/admin/users/${user.id}`, admin.id, { method: "PATCH", body: { status: "disabled" } })).status).toBe(200);
 
@@ -339,6 +400,80 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
       expect(std.resource_counts.templates).toBeNull();
       // schema 还没到位是预期状态，不该刷错误日志（否则每个管理员每次打开用户列表都是一屏红）
       expect(errSpy).not.toHaveBeenCalled();
+    } finally { await close(); }
+  });
+
+  it("rejects a malformed default_view at write time instead of silently dropping it later", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      // 为什么必须在**写入侧**拒绝：applyInviteDefaults 对坏配置走的是静默 return。
+      // 实测 default_view="[]" -> 建出 0 个 user_views、不抛异常、连一行 console.error 都没有。
+      // 管理员以为这张码带着默认视角，用它注册的每个用户都什么都拿不到，而任何日志里
+      // 都查不到痕迹。此刻管理员还在场、能立刻看到 400；等到注册时再兜底就没人看得见了
+      // （这也是为什么改这里比在 viewService.js 里兜底更好）。
+      const rejected = [
+        ["空数组（实测静默丢视角）", []],
+        ["数组", [{ name: "x" }]],
+        ["字符串", "policy"],
+        ["数字", 5],
+        ["布尔", true]
+      ];
+      for (let i = 0; i < rejected.length; i += 1) {
+        const [label, v] = rejected[i];
+        const code = `DV-BAD${i}`;
+        const r = await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code, default_view: v } });
+        expect(r.status, `default_view=${label} 应被 400 拒绝`).toBe(400);
+        expect(r.body, `default_view=${label}`).toEqual({ error: "bad default_view" });
+      }
+      expect(db.prepare("SELECT COUNT(*) c FROM invite_codes WHERE code LIKE 'DV-BAD%'").get().c).toBe(0);
+
+      // 合法形状与「不填」都必须照常放行——这条校验不许把正常用法一起挡掉
+      const ok = await api(port, "/api/admin/invite-codes", admin.id, {
+        method: "POST",
+        body: { code: "DV-OK1", default_view: { name: "默认", filters: { purposes: "policy" } } }
+      });
+      expect(ok.status).toBe(200);
+      expect(JSON.parse(codeRow("DV-OK1").default_view)).toEqual({ name: "默认", filters: { purposes: "policy" } });
+      for (const [code, extra] of [["DV-OK2", {}], ["DV-OK3", { default_view: null }]]) {
+        expect((await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code, ...extra } })).status).toBe(200);
+        expect(codeRow(code).default_view, `${code} 不填 default_view 应存 NULL`).toBeNull();
+      }
+    } finally { await close(); }
+  });
+
+  it("rejects an unknown role with 400 instead of silently issuing a plain-user code", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      // brief 原来是 ["admin","user"].includes(b.role) ? b.role : "user"：
+      // role:"Admin"（大小写打错）会**静默发出一张普通用户邀请码**，管理员只能从响应体里
+      // 发现。这与 C4 在同一个 handler 里对 max_uses 的显式拒绝原则自相矛盾。
+      // 方向仍是 fail-closed（最小权限），所以这不是安全洞，是一致性 + 可发现性问题。
+      const rejected = [
+        ["不存在的角色", "root"],
+        ["大小写打错", "Admin"],
+        ["空字符串", ""],
+        ["数字", 5],
+        ["布尔", true],
+        ["数组", ["admin"]]
+      ];
+      for (let i = 0; i < rejected.length; i += 1) {
+        const [label, v] = rejected[i];
+        const code = `ROLE-BAD${i}`;
+        const r = await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code, role: v } });
+        expect(r.status, `role=${label} 应被 400 拒绝`).toBe(400);
+        expect(r.body, `role=${label}`).toEqual({ error: "bad role" });
+      }
+      expect(db.prepare("SELECT COUNT(*) c FROM invite_codes WHERE code LIKE 'ROLE-BAD%'").get().c).toBe(0);
+
+      // 两个合法值照常；省略 / null = 默认 user（与 PATCH /users/:id 的 role 口径一致）
+      expect((await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code: "ROLE-A", role: "admin" } })).status).toBe(200);
+      expect(codeRow("ROLE-A").role).toBe("admin");
+      expect((await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code: "ROLE-U", role: "user" } })).status).toBe(200);
+      expect(codeRow("ROLE-U").role).toBe("user");
+      for (const [code, extra] of [["ROLE-D1", {}], ["ROLE-D2", { role: null }]]) {
+        expect((await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code, ...extra } })).status).toBe(200);
+        expect(codeRow(code).role, `${code} 省略 role 应默认 user`).toBe("user");
+      }
     } finally { await close(); }
   });
 });

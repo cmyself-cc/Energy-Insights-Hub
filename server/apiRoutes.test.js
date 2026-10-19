@@ -15,9 +15,14 @@ import { clearAuthTables, insertTestUser, listen, makeCookieJar } from "./testUt
 // **永远碰不到任何真实 handler**。唯一会走到 handler 的是「必须保持所有登录用户可用」那组，
 // 全部用 id 999999999（测试库 insights 表实测 rows=0），即使真执行也只影响 0 行。
 
+// 宿主 app 必须与 index.js 的组装**同构**：那边是 express.json({ limit: "10mb" })。
+// 少了 limit，body-parser 用默认的 100kb，`entity.too.large` 这条分支在测试里的触发条件就与
+// 生产不一致（虽然本轮没有用例真去发一个 >10mb 的体——那太慢，收益不匹配）。
+const JSON_LIMIT = { limit: "10mb" };
+
 function buildApp() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json(JSON_LIMIT));
   mountApiRoutes(app);
   return app;
 }
@@ -29,7 +34,7 @@ function buildApp() {
 // 这不是 mock 被测代码——被测对象就是那个中间件，异常是真的从 handler 里抛出来的。
 function buildAppWithProbe() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json(JSON_LIMIT));
   app.get("/api/__boom", () => { throw new Error("boom: UNIQUE constraint failed: secret_table.col"); });
   mountApiRoutes(app);
   return app;
@@ -177,6 +182,18 @@ describe("apiRoutes auth matrix", () => {
   });
 
   it("admin-only write routes reject a plain user with 403 before reaching the handler", async () => {
+    // I4：这里断言的是**前后差值为 0**，不是「表的绝对行数为 0」。
+    // 本文件既不建也不清 filter_rules / industry_categories，而测试库是磁盘上跨进程持久的：
+    // filter_rules 今天恰好为空靠的是 tracker.test.js 的 resetTables()，industry_categories
+    // 更脆——全仓只有 subjectKeywords.test.js（它自己的 beforeEach，且没有 afterEach/afterAll，
+    // 会把 INSERT 的行留在共享库里）和 tracker.js 的一条 DELETE 会碰它。
+    // 断言绝对 0 就等于把本文件的红绿绑在**别的文件的执行顺序和副作用**上；
+    // 而这条恰恰是全文件最强的断言（唯一证明 403 发生在 handler 之前），
+    // 将来某次无关改动让它变红，最可能的「修法」是把它删掉——那才是真正的损失。
+    const countOf = (t) => db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c;
+    const rulesBefore = countOf("filter_rules");
+    const catsBefore = countOf("industry_categories");
+
     const { port, close } = await listen(buildApp());
     try {
       for (const [method, p] of ADMIN_ONLY_WRITES) {
@@ -185,9 +202,9 @@ describe("apiRoutes auth matrix", () => {
       }
       // 403 必须发生在 handler 之前：这些写操作一个都不许落库。
       // POST /api/filters/rules 若真跑到 handler，会先 await generateAliases()（一次 LLM 调用）
-      // 再 INSERT 一行，所以「表仍是空的」既证明没写库、也证明没打 LLM。
-      expect(db.prepare("SELECT COUNT(*) c FROM filter_rules").get().c).toBe(0);
-      expect(db.prepare("SELECT COUNT(*) c FROM industry_categories").get().c).toBe(0);
+      // 再 INSERT 一行，所以「一行都没多出来」既证明没写库、也证明没打 LLM。
+      expect(countOf("filter_rules"), "403 之后 filter_rules 不许多出行").toBe(rulesBefore);
+      expect(countOf("industry_categories"), "403 之后 industry_categories 不许多出行").toBe(catsBefore);
     } finally { await close(); }
   });
 
@@ -275,9 +292,9 @@ describe("invite limiter is per real client IP", () => {
 
   afterAll(() => { clearAuthTables(); });
 
-  const register = (port, ip) => fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+  const register = (port, xff) => fetch(`http://127.0.0.1:${port}/api/auth/register`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Forwarded-For": ip },
+    headers: { "Content-Type": "application/json", "X-Forwarded-For": xff },
     // ticket 是假的 -> 服务端在票据校验处 400，全程零写库，只消耗一个限速配额
     body: JSON.stringify({ ticket: "nope", code: "nope" })
   }).then((r) => r.status);
@@ -291,11 +308,81 @@ describe("invite limiter is per real client IP", () => {
       }
       expect(await register(port, "1.2.3.4"), "同一个真实 IP 第 6 次必须 429").toBe(429);
 
-      // 这条才是判别式：没设 trust proxy 时 req.ip 恒为 127.0.0.1，
+      // 这条是「限速必须真的是 per-IP」的判别式：没设 trust proxy 时 req.ip 恒为 127.0.0.1，
       // 所有客户端共用一个桶，换一个 IP 也立刻 429 —— 限速退化成「全局 5 次/分钟」，
       // 一个攻击者就能把所有人的注册通道锁死。
       expect(await register(port, "5.6.7.8"), "不同真实 IP 必须有独立配额").not.toBe(429);
       expect(await register(port, "5.6.7.8"), "独立配额意味着它也走到票据校验").toBe(400);
     } finally { await close(); }
+  });
+
+  // 🔴 这条才是钉住「trust proxy 的确切值必须是 1、不能是 true」的那颗钉子。
+  // 上面那个用例发的是**单值** XFF，而 proxyaddr 对单值在 1 和 true 下返回同一个值
+  // （实测：两者都得 req.ip = "1.2.3.4"），所以它在结构上区分不了对错值。
+  // 生产是单跳 Caddy：Caddy 把真实客户端 IP **追加**到 XFF 右边，攻击者只能控制左边。
+  // trust proxy = 1 -> 只信任最近一跳（本机 socket），req.ip 取到 Caddy 追加的真实 IP；
+  // trust proxy = true -> 一路信任到最左，req.ip 变成攻击者任选的值，
+  //                      于是轮换最左值就能每次拿到全新限速桶，5 次/分钟形同虚设。
+  it("a spoofed leftmost X-Forwarded-For value never becomes the rate-limit key", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      // 真实客户端固定为 1.2.3.4，每次伪造一个不同的最左值。正确实现下 5 次之后必须 429。
+      // （本用例依赖 beforeEach 的 __resetInviteLimiter()：1.2.3.4 的桶必须是全新的，
+      //   否则上一个用例已经把它打到 6 次，这里第一次就会 429，判别式失效。）
+      for (let i = 1; i <= 5; i++) {
+        expect(await register(port, `9.9.9.${i}, 1.2.3.4`),
+          `第 ${i} 次：伪造的最左值不该让它变成一个新桶`).toBe(400);
+      }
+      expect(await register(port, "9.9.9.99, 1.2.3.4"),
+        "伪造的 XFF 最左值不得参与限速键").toBe(429);
+    } finally { await close(); }
+  });
+});
+
+// PLAN:16 逐字规定 session cookie 必须带 HttpOnly + SameSite=Lax + 生产 Secure。
+// 实现一直是对的（lib/authMiddleware.js 的 setSessionCookie），但此前**零断言**——
+// grep "httponly|samesite|getSetCookie" 在所有 *.test.js 里零命中。摘掉 HttpOnly 之后
+// 全套测试仍然绿，而 XSS 就能直接读走会话。这里补上钉子。
+//
+// ⚠️ Secure 位断言不了：PROD 在 auth.js **模块加载时**就固化了，而 vitest 下 NODE_ENV 是
+// "test"，所以这里恒为 false（详见 auth.js 里 PROD 上方那段注释）。这是诚实的覆盖缺口。
+describe("session cookie attributes", () => {
+  beforeEach(() => { clearAuthTables(); jars.clear(); });
+  afterAll(() => { clearAuthTables(); });
+
+  it("a real login sets HttpOnly + SameSite=Lax + Path=/ on the session cookie", async () => {
+    // 走**真登录**而不是手搓一条 Set-Cookie：mock 模式下 dev-login 对一个已存在的 active
+    // 用户直接走 loginExisting -> setSessionCookie，不碰网络、不需要微信凭证。
+    const prev = process.env.AUTH_DEV_MODE;
+    process.env.AUTH_DEV_MODE = "wechat-mock";
+    const { port, close } = await listen(buildApp());
+    try {
+      const u = insertTestUser({ unionid: "cookie-probe" });
+      const res = await fetch(`http://127.0.0.1:${port}/api/auth/dev-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ devUnionid: "cookie-probe" })
+      });
+      expect(res.status, "mock 模式下对已存在的 active 用户应当直接登录").toBe(200);
+
+      // getSetCookie() 而不是 get("set-cookie")：undici 下后者只返回第一条，
+      // 按逗号手工切分又会误伤 Expires 里含逗号的值（testUtils.makeCookieJar 同理）。
+      const raw = res.headers.getSetCookie().find((c) => c.startsWith("eih_session="));
+      expect(raw, "登录必须下发一条 eih_session cookie").toBeTruthy();
+      expect(raw, "必须 HttpOnly（否则 XSS 能直接读走会话）").toMatch(/;\s*HttpOnly/i);
+      expect(raw, "必须 SameSite=Lax（挡 CSRF）").toMatch(/;\s*SameSite=Lax/i);
+      expect(raw, "必须 Path=/（否则只在 /api/auth 下回传，登录后立刻掉线）").toMatch(/;\s*Path=\//i);
+      expect(raw, "必须带 Max-Age，否则是浏览器会话级 cookie，重启就掉线").toMatch(/;\s*Max-Age=\d+/i);
+
+      // 这条 cookie 必须真的能用，否则上面四条断言的可能是个废 cookie
+      const me = await fetch(`http://127.0.0.1:${port}/api/auth/me`, {
+        headers: { Cookie: raw.split(";")[0] }
+      });
+      expect(me.status).toBe(200);
+      expect((await me.json()).data.user.id).toBe(u.id);
+    } finally {
+      await close();
+      if (prev === undefined) delete process.env.AUTH_DEV_MODE; else process.env.AUTH_DEV_MODE = prev;
+    }
   });
 });

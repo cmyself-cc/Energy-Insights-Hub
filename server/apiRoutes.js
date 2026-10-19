@@ -67,12 +67,19 @@ export function mountApiRoutes(app) {
   app.use("/api/models", requireAuth, requireAdmin, modelsRouter);
   app.use("/api/search-providers", requireAuth, requireAdmin, searchProvidersRouter);
 
-  // —— 中央 JSON 错误中间件，必须挂在所有路由之后 ——
+  // —— 中央 JSON 错误中间件，必须挂在所有 **API** 路由之后 ——
   // 挂在 mountApiRoutes 末尾而不是 index.js 末尾，同样是为了 apiRoutes.test.js 能够着它。
   // 它是 4 参处理器：正常请求流会被 express 整个跳过，所以不影响 index.js 里排在后面的
   // express.static / SPA 兜底；而任何 next(err)（含 express.json 的 body 解析错误——
   // 那个中间件在 index.js 里注册得比这里**早**，但 express 找错误处理器时是从出错位置
   // 向后扫，跳过一切非 4 参层）都会落到这里，而不是 express 默认的 text/html 错误页。
+  //
+  // ⚠️ 作用域只到 API，别把「所有路由之后」读成「覆盖整个 app」：index.js 里排在**本行
+  // 之后**的 express.static 与 SPA 的 sendFile 若抛错（磁盘故障、路径问题），next(err)
+  // 会绕过本中间件、落到 express 默认的 HTML 错误页。这是刻意接受的——那两条路径本来就是
+  // 在给浏览器回 HTML，回一段 HTML 错误页比回一个 JSON 信封更对。
+  // 也不要为了「统一」把这个中间件在 index.js 末尾再注册一遍：重复注册会让同一个错误被
+  // 处理两次，第二次走进下面的 headersSent 分支、把连接直接销毁。
   app.use(jsonErrorHandler);
 }
 
@@ -87,13 +94,17 @@ const BODY_ERROR_ENVELOPES = new Map([
   ["request.aborted", "invalid request body"]
 ]);
 
-function jsonErrorHandler(err, _req, res, _next) {
+function jsonErrorHandler(err, _req, res, next) {
   const status = typeof err?.status === "number" && err.status >= 400 && err.status < 500 ? err.status : 500;
   const envelope = BODY_ERROR_ENVELOPES.get(err?.type) || (status === 400 ? "bad request" : "internal server error");
   // 详情只落服务端日志，绝不进响应：SyntaxError 的消息带原始 token、body-parser 还把
   // 整个请求体挂在 err.body 上，better-sqlite3 的消息会带出 schema 内部信息。
   // /api/auth/register 匿名可达，回显等于给外部一个反射式探针。
   console.error(`[api] ${status} ${err?.type || "error"}:`, err?.message || err);
-  if (res.headersSent) return;
+  // 响应已经开写了就没法再换状态码/body。此时**不能**直接 return：那会让连接一直挂着
+  // 直到超时。交回 express 的默认处理器——它（finalhandler）在 headersSent 时会
+  // req.socket.destroy() 把连接干掉，这正是 express 自己的做法。
+  // 今天这条分支不可达（本中间件是 API 链路的终点，上游没人写过响应），纯健壮性。
+  if (res.headersSent) return next(err);
   res.status(status).json({ error: envelope });
 }

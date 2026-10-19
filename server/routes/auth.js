@@ -37,8 +37,13 @@ function rateLimited(ip) {
   if (!b || now - b.ts > LIMIT_WINDOW_MS) {
     if (buckets.size >= MAX_BUCKETS) {
       evictExpired(now);
-      // 扫完还满，说明窗口内真有上万个不同 IP 在打注册：按插入顺序淘汰最老的（Map 保序），
-      // 而不是把活跃桶一起扔掉。淘汰只影响被轮换出来的那一个 IP，不波及别人。
+      // 扫完还满，说明窗口内真有上万个不同 IP 在打注册：按**插入顺序**淘汰最老的（Map 保序，
+      // 而命中已有桶时下面只改 b.count、并不 re-set，所以位置就是该 IP 首次出现的位置）。
+      // ⚠️ 这不等于淘汰「最久没活动」的那个：被淘汰的桶可能仍在窗口内，于是那个客户端的
+      // 计数被清零、拿到一份全新配额（对**单个**客户端 fail-open）。做成真 LRU 要在每个
+      // 请求上 delete + set，churn 与收益不匹配，所以这里只保证「不波及其他人」——
+      // 而这已经严格优于原来的 clear()：那会把**所有人**的配额一起清零，
+      // 等于给外部一个可触发的限速复位开关。
       while (buckets.size >= MAX_BUCKETS) {
         const oldest = buckets.keys().next();
         if (oldest.done) break;
@@ -159,9 +164,10 @@ router.post("/wechat/callback", async (req, res) => {
 
 // 仅 mock 模式的本地登录入口（联调/测试；生产自动 404）
 // 必须 async + await：exchangeIdentity 两个分支都返回 Promise，漏掉 await 会让
-// identity.unionid 读到 undefined，最终在 pending_identities.unionid 上撞 NOT NULL
-// 约束抛出 500（server/index.js 未装 4 参错误中间件，还会泄漏堆栈）。
-// try/catch 的理由与上面两个回调逐字相同：express 4.x 不把 async 逃逸转给 next(err)。
+// identity.unionid 读到 undefined，最终在 pending_identities.unionid 上撞 NOT NULL 约束抛出。
+// try/catch 的理由与上面两个回调逐字相同：express 4.x 不把 async 逃逸转给 next(err)，
+// 所以 apiRoutes.js 里那个中央 JSON 错误中间件**够不着这里**——逃逸的 rejected promise
+// 会变成进程级 unhandled rejection，连一个 500 响应都不会有。
 router.post("/dev-login", async (req, res) => {
   if (!isMockMode()) return res.status(404).json({ error: "not found" });
   const { devUnionid } = req.body || {};
