@@ -1,6 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { generateAliases } from "../lib/llmAlias.js";
+import { requireAdmin } from "../lib/authMiddleware.js";
 
 const router = Router();
 
@@ -30,7 +31,7 @@ function parseAliasesJson(raw) {
   }
 }
 
-router.post("/rules", async (req, res) => {
+router.post("/rules", requireAdmin, async (req, res) => {
   try {
     const { type, name, mustInclude, mustExclude, active, priority, purpose = "", aliases: aliasesOverride } = req.body;
     const cleanName = (name || "").trim();
@@ -46,7 +47,7 @@ router.post("/rules", async (req, res) => {
   }
 });
 
-router.put("/rules/:id", async (req, res) => {
+router.put("/rules/:id", requireAdmin, async (req, res) => {
   try {
     const { name, mustInclude, mustExclude, active, priority, purpose, aliases: aliasesOverride } = req.body;
     const cleanName = (name || "").trim();
@@ -74,7 +75,7 @@ router.put("/rules/:id", async (req, res) => {
   }
 });
 
-router.delete("/rules/:id", (req, res) => {
+router.delete("/rules/:id", requireAdmin, (req, res) => {
   try {
     db.prepare("DELETE FROM filter_rules WHERE id = ?").run(req.params.id);
     res.json({ data: { success: true } });
@@ -86,7 +87,7 @@ router.delete("/rules/:id", (req, res) => {
 // Regenerate LLM synonyms for a single filter rule (best-effort).
 // body.persist=false → generate only, do not write to DB (edit-dialog preview).
 // body.keyword → use this keyword instead of the stored rule name (e.g. after editing).
-router.post("/rules/:id/regenerate-aliases", async (req, res) => {
+router.post("/rules/:id/regenerate-aliases", requireAdmin, async (req, res) => {
   try {
     const rule = db.prepare("SELECT id, name FROM filter_rules WHERE id = ?").get(req.params.id);
     if (!rule) return res.status(404).json({ error: "Rule not found" });
@@ -111,7 +112,7 @@ router.get("/categories", (_req, res) => {
   }
 });
 
-router.put("/categories/:id", (req, res) => {
+router.put("/categories/:id", requireAdmin, (req, res) => {
   try {
     const { description, inclusion_prompt, active } = req.body;
     db.prepare(
@@ -138,7 +139,7 @@ router.get("/config", (req, res) => {
   }
 });
 
-router.put("/config", (req, res) => {
+router.put("/config", requireAdmin, (req, res) => {
   try {
     const { content, active } = req.body;
     const purpose = req.query.purpose || "";
@@ -171,7 +172,7 @@ router.get("/ai-presets", (_req, res) => {
   }
 });
 
-router.put("/ai-presets", (req, res) => {
+router.put("/ai-presets", requireAdmin, (req, res) => {
   try {
     const content = JSON.stringify(req.body.presets || []);
     const existing = db.prepare("SELECT id FROM filter_config WHERE type = 'ai_presets' LIMIT 1").get();

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { recordFeedback } from "../services/feedbackService.js";
+import { requireAdmin } from "../lib/authMiddleware.js";
 
 const router = Router();
 
@@ -215,7 +216,10 @@ router.post("/:id/reclassify", (req, res) => {
 });
 
 // 删除单个insight
-router.delete("/:id", (req, res) => {
+// 只有「删除」是管理员动作：hide / unhide / reclassify 是**用户反馈**动作，会回灌到过滤权重
+// （AGENTS.md: bookmark/hide feedback that feeds back into filtering weights），必须对全体登录
+// 用户开放，别顺手给它们也加 requireAdmin。apiRoutes.test.js 里有一条反向钉子盯着这件事。
+router.delete("/:id", requireAdmin, (req, res) => {
   try {
     const result = db.prepare("DELETE FROM insights WHERE id = ?").run(req.params.id);
     if (result.changes === 0) {

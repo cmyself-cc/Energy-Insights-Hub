@@ -2,6 +2,7 @@ import { Router } from "express";
 import db from "../db.js";
 import { fetchWithTimeout } from "../crawlers/utils.js";
 import { generateAliases } from "../lib/llmAlias.js";
+import { requireAdmin } from "../lib/authMiddleware.js";
 
 const router = Router();
 
@@ -32,7 +33,7 @@ router.get("/", (_req, res) => {
 });
 
 // Create new category
-router.post("/", async (req, res) => {
+router.post("/", requireAdmin, async (req, res) => {
   try {
     const { name, keywords } = req.body;
     if (!name || !name.trim()) {
@@ -55,7 +56,7 @@ router.post("/", async (req, res) => {
 });
 
 // Update category
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireAdmin, async (req, res) => {
   try {
     const { name, keywords, active } = req.body;
     const existing = db.prepare("SELECT * FROM industry_categories WHERE id = ?").get(req.params.id);
@@ -103,7 +104,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // Delete category
-router.delete("/:id", (req, res) => {
+router.delete("/:id", requireAdmin, (req, res) => {
   try {
     const existing = db.prepare("SELECT * FROM industry_categories WHERE id = ?").get(req.params.id);
     if (!existing) {
@@ -117,7 +118,7 @@ router.delete("/:id", (req, res) => {
 });
 
 // Suggest keywords via LLM
-router.post("/suggest-keywords", async (req, res) => {
+router.post("/suggest-keywords", requireAdmin, async (req, res) => {
   try {
     const { keyword } = req.body;
     if (!keyword || !keyword.trim()) {
