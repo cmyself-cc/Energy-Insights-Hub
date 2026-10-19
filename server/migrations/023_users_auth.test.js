@@ -5,6 +5,9 @@ function resetTables() {
   db.prepare("DELETE FROM sessions").run();
   db.prepare("DELETE FROM pending_identities").run();
   db.prepare("DELETE FROM invite_codes").run();
+  // user_views 有外键指向 users(id)，且 better-sqlite3 默认 PRAGMA foreign_keys=1；
+  // 不先清它，DELETE FROM users 会抛 FOREIGN KEY constraint failed。
+  db.prepare("DELETE FROM user_views").run();
   db.prepare("DELETE FROM users").run();
 }
 
