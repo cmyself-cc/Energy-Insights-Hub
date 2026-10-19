@@ -240,7 +240,10 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
       const wxCalls = fetchStub.mock.calls.map(([u]) => String(u)).filter((u) => !u.startsWith("http://127.0.0.1:"));
       expect(wxCalls).toHaveLength(2);
       expect(wxCalls.filter((u) => isTokenCall(u))).toHaveLength(1);
-      // 未开通的身份拿不到可用会话：need_invite 分支只发票据，不得顺手把人登进去
+      // need_invite 分支只发票据，一行会话都不许写：待开通的人此刻还没通过邀请码校验，
+      // 给它建 session 等于让「持有票据」和「已登录」两件事混为一谈
+      expect(db.prepare("SELECT COUNT(*) AS n FROM sessions").get().n).toBe(0);
+      expect(jar.cookies).toEqual({});
       expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
     } finally { await close(); }
   });
@@ -253,9 +256,14 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
       const r = await api(port, "/api/auth/wechat/callback?code=c1", { method: "GET" });
       expect(r.status).toBe(302);
       expect(r.location).toBe("/login#disabled");
-      // 禁用用户拿不到「可用」会话。这条钉的是 HTTP 边界：就算有人把 loginExisting 挪到 status
-      // 检查之前真的发了 cookie，resolveSession 也会因 status!=='active' 拒绝解析、这里仍是 401，
-      // 所以它抓不住「发了但不可用」的会话——那需要断言 sessions 表不得新增行。
+      // 禁用用户「不得被发出会话」，而不只是「发出的会话不可用」。两者不等价：
+      // resolveSession（server/lib/sessions.js:23）会因 status!=='active' 拒绝解析，所以就算有人把
+      // loginExisting 挪到 status 检查之前真的发了 cookie，下面那条 /me 401 依然通过（控制器已亲手
+      // 变异验证：该变异下 8/8 全绿，而 sessions 表确实多了一行、响应确实带 Set-Cookie）。
+      // 残留行不会因 disabled 被删（只有 expired 才删），所以一旦管理员把用户改回 active，这张在
+      // 禁用期间发出的 cookie 立刻生效——免登录静默复活。必须钉死源头：一行都不许写。
+      expect(db.prepare("SELECT COUNT(*) AS n FROM sessions").get().n).toBe(0);
+      expect(jar.cookies).toEqual({});
       expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
     } finally { await close(); }
   });
