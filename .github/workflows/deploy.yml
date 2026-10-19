@@ -6,7 +6,33 @@ on:
   workflow_dispatch:
 
 jobs:
+  # 不使用 actions/checkout、actions/setup-node：self-hosted runner 访问 GitHub 受限
+  # （参见 Dockerfile 使用 docker.1panel.live / registry.npmmirror.com 镜像），
+  # 改为用与部署脚本同源的 SSH key 做独立浅克隆，避免依赖 actions 下载。
+  verify:
+    runs-on: [self-hosted, mac-mini]
+    steps:
+      - name: Test and lint
+        run: |
+          set -e
+          # 与 deploy 脚本保持一致：确保 python3 解析到装了 pandas 的解释器
+          # （server/lib/configParser.test.js 经 parseExcelBuffer 调用 python3 + pandas）
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/id_ed25519_github_eih -o StrictHostKeyChecking=no"
+
+          VERIFY_DIR="$HOME/.cache/eih-verify"
+          rm -rf "$VERIFY_DIR"
+          git clone --depth 1 --branch main \
+            git@github.com:cmyself-cc/Energy-Insights-Hub.git "$VERIFY_DIR"
+          cd "$VERIFY_DIR"
+
+          npm ci --ignore-scripts
+          npm rebuild better-sqlite3
+          npx vitest run
+          npm run lint
+
   deploy:
+    needs: verify
     runs-on: [self-hosted, mac-mini]
     steps:
       - name: Deploy
