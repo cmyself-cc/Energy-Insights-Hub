@@ -63,8 +63,12 @@ export function applyInviteDefaults(userId, inviteRow) {
     // 配置不合法是正常降级路径（邀请码没填 default_view / 填坏了），静默返回，
     // 不刷错误日志——下面的外层 catch 只管真正的异常（如外键失败）。
     try { dv = JSON.parse(inviteRow.default_view); } catch { return; }
-    if (!dv || typeof dv !== "object") return;
-    createView(userId, { name: dv.name || "初始视角", filters: dv.filters || {} });
+    // 数组也是 typeof "object"，但不是一个视角配置；漏掉它会静默建出垃圾视角。
+    if (!dv || typeof dv !== "object" || Array.isArray(dv)) return;
+    // createView 失败（如已达 10 个上限）时必须立刻返回：否则下面的 setDefault 会在
+    // 什么都没建成的情况下，把该用户的 default 静默搬到 id 最小的既有视角上。
+    const created = createView(userId, { name: dv.name || "初始视角", filters: dv.filters || {} });
+    if (created.error) return;
     const first = db.prepare("SELECT id FROM user_views WHERE user_id=? ORDER BY id LIMIT 1").get(userId);
     if (first) setDefault(userId, first.id);
   } catch (e) {

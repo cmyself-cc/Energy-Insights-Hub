@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
 import express from "express";
 import db from "../db.js";
 import viewsRouter from "./views.js";
@@ -106,6 +106,12 @@ describe("/api/views", () => {
       expect(d.status).toBe(200);
       expect(d.body).toEqual({ data: { success: true } });
       expect(countViews(userIdForTest)).toBe(1);
+      // 删掉的正是 default 视角（首个创建 → count===0 → isDefault=1），而 deleteView 是裸
+      // DELETE、createView 只在 count===0 时设 default，所以不会自动重指派 → 落到零 default。
+      // 这不是 spec 违约（plan 的「若有 is_default → 自动启用」是条件式，容忍零 default，
+      // 且用户有「设默认」按钮可自愈）。显式钉住当前行为：将来若决定要自动重指派，
+      // 这条会红，强迫一次有意识的决定。
+      expect(defaultIds((await authedApi(port, "/api/views")).body.data)).toEqual([]);
     } finally { await close(); }
   });
 
@@ -151,6 +157,12 @@ describe("/api/views", () => {
       expect((await authedApi(port, "/api/views/999999/default", { method: "POST" })).status).toBe(404);
       expect((await authedApi(port, "/api/views/999999", { method: "PUT", body: { name: "x" } })).status).toBe(404);
       expect((await authedApi(port, "/api/views/999999", { method: "DELETE" })).status).toBe(404);
+      // 非数字 id：Number("abc") → NaN。今天它不抛、只 404，靠的是 better-sqlite3 11.10.0
+      // 对非有限数的绑定行为（SELECT 得 null、UPDATE/DELETE changes=0），**不是 SQLite 语义**。
+      // 一次依赖升级就可能把它变成 500 + 栈泄漏，而套件全绿。钉住，让结论从「实测过一次」
+      // 变成「被持续保护」。（已复证 NaN/0/1.5/1e21/-1/undefined/null × 三条 SQL 共 21 组全不抛，
+      // 所以不需要 id 白名单。）
+      expect((await authedApi(port, "/api/views/abc", { method: "PUT", body: { name: "x" } })).status).toBe(404);
       expect(defaultIds((await authedApi(port, "/api/views")).body.data)).toEqual([b.body.data.id]);
       expect(countViews(userIdForTest)).toBe(2);
     } finally { await close(); }
@@ -178,6 +190,12 @@ describe("/api/views", () => {
       ["default_view 为 null", { default_view: null }],
       ["default_view 不是 JSON", { default_view: "{不是 JSON" }],
       ["default_view 是 JSON 但不是对象", { default_view: "\"just a string\"" }],
+      // typeof [] === "object"，所以数组能穿过形状守卫，静默建出名为「初始视角」、
+      // filters 为 {} 的垃圾视角。Task 5 的形状守卫是整条链路上唯一拦得住它的地方：
+      // 管理界面是自由文本 textarea、路由只做 JSON 合法性校验（safeParse）、存库直接
+      // JSON.stringify，三处都不校验形状。管理员把 filters 误写成 ["purposes=policy"]
+      // 是很自然的错法，所以必须在这里挡住。属「配置不合法」→ 走静默降级，不得刷错误日志。
+      ["default_view 是数组", { default_view: "[]" }],
       ["inviteRow 整个是 undefined", undefined]
     ];
     for (const [label, invite] of badConfigs) {
@@ -193,4 +211,43 @@ describe("/api/views", () => {
     expect(String(errSpy.mock.calls[0][1])).toMatch(/FOREIGN KEY/);
     expect(countViews(userIdForTest)).toBe(0);
   });
+
+  it("applyInviteDefaults does not silently move an existing default when the limit is hit", () => {
+    // 可达路径：auth.js 注册事务的 dup 分支返回既有用户而不抛，随后对**已存在的用户**调
+    // applyInviteDefaults。今天需要跨进程并发（/register 全同步、单进程无交错窗口）；但
+    // Task 9/10 的管理员建号一旦落地，「管理员先建号 + 该 UnionID 手里还有一张 10 分钟内
+    // 有效的票据」就是一条无需并发的路径。
+    //
+    // 用户已满 10 个视角时 createView 返回 {error}、视角没建成。若丢弃这个返回值，后面的
+    // setDefault 会无条件执行，把 default 静默搬到 id 最小的视角上——一次无意的数据改动。
+    const ids = [];
+    for (let i = 0; i < 10; i += 1) {
+      const { lastInsertRowid } = db.prepare(
+        "INSERT INTO user_views (user_id, name, filters, is_default) VALUES (?,?,?,0)"
+      ).run(userIdForTest, `v${i}`, "{}");
+      ids.push(lastInsertRowid);
+    }
+    // 故意把 default 放在 **id 最大** 的那个上：出 bug 时 setDefault 会去抢 ORDER BY id
+    // LIMIT 1（id 最小）的那个，断言才抓得住。放在 id 最小上则平凡为真、什么都证明不了。
+    const keeper = ids[ids.length - 1];
+    db.prepare("UPDATE user_views SET is_default=1 WHERE id=?").run(keeper);
+    expect(countViews(userIdForTest)).toBe(10);
+
+    expect(() => applyInviteDefaults(userIdForTest, {
+      default_view: JSON.stringify({ name: "初始视角", filters: { purposes: "policy" } })
+    }), "已达上限时不得抛出").not.toThrow();
+
+    expect(countViews(userIdForTest)).toBe(10);   // 第 11 个没有落库
+    const defaults = db.prepare("SELECT id FROM user_views WHERE user_id=? AND is_default=1")
+      .all(userIdForTest).map((r) => r.id);
+    expect(defaults, "default 必须仍是原来那个，不能被静默搬走").toEqual([keeper]);
+  });
+
+  // 文件级清理：user_views 有外键指向 users(id) 且 better-sqlite3 默认 PRAGMA foreign_keys=1，
+  // 残留行会让后续测试文件的 DELETE FROM users 抛 FOREIGN KEY constraint failed。
+  // 当前「本文件跑完恰好是干净的」只是**数据性质的巧合**（最后一个用例的 beforeEach 清过、
+  // 且它自己不建行），不是代码性质。Task 8 的邀请码管理测试会 POST default_view 并走
+  // 「邀请码 → 注册」端到端，届时就会开始留残留行。加这一行把整类顺序脆弱性移掉；
+  // 023_users_auth.test.js 里那条 R4 修复仍然保留（纵深防御，两处一起才对）。
+  afterAll(() => { clearAuthTables(); });
 });
