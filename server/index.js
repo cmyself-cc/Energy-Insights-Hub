@@ -5,17 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import db, { initDb } from "./db.js";
-import sourcesRouter from "./routes/sources.js";
-import insightsRouter from "./routes/insights.js";
-import reportsRouter from "./routes/reports.js";
-import trackerRouter from "./routes/tracker.js";
-import settingsRouter from "./routes/settings.js";
-import filtersRouter from "./routes/filters.js";
-import feedbackRoutes from "./routes/feedback.js";
-import industriesRouter from "./routes/industries.js";
-import modelsRouter from "./routes/models.js";
-import searchProvidersRouter from "./routes/searchProviders.js";
-import aiRouter from "./routes/ai.js";
+import { mountApiRoutes } from "./apiRoutes.js";
 import { startScheduler, reconcileStaleRuns } from "./services/tracker.js";
 import { seedSources } from "./seeds/002_seed_sources.js";
 import { seedIndustryCategories } from "./seeds/seedIndustryCategories.js";
@@ -45,21 +35,7 @@ seedLlmPrompts();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-app.use("/api/sources", sourcesRouter);
-app.use("/api/insights", insightsRouter);
-app.use("/api/reports", reportsRouter);
-app.use("/api/tracker", trackerRouter);
-app.use("/api/tracker-settings", settingsRouter);
-app.use("/api/filters", filtersRouter);
-app.use("/api/feedback", feedbackRoutes);
-app.use("/api/industries", industriesRouter);
-app.use("/api/models", modelsRouter);
-app.use("/api/search-providers", searchProvidersRouter);
-app.use("/api/ai", aiRouter);
-
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
+mountApiRoutes(app);
 
 // 生产环境：提供静态前端构建产物
 const distPath = path.join(__dirname, "..", "dist");
