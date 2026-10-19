@@ -168,6 +168,8 @@ describe("auth flow (mock mode)", () => {
 describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)", () => {
   const APPID = "wx_appid_test";
   const SECRET = "super_secret_do_not_leak";
+  // describe 作用域持有桩：用例要断言它打向微信上游的调用次数（token + userinfo 各一次）
+  let fetchStub;
 
   beforeEach(() => {
     envSnapshot = ENV_KEYS.map((k) => [k, process.env[k]]);
@@ -182,14 +184,15 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
     clearAuthTables();
     jar = makeCookieJar();
     tokenBody = null;
-    vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+    fetchStub = vi.fn(async (url, init) => {
       const u = String(url);
       // 放行测试客户端自己打到本地服务的请求，只拦微信上游
       if (u.startsWith("http://127.0.0.1:")) return realFetch(url, init);
       return isTokenCall(u)
         ? jsonResponse(tokenBody)
         : jsonResponse({ nickname: "张三", headimgurl: "https://wx.example/a.png" });
-    }));
+    });
+    vi.stubGlobal("fetch", fetchStub);
   });
 
   afterEach(() => {
@@ -228,6 +231,17 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
       // 库里只存 sha256：明文票据一旦入库，读到库就等于能劫持这个待开通身份
       expect(pending, "pending_identities 里找不到 sha256(ticket) 对应的行").toBeTruthy();
       expect(pending.unionid).toBe("wx-new");
+      // 桩里的资料经 identityProvider 的 userinfo 分支流进 issuePending 的 INSERT，这一段别处
+      // 没有任何断言：两个绑定参数写反了也不会有人发现，所以在这里钉死
+      expect(pending.nickname).toBe("张三");
+      expect(pending.avatar_url).toBe("https://wx.example/a.png");
+      // 桩是全局 fetch，测试客户端自己打到 127.0.0.1 的请求也会经过它，所以只数打向微信上游的：
+      // 一次 token + 一次 userinfo（后者证明资料分支确实被走过，nickname/avatar 不是兜底值）
+      const wxCalls = fetchStub.mock.calls.map(([u]) => String(u)).filter((u) => !u.startsWith("http://127.0.0.1:"));
+      expect(wxCalls).toHaveLength(2);
+      expect(wxCalls.filter((u) => isTokenCall(u))).toHaveLength(1);
+      // 未开通的身份拿不到可用会话：need_invite 分支只发票据，不得顺手把人登进去
+      expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
     } finally { await close(); }
   });
 
@@ -239,6 +253,10 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
       const r = await api(port, "/api/auth/wechat/callback?code=c1", { method: "GET" });
       expect(r.status).toBe(302);
       expect(r.location).toBe("/login#disabled");
+      // 禁用用户拿不到「可用」会话。这条钉的是 HTTP 边界：就算有人把 loginExisting 挪到 status
+      // 检查之前真的发了 cookie，resolveSession 也会因 status!=='active' 拒绝解析、这里仍是 401，
+      // 所以它抓不住「发了但不可用」的会话——那需要断言 sessions 表不得新增行。
+      expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
     } finally { await close(); }
   });
 });

@@ -88,19 +88,31 @@ function handleIdentity(req, res, identity, { json }) {
               : res.redirect(302, `/login#invite=${ticket}`);
 }
 
+// ⚠️ 这里的 state 目前只生成、不校验：GET /wechat/callback 只读 req.query.code，全文没有任何
+// 地方读 req.query.state。它现在挡不住任何东西，不要把它当成已有的 CSRF 防护。
+// 为什么不能就地补一个无状态 HMAC 校验：HMAC 只能证明「这个 state 是我们签发的」，而攻击者
+// 可以自己调一次 /config 领到合法 state 再塞进伪造链接，校验照样通过。真正的防御要求 state 与
+// 发起跳转的那个浏览器绑定（一次性 cookie 或服务端存储），契约的另一半在 Task 7 的前端，属
+// Task 6/7 范围（已按高危登记为微信登录上线的阻断项）。
+// 不校验的具体危害（login CSRF / 会话固定）：攻击者用自己的账号取得合法 code，诱使受害者访问
+// /api/auth/wechat/callback?code=<攻击者的code> → 受害者浏览器被写下**攻击者账号**的 session
+// cookie → 受害者此后保存的视角、反馈全部落进攻击者可读的账号。
 router.get("/config", (_req, res) => {
   res.json({ data: { mockMode: isMockMode(), authorizeUrl: getAuthorizeUrl(crypto.randomBytes(8).toString("hex")) } });
 });
 
-// 微信回跳（GET，浏览器带 ?code=&state=）
+// 微信回跳（GET，浏览器带 ?code=&state=；state 目前不校验，见 /config 上方说明）
 // exchangeIdentity 的契约是 total 的、不会 reject，所以 catch 目前不可达；但本仓 express 是
 // 4.x，async handler 里逃逸的 rejected promise 不会被转给 next(err)，会变成进程级
 // unhandled rejection。handleIdentity 保持同步，兜底包在它的调用方。
+// catch 里仍然记日志：不可达 ≠ 永远不会可达，而这条路径最难查的形态是 loginExisting 已经挂上
+// Set-Cookie、随后的 UPDATE 才抛出——客户端收到 500、实际却已登录，没有服务端日志无从定位。
 router.get("/wechat/callback", async (req, res) => {
   try {
     const identity = await exchangeIdentity({ code: req.query.code });
     handleIdentity(req, res, identity, { json: false });
-  } catch {
+  } catch (e) {
+    console.error("[auth] login failed:", e?.message || e);
     res.status(500).json({ error: "login failed" });
   }
 });
@@ -109,7 +121,8 @@ router.post("/wechat/callback", async (req, res) => {
   try {
     const identity = await exchangeIdentity({ code });
     handleIdentity(req, res, identity, { json: true });
-  } catch {
+  } catch (e) {
+    console.error("[auth] login failed:", e?.message || e);
     res.status(500).json({ error: "login failed" });
   }
 });
@@ -118,11 +131,17 @@ router.post("/wechat/callback", async (req, res) => {
 // 必须 async + await：exchangeIdentity 两个分支都返回 Promise，漏掉 await 会让
 // identity.unionid 读到 undefined，最终在 pending_identities.unionid 上撞 NOT NULL
 // 约束抛出 500（server/index.js 未装 4 参错误中间件，还会泄漏堆栈）。
+// try/catch 的理由与上面两个回调逐字相同：express 4.x 不把 async 逃逸转给 next(err)。
 router.post("/dev-login", async (req, res) => {
   if (!isMockMode()) return res.status(404).json({ error: "not found" });
   const { devUnionid } = req.body || {};
-  const identity = await exchangeIdentity({ devUnionid });
-  handleIdentity(req, res, identity, { json: true });
+  try {
+    const identity = await exchangeIdentity({ devUnionid });
+    handleIdentity(req, res, identity, { json: true });
+  } catch (e) {
+    console.error("[auth] login failed:", e?.message || e);
+    res.status(500).json({ error: "login failed" });
+  }
 });
 
 router.post("/register", (req, res) => {
