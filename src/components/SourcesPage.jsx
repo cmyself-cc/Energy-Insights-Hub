@@ -16,7 +16,7 @@ export default function SourcesPage({ darkMode, language, onTrackerComplete }) {
   const [trackerRunning, setTrackerRunning] = useState(false);
   const [message, setMessage] = useState(null);
   const [activeRun, setActiveRun] = useState(null);
-  const [runProgress, setRunProgress] = useState(0);
+  const [, setRunProgress] = useState(0);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", url: "", type: "rss", active: true, mcpUrl: "", feedId: "", purpose: [] });
   const [discoveringSubPages, setDiscoveringSubPages] = useState(false);

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
-import { i18n } from "../constants/i18n";
 import CardActions from "./CardActions";
 
 const PURPOSE_DOTS = {
@@ -65,7 +64,6 @@ export default function InsightCard({
   onKeywordClick,
   subjectKeywords = []
 }) {
-  const t = i18n[language];
   const [copied, setCopied] = useState(false);
 
   // 主体关键词高亮样式（标题与摘要共用）

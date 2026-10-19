@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
+import { COLORS, FONT_SIZES } from "../constants/theme";
 import { backendApi } from "../utils/backendApi";
 
 const PHASE_LABELS = {

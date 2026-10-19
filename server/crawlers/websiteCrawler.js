@@ -624,7 +624,6 @@ async function fetchWithPlaywright(source) {
 
     // Fall back to DOM link extraction
     const html = await page.content();
-    const $ = cheerio.load(html);
     const links = extractArticleLinks(html, source.url, config.articleLimit * 3, config.listSelectors);
 
     let allLinks = [...links];

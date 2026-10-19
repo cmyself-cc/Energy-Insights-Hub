@@ -32,6 +32,7 @@ function statusBadge(status, language) {
   return { text: "", color: "", bg: "" };
 }
 
+// eslint-disable-next-line no-unused-vars -- App.jsx:430 传入但本组件未调用（报告查看已改由 openReportId 驱动）；待产品确认是恢复接线还是移除
 export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled, titleSlotEl, onViewReport, onGenerateDailyBriefing }) {
   const t = i18n[language];
   const isMobile = useIsMobile();
@@ -85,7 +86,6 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
     if (!reports.some(r => r.status === "generating")) return;
     const timer = setInterval(loadReports, 5000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reports]);
 
   const deleteReport = async (id, e) => {

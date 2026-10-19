@@ -140,35 +140,6 @@ async function fetchSourceItems(source) {
   return fetchArticles(source);
 }
 
-async function processBatch(items, language, filterContext = null) {
-  const results = [];
-  const ctx = filterContext || {
-    semanticPrompt: loadSemanticConfig(),
-    categories: loadActiveCategories(),
-    subjectKeywords: collectSubjectKeywordsByPurpose(),
-    classificationEnabled: Boolean(process.env.LLM_API_KEY)
-  };
-  for (let i = 0; i < items.length; i += BATCH_SIZE) {
-    const batch = items.slice(i, i + BATCH_SIZE);
-    const settled = await Promise.allSettled(
-      batch.map(item => processInsight(item, language, ctx))
-    );
-    for (let j = 0; j < settled.length; j++) {
-      const result = settled[j];
-      if (result.status === "fulfilled") {
-        results.push(result.value);
-      } else {
-        console.error(`[tracker] processInsight failed for batch item ${i + j}:`, result.reason?.message || result.reason);
-      }
-    }
-    if (results.length === 0 && batch.length > 0) {
-      throw new Error(`All ${batch.length} articles in batch failed LLM processing`);
-    }
-    if (i + BATCH_SIZE < items.length) await sleep(2000);
-  }
-  return results;
-}
-
 export async function runTracker(runId = null) {
   if (isTrackerRunning || hasRunningTrackerInDb(runId)) {
     console.log("[tracker] Another tracker run is already in progress. Skipping.");

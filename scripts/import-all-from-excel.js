@@ -7,7 +7,7 @@
 import Database from 'better-sqlite3';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 import * as XLSX from 'xlsx';
 
 const __filename = fileURLToPath(import.meta.url);

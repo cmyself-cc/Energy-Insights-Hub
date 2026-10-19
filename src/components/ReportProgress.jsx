@@ -31,7 +31,6 @@ export default function ReportProgress({ darkMode, language }) {
     poll();
     timer = setInterval(poll, 2000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, job]);
 
   if (!visible || !job) return null;

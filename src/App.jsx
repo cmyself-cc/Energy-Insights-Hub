@@ -66,6 +66,7 @@ export default function App() {
       console.error("Backend load failed:", e);
     }
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- language 保留以在切换语言时重建回调；移除会改变 loadInsightsFromBackend 的 identity
   }, [language]);
 
   useEffect(() => {
@@ -254,7 +255,6 @@ export default function App() {
       }
       
       // 使用后端返回的pagination信息判断是否还有更多数据
-      const currentPage = append ? page + 1 : 1;
       const loadedCount = append ? (insights.length + newData.length) : newData.length;
       setHasMore(loadedCount < (pagination.total || 0));
     } catch (e) {
@@ -262,6 +262,7 @@ export default function App() {
       addToast(t.toasts.insightsFailed, "error");
     }
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 不加入 insights.length：会让 fetchInsights 每次 insights 变化都重建，触发下方 debounce useEffect 循环
   }, [filters, t, language, page]);
 
   // Auto-fetch when filters change (debounced for query input) - reset pagination

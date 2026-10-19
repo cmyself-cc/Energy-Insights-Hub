@@ -143,7 +143,7 @@ function excelDateToJSDate(serial) {
   return new Date(utcMs).toISOString();
 }
 
-async function processRecord(record, db, insertStmt, index, total) {
+async function processRecord(record, db, insertStmt, index, _total) {
   try {
     const llmResult = await callLLM({
       title: record.title,

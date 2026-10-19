@@ -26,7 +26,6 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
 
   const [message, setMessage] = useState(null);
   const [presets, setPresets] = useState(["", "", ""]);
-  const [loading, setLoading] = useState(true);
   const [aiModelId, setAiModelId] = useState(() => localStorage.getItem("ai_model_id") || "");
   const [savedModels, setSavedModels] = useState([]);
   const [configMessage, setConfigMessage] = useState(null);
@@ -69,7 +68,6 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
           setPresets(fallback);
         }
       } catch (e) { /* ignore */ }
-      setLoading(false);
     })();
   }, []);
 

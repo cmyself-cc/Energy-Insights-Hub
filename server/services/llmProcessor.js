@@ -48,6 +48,7 @@ function safeJsonParse(txt, fallbackItem = {}) {
     fixed += "}".repeat(openBraces - closeBraces);
   }
   // Remove unescaped control chars in strings
+  // eslint-disable-next-line no-control-regex -- 有意匹配并清除 LLM 返回 JSON 中的控制字符
   fixed = fixed.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
   try { return JSON.parse(fixed); } catch {}
 
@@ -141,9 +142,7 @@ export async function processInsight(item, _language = "en", _filterContext = nu
   const categoryList = categoryNames.length > 0 ? categoryNames.join("、") : "电力&氢能、储能、光伏、油气、CCS、化工、LNG/天然气、移动出行、润滑油、生物燃料";
 
   // Inject purpose-specific semantic prompt if available
-  // 优先使用传入的 itemPurpose，否则回退到通用的 semanticPrompt
   let semanticBlock = "";
-  const itemPurpose = _filterContext?.itemPurpose;
   const semanticPrompt = _filterContext?.semanticPrompt || "";
   if (semanticPrompt) {
     semanticBlock = `附加语义要求: ${semanticPrompt}`;
