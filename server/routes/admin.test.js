@@ -171,7 +171,7 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
   it("C3: normalizes expires_at on write so the auth-side comparison cannot silently misjudge", async () => {
     const { port, close } = await listen(buildApp());
     try {
-      // 浏览器 datetime-local / JSON 的自然形态是带 T/Z 的 ISO 串，而 auth.js:157 用
+      // 浏览器 datetime-local / JSON 的自然形态是带 T/Z 的 ISO 串，而 auth.js 的 /register 用
       // `SELECT datetime('now') < ? AS ok` 比较它。TEXT 字典序里 ' '(0x20) < 'T'(0x54)，
       // 于是「当天午夜、其实早已过期」会被判成未过期。先证明这个陷阱真实存在：
       const today = db.prepare("SELECT datetime('now') n").get().n.slice(0, 10);

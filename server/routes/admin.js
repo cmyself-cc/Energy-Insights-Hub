@@ -5,7 +5,7 @@ import db from "../db.js";
 const router = Router();
 
 // C10：管理面一律走显式白名单，绝不用 {...u} 全量展开。
-// brief 里这个函数叫 publicUser，与 auth.js:62 那个**同名但语义相反**的 publicUser 撞车
+// brief 里这个函数叫 publicUser，与 auth.js 里那个**同名但语义相反**的 publicUser 撞车
 // （那个是给登录用户看自己的，本来就是白名单式）。改名 adminUser 消除歧义，并显式列出字段：
 // 这样将来给 users 加任何列都不会自动泄漏出去。openid_web / openid_mp 是身份提供商的内部
 // 标识，不属于管理列表。
@@ -43,11 +43,12 @@ function adminUser(u) {
 }
 
 // C3：expires_at 落库前一律在 SQL 侧归一化。
-// auth.js:157 用 `SELECT datetime('now') < ? AS ok` 比较这一列，而 created_at 由
+// auth.js 的 POST /register 用 `SELECT datetime('now') < ? AS ok` 比较这一列，而 created_at 由
 // CURRENT_TIMESTAMP 落成 'YYYY-MM-DD HH:MM:SS'。若把浏览器 datetime-local / JSON 的 ISO 串
 // （带 T/Z）原样存进去，TEXT 字典序里 ' '(0x20) < 'T'(0x54)，日期部分相同、只有时间不同时
 // 比较会静默出错——实测「当天午夜、其实早已过期」会被判成 ok=1（未过期），邀请码于是永不过期。
-// 这是本仓踩过的同一个坑（server/services/tracker.js:28-30、auth.js:43-45 都有记录）。
+// 这是本仓踩过的同一个坑（server/services/tracker.js 的 reconcileStaleRuns、
+// auth.js 的 issuePending 上方注释都有记录；这里刻意不写行号，行号会随改动漂移）。
 // datetime() 顺带把带时区偏移的串转成 UTC、把纯日期补成当天午夜，并对无法解析的输入返回 null。
 function normalizeExpiresAt(raw) {
   if (raw == null) return { value: null };            // NULL = 长期有效
