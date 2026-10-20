@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import ApiConfig from "./components/ApiConfig";
 import InsightsGenerator from "./components/InsightsGenerator";
 import Header from "./components/Header";
@@ -54,8 +54,6 @@ export default function App() {
   const [apiConfig, setApiConfig] = useState(null);
   // 语言初始值按设备判断（手机端仅中文），避免 en→zh 切换触发重复 fetch/toast
   const [language, setLanguage] = useState(() => (isMobileViewport() ? "zh" : "en"));
-  // 防重复 toast：记录上次成功 toast 的文案与时间
-  const lastToastRef = useRef({ key: "", ts: 0 });
   const isMobile = useIsMobile();
   const [toasts, setToasts] = useState([]);
   const [selectedArticle, setSelectedArticle] = useState(null);
@@ -167,9 +165,15 @@ export default function App() {
     // 都重拉一遍全量数据，而切换语言只该改文案、不该改数据。
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addToast = (message, type = "success") => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
+  // opts.id：稳定 id 时执行**覆盖**（同 id 的旧 toast 先移除再追加新的）——
+  // 用于「Fetched N insights」这类高频提示：新的覆盖旧的，始终只留最新一条
+  // （产品负责人 2026-10-21）。其他 toast 不传 id，维持原样堆叠。
+  const addToast = (message, type = "success", opts = {}) => {
+    const id = opts.id ?? Date.now();
+    setToasts(prev => {
+      const rest = opts.id != null ? prev.filter(t => t.id !== opts.id) : prev;
+      return [...rest, { id, message, type }];
+    });
   };
 
   const removeToast = (id) => {
@@ -344,15 +348,9 @@ export default function App() {
         setFetched(true);
         const count = newData.length;
         const msg = language === "zh" ? `成功获取 ${count} 条洞察` : `Fetched ${count} insights`;
-        // 时间窗去重（2026-10-21 产品负责人要求）：3 秒内**任何**成功提示只留一条。
-        // 登录时默认视角自动启用会连发两次 fetch（默认筛选 + 视角筛选，条数不同、
-        // key 不同，旧的同文案 2s 去重挡不住）；快速连续刷新同理。错误 toast 走另一条
-        // 分支不受影响。
-        const now = Date.now();
-        if (now - lastToastRef.current.ts > 3000) {
-          addToast(msg, "success");
-          lastToastRef.current = { key: msg, ts: now };
-        }
+        // 稳定 id 覆盖：登录时默认视角自动启用会连发两次 fetch（默认筛选 + 视角筛选），
+        // 新的结果直接覆盖旧 toast，最后只留最新一条（产品负责人 2026-10-21）。
+        addToast(msg, "success", { id: "insights-fetch-result" });
       }
       
       // 使用后端返回的pagination信息判断是否还有更多数据
