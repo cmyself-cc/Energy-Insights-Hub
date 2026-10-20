@@ -94,6 +94,23 @@ export function matchesAnyKeyword(item, keywords) {
   return findMatchedKeyword(item, keywords) !== null;
 }
 
+// 排除关键词专用：在 title+summary 之外**同时匹配正文**（rawContent/content，截断 8000 字）。
+// 2026-10 生产实证：抓取阶段的列表页标题可能缺关键词（LLM 标题是 Phase 3 才生成的），
+// 只看 title+summary 会让「招聘」类排除词从标题抓取的缺口漏入（北极星储能网 2 例、
+// 天然气咨询 1 例）。排除是精度工具、宁过排勿漏排；include/enterprise 仍走
+// findMatchedKeyword（title+summary，召回语义不变）。
+export function findMatchedExcludingKeyword(item, keywords) {
+  if (!keywords || keywords.length === 0) return null;
+  const body = String(item.rawContent || item.content || "").slice(0, 8000);
+  const text = `${item.title || ""} ${item.summary || ""} ${body}`.toLowerCase();
+  for (const k of keywords) {
+    for (const term of keywordTerms(k)) {
+      if (text.includes(String(term).toLowerCase())) return term;
+    }
+  }
+  return null;
+}
+
 /**
  * Pure-ASCII aliases of ≤2 chars (e.g. "GW") collide with units/abbreviations
  * in titles and must never be used as subject keywords. Names are exempt —

@@ -1,4 +1,4 @@
-import { matchesAnyKeyword, findMatchedKeyword } from "./filterRules.js";
+import { matchesAnyKeyword, findMatchedKeyword, findMatchedExcludingKeyword } from "./filterRules.js";
 import db from "../db.js";
 
 const DEFAULT_INDUSTRY_KEYWORDS = [
@@ -61,7 +61,7 @@ export function applyKeywordGate(items, context) {
     if (!item.title) { excluded++; continue; }
 
     // Global exclude keywords (tracker_settings)
-    if (excludeKeywords.length && matchesAnyKeyword(item, excludeKeywords)) {
+    if (excludeKeywords.length && findMatchedExcludingKeyword(item, excludeKeywords) !== null) {
       excluded++;
       continue;
     }
@@ -78,12 +78,15 @@ export function applyKeywordGate(items, context) {
     for (const [purpose, rules] of Object.entries(purposeRules)) {
       const subjectMatch = rules.enterprise?.length > 0 && matchesAnyKeyword(item, rules.enterprise);
       const includeMatch = rules.include_keyword?.length > 0 && matchesAnyKeyword(item, rules.include_keyword);
-      const excludeMatch = rules.exclude_keyword?.length > 0 && matchesAnyKeyword(item, rules.exclude_keyword);
+      // 🔴 排除走正文感知匹配（rawContent/content 也查）——只看 title+summary 时，
+      // 抓取阶段的标题缺口会让排除词漏入（2026-10 生产实证，见 findMatchedExcludingKeyword）。
+      // include/enterprise 保持 title+summary，召回语义不变。
+      const excludeMatch = rules.exclude_keyword?.length > 0 && findMatchedExcludingKeyword(item, rules.exclude_keyword) !== null;
 
       // Exclude keyword blocks the match for this purpose
       if (excludeMatch) {
         if (TRACE_KEYWORD_GATE) {
-          const exKw = findMatchedKeyword(item, rules.exclude_keyword);
+          const exKw = findMatchedExcludingKeyword(item, rules.exclude_keyword);
           console.log(`[keyword-gate] ${purpose}: EXCLUDED by "${exKw}" — "${(item.title||'').slice(0,50)}"`);
         }
         continue;
