@@ -77,8 +77,15 @@ router.get("/current", (_req, res) => {
   try {
     const row = db.prepare("SELECT * FROM model_configs WHERE is_active = 1 LIMIT 1").get();
     if (row) return res.json({ data: safeList([row])[0] });
-    // 没有 active 记录时，用 .env 兜底
-    res.json({ data: { id: null, name: process.env.LLM_MODEL || "未配置", modelId: process.env.LLM_MODEL || "", isActive: true } });
+    // 没有 active 记录时用 .env 兜底；连 env 都没配 → data: null。
+    // 🔴 之前回退对象恒为真值（isActive:true + 硬编码中文「未配置」），导致：
+    //   · Header 的空态分支（zh「未配置模型」/en「No model」+ 灰色）成了死代码；
+    //   · 「未配置」中文泄漏进英文界面，芯片还恒为绿色（截图实证 2026-10-21）。
+    // Header 的空态判断基于对象真值，所以「没配」必须回 null 而不是假对象。
+    if (process.env.LLM_MODEL) {
+      return res.json({ data: { id: null, name: process.env.LLM_MODEL, modelId: process.env.LLM_MODEL, isActive: true } });
+    }
+    res.json({ data: null });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
