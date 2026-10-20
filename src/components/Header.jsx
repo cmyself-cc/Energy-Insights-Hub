@@ -22,7 +22,17 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
     whiteSpace: "nowrap"
   });
 
+  // 🔴 admin-only 消费者。server/apiRoutes.js 把 /api/tracker 与 /api/models **整个前缀**
+  // 挂成 requireAdmin（含 GET），而 Header 对每个已登录用户都渲染：普通用户挂上
+  // <TrackerProgress> 就会被它按固定间隔轮询的 /api/tracker/status 打成连续 403（实测 ~10s 内 5 次），
+  // getCurrentModel() 同理。症状不只是生产日志噪音——进度气泡永远不出现，模型芯片对所有普通
+  // 用户恒显示「No model」，而它的 tooltip 还指向普通用户根本进不去的配置页。
+  // 授权矩阵是 Task 6 评审通过的，本轮不动它；由前端只对 admin 挂载这两个消费者。
+  // <ReportProgress> 不在此列：它打的 /api/reports/jobs 对所有已登录用户开放（实测 200）。
+  const isAdmin = user?.role === "admin";
+
   useEffect(() => {
+    if (!isAdmin) return;
     const load = () => {
       backendApi.getCurrentModel()
         .then(res => setCurrentModel(res.data || null))
@@ -31,7 +41,7 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
     load();
     window.addEventListener("model-updated", load);
     return () => window.removeEventListener("model-updated", load);
-  }, []);
+  }, [isAdmin]);
 
   // 头像兜底链：昵称首字母（大写）→ "U"。微信昵称可能是 emoji，charAt(0) 取到的是
   // 代理对的前半，渲染出来是乱码方块——所以只在首字符是字母/数字/CJK 时才用它。
@@ -56,11 +66,13 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
             <button style={navTabStyle(activeTab === "reports")} onClick={() => onTabChange("reports")}>{zh ? "报告" : "Reports"}</button>
           </nav>
         )}
-        {/* 进度气泡：移动端悬浮在 header 上（不挤占"市场洞察/报告"导航），Web 端内联 */}
-        <TrackerProgress darkMode={darkMode} language={language} floating={isMobile} />
+        {/* 进度气泡：移动端悬浮在 header 上（不挤占"市场洞察/报告"导航），Web 端内联。
+            Tracker 气泡只给 admin —— 理由见上面 isAdmin 处的注释。 */}
+        {isAdmin && <TrackerProgress darkMode={darkMode} language={language} floating={isMobile} />}
         <ReportProgress darkMode={darkMode} language={language} />
-        {/* 当前生效模型（只读展示，配置在设置页全局配置）；移动端隐藏以节省空间 */}
-        {!isMobile && (
+        {/* 当前生效模型（只读展示，配置在设置页全局配置）；移动端隐藏以节省空间。
+            同样只给 admin：/api/models/* 整前缀 requireAdmin，且「去设置页管理」对普通用户是死链。 */}
+        {!isMobile && isAdmin && (
           <div
             title={zh ? "当前生效模型（在设置页全局配置中管理）" : "Active model (manage in Settings → Global Config)"}
             style={{
@@ -146,7 +158,10 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
                 borderRadius: BORDER_RADIUS.md,
                 border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
                 background: "transparent",
-                color: darkMode ? "#888" : COLORS.text.tertiary,
+                // 用 secondary(#555) 而不是 tertiary(#888)：#888 在白底上只有 3.54:1，低于 WCAG AA
+                // 的 4.5:1，而且比紧挨着的语言切换按钮（它用的就是 secondary）还浅——同一个 header
+                // 里两个同级按钮不该有两种对比度。暗色下沿用 #e8e8e8，与语言切换按钮一致。
+                color: darkMode ? "#e8e8e8" : COLORS.text.secondary,
                 fontSize: isMobile ? FONT_SIZES.sm : FONT_SIZES.md,
                 fontWeight: 500,
                 cursor: "pointer",

@@ -29,7 +29,12 @@ export default function LoginGate({ onLoggedIn }) {
   const [language] = useState(() => (isMobileViewport() ? "zh" : (storage.getStoredLanguage() || "en")));
   const [darkMode] = useState(() => storage.getDarkMode());
 
-  const t = i18n[language].auth;
+  // || i18n.en 这层兜底不能省：storage.getStoredLanguage() 直接返回 localStorage.getItem，
+  // **不校验值域**。里面只要有一个不认识的值（手工改过、浏览器扩展写过、或某个曾经存在过的
+  // 语言被移除后留下的陈旧值），i18n[language] 就是 undefined，而这是**登录门** —— 抛异常
+  // 意味着用户连登录都做不到，也没办法用 UI 把语言改回来。仓里已有 4 处同样的防御写法
+  // （ContentFiltersPage / InsightsGenerator / TrackerSettingsPage ×2），这里沿用惯例。
+  const t = (i18n[language] || i18n.en).auth;
 
   useEffect(() => {
     const onHashChange = () => setHash(window.location.hash);
@@ -128,7 +133,9 @@ export default function LoginGate({ onLoggedIn }) {
   const bg = darkMode ? COLORS.background.dark : "#f8f8fc";
   const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
-  const muted = darkMode ? "#888" : COLORS.text.tertiary;
+  // 用 secondary(#555) 而不是 tertiary(#888)：#888 在白底上是 3.54:1，低于 WCAG AA 的 4.5:1。
+  // 暗色下 #888 对 cardDark(#1c1f2b) 是 4.77:1，本来就过线，保持不动。
+  const muted = darkMode ? "#888" : COLORS.text.secondary;
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
 
   const inputStyle = {
@@ -142,7 +149,13 @@ export default function LoginGate({ onLoggedIn }) {
     fontSize: FONT_SIZES.base,
     outline: "none"
   };
-  const primaryBtn = {
+  // off = 按钮处于 disabled（busy 或输入为空）。
+  // ⚠️ disabled 态必须在**视觉上**可分辨：只有 disabled 属性、样式却与可点时逐像素相同的话，
+  // 用户看不出「为什么点了没反应」，会以为页面卡了。responsive.css 里没有 button:disabled 规则，
+  // 而 inline style 又表达不了伪类，所以由调用方把 disabled 的同一个布尔值传进来。
+  // 用 opacity 而不是换 background：换色会引入 theme.js 之外的字面值，而 disabled 控件本来就
+  // 不受 WCAG 对比度约束，压暗是最省事也最不会与主题打架的做法。
+  const primaryBtn = (off) => ({
     width: "100%",
     padding: "11px 16px",
     borderRadius: BORDER_RADIUS.md,
@@ -151,14 +164,17 @@ export default function LoginGate({ onLoggedIn }) {
     color: "#fff",
     fontSize: FONT_SIZES.base,
     fontWeight: 600,
-    cursor: busy ? "default" : "pointer",
-    opacity: busy ? 0.6 : 1,
+    cursor: off ? "not-allowed" : "pointer",
+    opacity: off ? 0.45 : 1,
     textDecoration: "none",
     display: "block",
     textAlign: "center",
     boxSizing: "border-box",
     transition: `opacity ${TRANSITIONS.fast}`
-  };
+  });
+  // 与下面 button 的 disabled 用同一个布尔值，避免「属性说禁用了、样式说能点」这种分叉
+  const inviteOff = busy || !code.trim();
+  const devOff = busy || !devUnionid.trim();
 
   return (
     <div style={{
@@ -219,14 +235,14 @@ export default function LoginGate({ onLoggedIn }) {
                   autoFocus
                   style={inputStyle}
                 />
-                <button type="submit" disabled={busy || !code.trim()} style={primaryBtn}>{t.inviteSubmit}</button>
+                <button type="submit" disabled={inviteOff} style={primaryBtn(inviteOff)}>{t.inviteSubmit}</button>
               </form>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {config === null ? (
                   <div style={{ height: 40 }} />
                 ) : config.authorizeUrl ? (
-                  <a href={config.authorizeUrl} style={primaryBtn}>{t.wechatLogin}</a>
+                  <a href={config.authorizeUrl} style={primaryBtn(false)}>{t.wechatLogin}</a>
                 ) : (
                   <p style={{ margin: 0, fontSize: FONT_SIZES.sm, color: muted, lineHeight: 1.6 }}>{t.notConfigured}</p>
                 )}
@@ -242,7 +258,9 @@ export default function LoginGate({ onLoggedIn }) {
                       autoComplete="off"
                       style={inputStyle}
                     />
-                    <button type="submit" disabled={busy || !devUnionid.trim()} style={primaryBtn}>{t.devLogin}</button>
+                    {/* label 与按钮不再复用同一个键：t.devLogin 是这块表单的说明（「本地开发登录（仅测试）」），
+                        按钮是动作。同一句话在一个表单里出现两次没有信息量。 */}
+                    <button type="submit" disabled={devOff} style={primaryBtn(devOff)}>{t.devLoginSubmit}</button>
                   </form>
                 )}
               </div>

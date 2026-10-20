@@ -29,7 +29,10 @@ export default function App() {
   const [hasMore, setHasMore] = useState(true);
   const [cart, setCart] = useState([]);
   const [newsletter, setNewsletter] = useState(null);
-  const [darkMode, setDarkMode] = useState(false);
+  // 惰性初始化器，而不是 useState(false) 再由 effect A 读回：useEffect 在**首次绘制之后**才跑，
+  // 用 false 起头会让暗色用户看到一帧浅色底 —— 包括 !authReady 那屏的加载脉冲点。
+  // LoginGate.jsx 早已用 useState(() => storage.getDarkMode()) 解决同一个问题，这里对齐。
+  const [darkMode, setDarkMode] = useState(() => storage.getDarkMode());
   const [bookmarks, setBookmarks] = useState([]);
   const [hidden, setHidden] = useState([]);
   const [activeTab, setActiveTab] = useState("intelligence");
@@ -93,7 +96,8 @@ export default function App() {
   }, [language]);
 
   useEffect(() => {
-    setDarkMode(storage.getDarkMode());
+    // darkMode 不在这里读：它已改成 useState 的惰性初始化器（见上），在这里再 set 一次
+    // 只会在首帧之后多触发一次无谓的重渲染。
     setBookmarks(storage.getBookmarks());
     setCart(storage.getCart());
     setApiConfig(storage.getApiConfig());
