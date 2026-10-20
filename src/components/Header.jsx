@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
+import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 import TrackerProgress from "./TrackerProgress";
 import ReportProgress from "./ReportProgress";
 
-export default function Header({ darkMode, language, onLanguageToggle, isMobile = false, activeTab, onTabChange }) {
+export default function Header({ darkMode, language, onLanguageToggle, isMobile = false, activeTab, onTabChange, user, onLogout }) {
   const [currentModel, setCurrentModel] = useState(null);
   const zh = language === "zh";
+  const auth = i18n[language].auth;
   // 移动端顶部导航：右上角下划线式切换（绿色粗线为选中态），与页面内 tab 区分
   const navTabStyle = (active) => ({
     padding: "8px 2px",
@@ -30,6 +32,11 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
     window.addEventListener("model-updated", load);
     return () => window.removeEventListener("model-updated", load);
   }, []);
+
+  // 头像兜底链：昵称首字母（大写）→ "U"。微信昵称可能是 emoji，charAt(0) 取到的是
+  // 代理对的前半，渲染出来是乱码方块——所以只在首字符是字母/数字/CJK 时才用它。
+  const nickname = user?.nickname || "";
+  const avatarChar = /^[A-Za-z0-9\u4e00-\u9fa5]/.test(nickname) ? nickname.charAt(0).toUpperCase() : "U";
 
   return (
     <header style={{ position: "sticky", top: 0, zIndex: 100, minHeight: 56, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: isMobile ? 6 : 0, padding: isMobile ? "8px 16px" : "0 28px", background: darkMode ? COLORS.background.cardDark : COLORS.background.card, borderBottom: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
@@ -75,8 +82,67 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
             {language === "en" ? "中 文" : "English"}
           </button>
         )}
-        {!isMobile && (
-          <div style={{ width: 32, height: 32, borderRadius: "50%", background: COLORS.primaryLight, color: COLORS.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: FONT_SIZES.md, fontWeight: 700, border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}` }}>U</div>
+        {/* 身份块。头像与登出**不受 isMobile 约束**：移动端没有侧边栏、也没有配置页，
+            如果连登出也按 isMobile 藏掉，手机上就再也没有退出登录的入口了。
+            移动端只收紧尺寸、并隐藏昵称与管理员徽标（这两项是信息，不是操作）。 */}
+        {user && (
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 12 }}>
+            {!isMobile && (
+              <>
+                <span
+                  title={nickname}
+                  style={{
+                    maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    fontSize: FONT_SIZES.md, fontWeight: 500, color: darkMode ? "#e8e8e8" : COLORS.text.secondary
+                  }}
+                >
+                  {nickname}
+                </span>
+                {user.role === "admin" && (
+                  <span style={{
+                    padding: "3px 8px", borderRadius: BORDER_RADIUS.sm,
+                    background: COLORS.primaryLight, color: COLORS.primary,
+                    fontSize: FONT_SIZES.xs, fontWeight: 700, whiteSpace: "nowrap"
+                  }}>
+                    {auth.adminBadge}
+                  </span>
+                )}
+              </>
+            )}
+            <div
+              title={nickname || auth.logout}
+              style={{
+                width: isMobile ? 26 : 30, height: isMobile ? 26 : 30, borderRadius: "50%",
+                background: COLORS.primaryLight, color: COLORS.primary,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: isMobile ? FONT_SIZES.sm : FONT_SIZES.md, fontWeight: 700,
+                border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+                flexShrink: 0
+              }}
+            >
+              {avatarChar}
+            </div>
+            <button
+              onClick={onLogout}
+              title={auth.logout}
+              aria-label={auth.logout}
+              style={{
+                padding: isMobile ? "5px 8px" : "6px 12px",
+                borderRadius: BORDER_RADIUS.md,
+                border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+                background: "transparent",
+                color: darkMode ? "#888" : COLORS.text.tertiary,
+                fontSize: isMobile ? FONT_SIZES.sm : FONT_SIZES.md,
+                fontWeight: 500,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                transition: `all ${TRANSITIONS.fast}`
+              }}
+            >
+              {auth.logout}
+            </button>
+          </div>
         )}
       </div>
     </header>

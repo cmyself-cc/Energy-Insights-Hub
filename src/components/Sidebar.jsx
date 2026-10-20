@@ -8,8 +8,11 @@ const MENU_ITEMS = [
 ];
 
 
-export default function Sidebar({ darkMode, language, activeTab, onTabChange, collapsed = false }) {
+export default function Sidebar({ darkMode, language, activeTab, onTabChange, collapsed = false, role }) {
   const t = i18n[language];
+  // 配置页整页都是管理员职能（数据源、过滤规则、模型密钥、追踪器），普通用户看不到入口。
+  // 这只是 UI 收敛，不是权限边界：服务端 /api/admin/* 与写操作各自带 requireAdmin。
+  const items = MENU_ITEMS.filter(item => item.key !== "configuration" || role === "admin");
 
   return (
     <aside style={{
@@ -23,7 +26,7 @@ export default function Sidebar({ darkMode, language, activeTab, onTabChange, co
       transition: `width ${TRANSITIONS.normal}`
     }}>
       <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px" }}>
-        {MENU_ITEMS.map(item => {
+        {items.map(item => {
           const active = activeTab === item.key;
           const label = t.competitiveIntelligence[item.i18nKey];
           return (

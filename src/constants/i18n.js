@@ -270,6 +270,33 @@ export const i18n = {
       tech: "Tech Trends",
       industry: "Industry Trends"
     },
+    auth: {
+      loginTitle: "Sign in to Energy Insights Hub",
+      wechatLogin: "Sign in with WeChat",
+      inviteTitle: "Enter your invite code",
+      invitePlaceholder: "Invite code",
+      inviteSubmit: "Activate account",
+      disabled: "This account has been disabled. Please contact the administrator.",
+      stateExpired: "Your sign-in timed out. Please scan the QR code again.",
+      notConfigured: "WeChat sign-in is not configured on this server yet.",
+      devLogin: "Dev sign-in",
+      devPlaceholder: "dev unionid",
+      inviteError: "That invite code is invalid or expired.",
+      rateLimited: "Too many attempts. Please wait a moment and try again.",
+      logout: "Sign out",
+      adminBadge: "Admin"
+    },
+    views: {
+      toggleLabel: "Views",
+      myViews: "My views",
+      saveAsView: "Save as view",
+      viewLimit: "You can save up to 10 views.",
+      driftHint: "Filters have changed since this view was saved.",
+      backToPublic: "Back to default",
+      updateView: "Update view",
+      deleteView: "Delete view",
+      setDefault: "Set as default"
+    },
   },
   zh: {
     header: {
@@ -542,6 +569,33 @@ export const i18n = {
       tech: "技术动态",
       industry: "行业动态"
     },
+    auth: {
+      loginTitle: "登录混沌能源智库",
+      wechatLogin: "微信扫码登录",
+      inviteTitle: "输入邀请码开通账号",
+      invitePlaceholder: "邀请码",
+      inviteSubmit: "开通账号",
+      disabled: "该账号已被停用，请联系管理员。",
+      stateExpired: "登录已超时，请重新扫码。",
+      notConfigured: "服务端尚未配置微信登录。",
+      devLogin: "开发者登录",
+      devPlaceholder: "dev unionid",
+      inviteError: "邀请码无效或已过期。",
+      rateLimited: "尝试次数过多，请稍后再试。",
+      logout: "退出登录",
+      adminBadge: "管理员"
+    },
+    views: {
+      toggleLabel: "视角",
+      myViews: "我的视角",
+      saveAsView: "保存为视角",
+      viewLimit: "每人最多保存 10 个视角。",
+      driftHint: "当前筛选条件已与该视角保存时不同。",
+      backToPublic: "回到默认",
+      updateView: "更新视角",
+      deleteView: "删除视角",
+      setDefault: "设为默认"
+    }
   }
 };
 

@@ -8,6 +8,7 @@ import AiDrawer from "./components/AiDrawer";
 import ReportsPage from "./components/ReportsPage";
 import ReportGeneratorModal from "./components/ReportGeneratorModal";
 import ConfigurationPage from "./components/ConfigurationPage";
+import LoginGate from "./components/LoginGate";
 import { ToastContainer } from "./components/Toast";
 import { storage } from "./utils/storage";
 import { api } from "./utils/api";
@@ -51,8 +52,30 @@ export default function App() {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   // 内容过滤配置中的主体关键词（企业/主体 + 包含关键词及别名），用于卡片高亮
   const [subjectKeywords, setSubjectKeywords] = useState([]);
+  // 身份：user 为 null 时整个应用外壳都不挂载（见下方早返回）。
+  // authReady 与 user 分开，是因为「还没问完」和「问完了，确实没登录」必须渲染成不同的东西：
+  // 前者是加载态，后者是登录门。合成一个状态就会在首屏闪一次登录页。
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  // 抽出来而不是在依赖数组里写 user?.id：exhaustive-deps 会把可选链当成
+  // 「无法静态检查的复杂表达式」告警，而本仓 lint 带 --max-warnings 0。
+  const userId = user?.id ?? null;
 
   const t = i18n[language];
+
+  useEffect(() => {
+    let cancelled = false;
+    backendApi.me()
+      .then((res) => { if (!cancelled) setUser(res.data?.user || null); })
+      .catch((e) => {
+        // 401 是「没登录」的正常答案，不是故障，不该往 console 里刷 error。
+        // 判断依据是状态码而不是错误文案（backendApi 把 response.status 挂在 err.status 上）。
+        if (e?.status !== 401) console.error("[App] session check failed:", e?.message || e);
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => { if (!cancelled) setAuthReady(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   const loadInsightsFromBackend = useCallback(async () => {
     setLoading(true);
@@ -77,6 +100,13 @@ export default function App() {
     const savedLanguage = storage.getStoredLanguage();
     // 移动端仅中文界面（语言切换已隐藏）；Web 端沿用保存值，默认英文
     setLanguage(isMobileViewport() ? "zh" : (savedLanguage || "en"));
+  }, []);
+
+  // 三处后端加载从上面那个 effect 里拆出来、挂到 userId 上：Task 6 之后这些端点全在鉴权墙内，
+  // 未登录时打过去只会收到一串 401（污染 console，且拿到的是空数据），而原 effect 的 deps 是 []，
+  // 登录之后根本不会再跑一次 —— 只在里面加 if 守卫是修不好的，必须让它依赖身份。
+  useEffect(() => {
+    if (!userId) return;
     loadInsightsFromBackend();
     backendApi.getReportTemplates().then(r => setReportTemplates(r.data || [])).catch(() => {});
     // 主体关键词：用于洞察卡片标题中突出显示主体
@@ -112,8 +142,9 @@ export default function App() {
         }
         setSubjectKeywords([...kws].sort((a, b) => b.length - a.length));
       }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // loadInsightsFromBackend 刻意不入 deps：它随 language 重建，入 deps 会让每次切换语言
+    // 都重拉一遍全量数据，而切换语言只该改文案、不该改数据。
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addToast = (message, type = "success") => {
     const id = Date.now();
@@ -267,11 +298,15 @@ export default function App() {
 
   // Auto-fetch when filters change (debounced for query input) - reset pagination
   useEffect(() => {
+    // 未登录时不打 /api/insights（Task 6 之后它在鉴权墙内，只会收到 401）。
+    // 依赖里带上 userId：登录那一刻 filters 没变，不靠这个依赖不会自动拉首屏数据。
+    // ⚠️ 绝不能加 insights.length —— 见上面 fetchInsights 的依赖说明。
+    if (!userId) return;
     const timer = setTimeout(() => {
       fetchInsights(false);
     }, filters.query ? 500 : 0);
     return () => clearTimeout(timer);
-  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load more function for infinite scroll
   const loadMore = useCallback(() => {
@@ -305,9 +340,49 @@ export default function App() {
     if (isMobile && activeTab === "configuration") setActiveTab("intelligence");
   }, [isMobile, activeTab]);
 
+  const handleLogout = async () => {
+    // 服务端失败也要清本地状态：会话 cookie 是 HttpOnly 的，前端唯一能做的判断是
+    // 「本地不再认为已登录」。留着 user 只会让用户以为还登录着，而下一个请求照样 401。
+    try {
+      await backendApi.logout();
+    } catch (e) {
+      console.error("[App] logout failed:", e?.message || e);
+    }
+    // 不发 toast：ToastContainer 挂在主壳里，user 一变 null 主壳就被 LoginGate 替换，
+    // toast 会跟着一起卸载 —— 用户看不到它，只会看到一个闪一下就没了的东西。
+    setUser(null);
+  };
+
+  // —— 以下不再有 hook，可以早返回 ——
+  if (!authReady) {
+    // 身份还没问完。**不放任何文案**：此刻 language 仍是按设备猜的初始值，effect 可能马上
+    // 把它改成存储值，闪一句错语言的「加载中」比一个中性的脉冲点更糟。
+    // pulse 关键帧来自 src/styles/responsive.css（本文件已 import），不新增样式表。
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: darkMode ? COLORS.background.dark : "#f8f8fc"
+      }}>
+        <div style={{
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: COLORS.primary,
+          animation: "pulse 1.2s ease-in-out infinite"
+        }} />
+      </div>
+    );
+  }
+  if (!user) return <LoginGate onLoggedIn={(u) => setUser(u)} />;
+
   const showIntelligence = activeTab === "intelligence";
   const showReports = activeTab === "reports";
-  const showConfiguration = activeTab === "configuration" && !isMobile;
+  // 非管理员连页面都不渲染：Sidebar 已经不给入口，这里是兜底（activeTab 是普通 state，
+  // 任何将来的代码都可能把它设成 "configuration"）。真正的边界在服务端 requireAdmin。
+  const showConfiguration = activeTab === "configuration" && !isMobile && user.role === "admin";
 
   const bg = darkMode ? COLORS.background.dark : "#f8f8fc";
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
@@ -329,6 +404,8 @@ export default function App() {
         isMobile={isMobile}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        user={user}
+        onLogout={handleLogout}
       />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -339,6 +416,7 @@ export default function App() {
             language={language}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            role={user.role}
           />
         )}
 
@@ -463,6 +541,7 @@ export default function App() {
               language={language}
               titleSlotEl={titleSlotEl}
               onTrackerComplete={loadInsightsFromBackend}
+              user={user}
             />
           )}
         </main>

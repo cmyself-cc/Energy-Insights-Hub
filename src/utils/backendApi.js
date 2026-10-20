@@ -2,6 +2,13 @@ const API_BASE = "/api";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
+    // 会话 cookie 是 HttpOnly 的，前端唯一能做的是「确保它随请求发出去」。
+    // 诚实说明：API_BASE 是硬编码的同源相对路径 "/api"，而同源请求的 fetch 默认
+    // （credentials: "same-origin"）本来就带 cookie，所以这一行**今天**是 no-op。
+    // 写在这里是把意图钉在将来真需要它的那一行旁边：如果哪天 API_BASE 改成跨源绝对地址，
+    // 没有它就会静默地不带会话。但光有它**不够** —— 跨源还需要服务端 CORS 回
+    // Access-Control-Allow-Credentials: true，且 Access-Control-Allow-Origin 不能是 "*"。
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...options.headers
@@ -11,7 +18,11 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || `HTTP ${response.status}`);
+    const err = new Error(error.error || `HTTP ${response.status}`);
+    // 挂上状态码，调用方才能区分 429（限速，该提示「稍后再试」）与 400（邀请码错，
+    // 该提示「邀请码无效」），而不必去正则匹配错误文案 —— 文案是给用户看的，不是给代码判断的。
+    err.status = response.status;
+    throw err;
   }
 
   return response.json();
@@ -19,6 +30,13 @@ async function request(path, options = {}) {
 
 export const backendApi = {
   health: () => request("/health"),
+
+  // Auth —— 会话 cookie 由服务端 Set-Cookie 管理，前端只读 { data: { user } }
+  getAuthConfig: () => request("/auth/config"),
+  devLogin: (devUnionid) => request("/auth/dev-login", { method: "POST", body: JSON.stringify({ devUnionid }) }),
+  registerWithInvite: (ticket, code) => request("/auth/register", { method: "POST", body: JSON.stringify({ ticket, code }) }),
+  me: () => request("/auth/me"),
+  logout: () => request("/auth/logout", { method: "POST" }),
 
   // Insights
   getInsights: (params = {}) => {
