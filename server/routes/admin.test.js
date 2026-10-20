@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vites
 import express from "express";
 import db from "../db.js";
 import adminRouter from "./admin.js";
+import authRouter from "./auth.js";
+import { ensureSuperAdminInvite, superAdminUnionid } from "../lib/pairIdentity.js";
 import { requireAuth, requireAdmin } from "../lib/authMiddleware.js";
 import { createSession } from "../lib/sessions.js";
 import { clearAuthTables, insertTestUser, listen, makeCookieJar } from "../testUtils.js";
@@ -15,6 +17,7 @@ function buildApp() {
   // 挂载形状与 views.test.js 的宿主 app 一致：中间件写在 router 之前（apiRoutes.js 里
   // 「挂载形状是硬约束」那段注释说明了为什么）。刻意不引用行号——行号会随改动漂移。
   app.use("/api/admin", requireAuth, requireAdmin, adminRouter);
+  app.use("/api/auth", authRouter);
   return app;
 }
 
@@ -484,6 +487,106 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
         expect((await api(port, "/api/admin/invite-codes", admin.id, { method: "POST", body: { code, ...extra } })).status).toBe(200);
         expect(codeRow(code).role, `${code} 省略 role 应默认 user`).toBe("user");
       }
+    } finally { await close(); }
+  });
+});
+
+describe("内置超级管理员（产品负责人 2026-10-21）", () => {
+  let sadm, sua;
+  beforeEach(() => {
+    clearAuthTables();
+    sadm = insertTestUser({ unionid: "radm", role: "admin" });
+    sua = insertTestUser({ unionid: "rstd-a" });
+    ensureSuperAdminInvite();
+  });
+
+  it("种子：幂等，且码为 admin 角色、不限次、不过期", () => {
+    ensureSuperAdminInvite();  // 二次调用不炸、不重复
+    const code = db.prepare("SELECT * FROM invite_codes WHERE code='ADMIN123456'").get();
+    expect(code.role).toBe("admin");
+    expect(code.max_uses).toBe(1);   // 超管只有一个名额
+    expect(code.expires_at).toBeNull();
+    expect(code.active).toBe(1);
+    expect(db.prepare("SELECT COUNT(*) c FROM invite_codes WHERE code='ADMIN123456'").get().c).toBe(1);
+  });
+
+  it("超管账号注册（pair 流程）→ role=admin，列表带 locked=true", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      const reg = await api(port, "/api/auth/register-pair", sua.id, { method: "POST", body: { code: "admin123456", username: "admin" } });
+      expect(reg.status).toBe(201);
+      expect(reg.body.data.user.role).toBe("admin");
+      // 超管本人视角：能看到自己行且 locked=true
+      const meList = await api(port, "/api/admin/users", reg.body.data.user.id);
+      const row = meList.body.data.find((u) => u.nickname === "admin");
+      expect(row.locked).toBe(true);
+      // 其他管理员视角：超管行不可见
+      const otherList = await api(port, "/api/admin/users", sadm.id);
+      expect(otherList.body.data.find((u) => u.nickname === "admin")).toBeUndefined();
+      const other = otherList.body.data.find((u) => u.unionid === "rstd-a");
+      expect(other.locked).toBe(false);
+    } finally { await close(); }
+  });
+
+  it("🔴 超管不可改角色 / 不可停用（先于一切校验，任何 patch 一律 400）", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      await api(port, "/api/auth/register-pair", sua.id, { method: "POST", body: { code: "admin123456", username: "admin" } });
+      // 其他管理员的列表已滤掉超管行（下方有专门用例），这里直接查库拿 id
+      const saRow = db.prepare("SELECT id FROM users WHERE unionid = ?").get(superAdminUnionid());
+      const demote = await api(port, `/api/admin/users/${saRow.id}`, sadm.id, { method: "PATCH", body: { role: "user" } });
+      expect(demote.status).toBe(400);
+      expect(demote.body.error).toBe("super admin account cannot be modified");
+      const disable = await api(port, `/api/admin/users/${saRow.id}`, sadm.id, { method: "PATCH", body: { status: "disabled" } });
+      expect(disable.status).toBe(400);
+      // 行原样保留
+      const row = db.prepare("SELECT role, status FROM users WHERE id=?").get(saRow.id);
+      expect(row.role).toBe("admin");
+      expect(row.status).toBe("active");
+    } finally { await close(); }
+  });
+
+  it("🔴 超管邀请码不可被停用（新注册永远开放）", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      const codeRow = db.prepare("SELECT id FROM invite_codes WHERE code='ADMIN123456'").get();
+      const r = await api(port, `/api/admin/invite-codes/${codeRow.id}`, sadm.id, { method: "PATCH", body: { active: 0 } });
+      expect(r.status).toBe(400);
+      expect(r.body.error).toBe("super admin invite code cannot be deactivated");
+      expect(db.prepare("SELECT active FROM invite_codes WHERE code='ADMIN123456'").get().active).toBe(1);
+    } finally { await close(); }
+  });
+});
+
+describe("超管唯一性与可见性（产品负责人 2026-10-21 补充）", () => {
+  let sadm, sua;
+  beforeEach(() => {
+    clearAuthTables();
+    sadm = insertTestUser({ unionid: "radm", role: "admin" });
+    sua = insertTestUser({ unionid: "rstd-a" });
+    ensureSuperAdminInvite();
+  });
+
+  it("🔴 超管注册后码即枯竭：同码不可再注册任何新用户/新管理员（名额只有一个）", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      const first = await api(port, "/api/auth/register-pair", sua.id, { method: "POST", body: { code: "admin123456", username: "admin" } });
+      expect(first.status).toBe(201);
+      const second = await api(port, "/api/auth/register-pair", sua.id, { method: "POST", body: { code: "admin123456", username: "admin2" } });
+      expect(second.status).toBe(400);
+      expect(second.body.error).toBe("invite code exhausted");
+    } finally { await close(); }
+  });
+
+  it("🔴 其他管理员的邀请码列表看不到 ADMIN123456 行（防暴露登录信息）；超管本人可见", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      await api(port, "/api/auth/register-pair", sua.id, { method: "POST", body: { code: "admin123456", username: "admin" } });
+      const superId = db.prepare("SELECT id FROM users WHERE unionid=?").get(superAdminUnionid()).id;
+      const superList = await api(port, "/api/admin/invite-codes", superId);
+      expect(superList.body.data.find((c) => c.code === "ADMIN123456")).toBeTruthy();
+      const otherList = await api(port, "/api/admin/invite-codes", sadm.id);
+      expect(otherList.body.data.find((c) => c.code === "ADMIN123456")).toBeUndefined();
     } finally { await close(); }
   });
 });

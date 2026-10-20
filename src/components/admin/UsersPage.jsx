@@ -79,6 +79,8 @@ const BTN = {
 export function UserRow({ u, codes, codesLoaded, t, p, onPatch }) {
   const disabled = u.status === "disabled";
   const isAdmin = u.role === "admin";
+  // 超管护锁（产品负责人 2026-10-21）：后端 PATCH 会 400，前端不渲染按钮并给徽标。
+  const locked = u.locked === true;
   // resource_counts 是服务端内嵌的只读计数（admin.js:37-41），reports/templates 那两项在
   // Task 8 的 024 迁移之前会因 "no such column" 降级成 **null**（不是缺失）。
   // 所以这里必须用 ?? 0：?. 只能挡住「整个对象缺失」，挡不住「键在但值是 null」。
@@ -103,6 +105,14 @@ export function UserRow({ u, codes, codesLoaded, t, p, onPatch }) {
           color: isAdmin ? "#fff" : p.muted,
           border: isAdmin ? "none" : `1px solid ${p.border}`
         }}>{isAdmin ? t.admin.roleAdmin : t.admin.roleUser}</span>
+        {locked && (
+          <span style={{
+            padding: "2px 8px", borderRadius: BORDER_RADIUS.sm, fontSize: FONT_SIZES.xs, fontWeight: 600,
+            background: "rgba(245,197,24,0.15)",
+            border: `1px solid ${COLORS.status.warning}`,
+            color: COLORS.status.warning
+          }}>{t.admin.superAdminBadge}</span>
+        )}
         {disabled && (
           <span style={{
             padding: "2px 8px", borderRadius: BORDER_RADIUS.sm, fontSize: FONT_SIZES.xs, fontWeight: 600,
@@ -125,6 +135,7 @@ export function UserRow({ u, codes, codesLoaded, t, p, onPatch }) {
         {counts.views ?? 0} {t.admin.countViews}
       </div>
 
+      {!locked && (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={() => onPatch(u.id, { role: isAdmin ? "user" : "admin" })}
@@ -145,6 +156,7 @@ export function UserRow({ u, codes, codesLoaded, t, p, onPatch }) {
           }}
         >{disabled ? t.admin.actionEnable : t.admin.actionDisable}</button>
       </div>
+      )}
     </div>
   );
 }

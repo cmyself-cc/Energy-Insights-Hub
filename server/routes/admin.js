@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { Router } from "express";
 import db from "../db.js";
+import { SUPER_ADMIN, superAdminUnionid } from "../lib/pairIdentity.js";
 
 const router = Router();
 
@@ -33,6 +34,8 @@ function countSafe(sql, id) {
 function adminUser(u) {
   const out = {};
   for (const k of ADMIN_USER_FIELDS) out[k] = u[k] ?? null;
+  // 超管标记：前端据此隐藏停用/改角色按钮（即便渲染了，点了也会被 PATCH 护锁 400）
+  out.locked = u.unionid === superAdminUnionid();
   // C7：ADM-3 的只读计数内嵌在列表里，没有独立的 GET /users/:id/resources 路由
   out.resource_counts = {
     reports: countSafe("SELECT COUNT(*) c FROM reports WHERE owner_id=?", u.id),
@@ -79,13 +82,23 @@ function isLastActiveAdmin(target) {
   return db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin' AND status='active'").get().c <= 1;
 }
 
-router.get("/users", (_req, res) => {
-  res.json({ data: db.prepare("SELECT * FROM users ORDER BY created_at DESC").all().map(adminUser) });
+router.get("/users", (req, res) => {
+  // 超管的身份（用户名即登录名）只向超管本人展示：其他管理员的列表直接滤掉该行，
+  // 避免在管理界面暴露超管登录信息（产品负责人 2026-10-21）。
+  const isSuper = req.user.unionid === superAdminUnionid();
+  const rows = db.prepare("SELECT * FROM users ORDER BY created_at DESC").all()
+    .filter((u) => isSuper || u.unionid !== superAdminUnionid());
+  res.json({ data: rows.map(adminUser) });
 });
 
 router.patch("/users/:id", (req, res) => {
   const target = db.prepare("SELECT * FROM users WHERE id=?").get(Number(req.params.id));
   if (!target) return res.status(404).json({ error: "not found" });
+  // 🔴 超管护锁（产品负责人 2026-10-21）：内置 admin 账号不可停用、不可改角色。
+  // 先于一切校验：锁的是身份不是参数，什么 patch 进来都一律拒绝。
+  if (target.unionid === superAdminUnionid()) {
+    return res.status(400).json({ error: "super admin account cannot be modified" });
+  }
   const b = req.body || {};
   const role = b.role;            // 'admin' | 'user'
   const status = b.status;        // 'active' | 'disabled'（禁用 = 只挡登录，数据全保留）
@@ -113,8 +126,12 @@ router.patch("/users/:id", (req, res) => {
   res.json({ data: adminUser(db.prepare("SELECT * FROM users WHERE id=?").get(target.id)) });
 });
 
-router.get("/invite-codes", (_req, res) => {
-  res.json({ data: db.prepare("SELECT * FROM invite_codes ORDER BY created_at DESC").all() });
+router.get("/invite-codes", (req, res) => {
+  // 同上：超管码行（note 里含开通方式）只向超管本人展示
+  const isSuper = req.user.unionid === superAdminUnionid();
+  const rows = db.prepare("SELECT * FROM invite_codes ORDER BY created_at DESC").all()
+    .filter((c) => isSuper || c.code !== SUPER_ADMIN.CODE);
+  res.json({ data: rows });
 });
 
 router.post("/invite-codes", (req, res) => {
@@ -157,6 +174,10 @@ router.patch("/invite-codes/:id", (req, res) => {
   const row = db.prepare("SELECT * FROM invite_codes WHERE id=?").get(Number(req.params.id));
   if (!row) return res.status(404).json({ error: "not found" });
   const b = req.body || {};
+  // 超管邀请码不可停用（新注册永远开放）
+  if (b.active != null && row.code === SUPER_ADMIN.CODE && !(b.active ? 1 : 0)) {
+    return res.status(400).json({ error: "super admin invite code cannot be deactivated" });
+  }
   if (b.active != null) db.prepare("UPDATE invite_codes SET active=? WHERE id=?").run(b.active ? 1 : 0, row.id);
   if (b.note != null) db.prepare("UPDATE invite_codes SET note=? WHERE id=?").run(String(b.note), row.id);
   res.json({ data: db.prepare("SELECT * FROM invite_codes WHERE id=?").get(row.id) });

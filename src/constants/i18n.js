@@ -375,6 +375,7 @@ export const i18n = {
       errMaxUses: "Max uses must be a whole number of 1 or more, or blank for unlimited.",
       errExpires: "Expiry must be a date.",
       errDefaultView: "Default view must be a JSON object (not an array).",
+      superAdminBadge: "Super Admin",
       loadFailed: "Could not load data from the server."
     },
   },
@@ -754,6 +755,7 @@ export const i18n = {
       errMaxUses: "可用次数必须是 1 以上的整数，或留空表示不限。",
       errExpires: "到期日必须是日期。",
       errDefaultView: "默认视角必须是 JSON 对象（不能是数组）。",
+      superAdminBadge: "超级管理员",
       loadFailed: "无法从服务器加载数据。"
     }
   }

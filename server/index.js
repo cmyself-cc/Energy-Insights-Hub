@@ -14,6 +14,7 @@ import { seedReportTemplates } from "./services/reportTemplateService.js";
 import { seedSearchProviders } from "./services/searchProviderService.js";
 import { seedLlmPrompts } from "./services/promptStore.js";
 import { startJobRunner } from "./services/reportGenerator.js";
+import { ensureSuperAdminInvite } from "./lib/pairIdentity.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +47,7 @@ if (process.env.NODE_ENV === "production" && fs.existsSync(distPath)) {
   });
 }
 
+ensureSuperAdminInvite();
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
   startScheduler();

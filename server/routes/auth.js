@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { Router } from "express";
 import db from "../db.js";
 import { createSession, destroySession } from "../lib/sessions.js";
+import { pairUnionid } from "../lib/pairIdentity.js";
 import { requireAuth, parseCookieValue, SESSION_COOKIE, setSessionCookie, clearSessionCookie } from "../lib/authMiddleware.js";
 import { exchangeIdentity, getAuthorizeUrl, isMockMode } from "../services/identityProvider.js";
 import { applyInviteDefaults } from "../services/viewService.js";
@@ -363,8 +364,7 @@ router.post("/register", (req, res) => {
 // 天然把「用户名+邀请码」绑成全局唯一键，跨码重名互不冲突（不同码合成不同 unionid）。
 // 密码学上邀请码即凭证：暴力破解靠 5 次/分/IP 限速（复用 register 的同一闸门），
 // 配对失败一律统一文案，不泄露「用户名存在但码错」这种对半信息。
-const pairUnionid = (code, username) =>
-  "pair-" + sha256(`${String(code || "").trim().toUpperCase()}:${String(username || "").trim()}`);
+
 
 // 邀请码通用校验（与 /register 同一口径；注册类端点用，登录类端点**不**校验码状态——
 // 「邀请码过期后不可再添加新用户」，存量用户登录权不受码生命周期影响）
