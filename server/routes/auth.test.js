@@ -442,6 +442,35 @@ describe("oauth state binding (login CSRF) + /config idempotency", () => {
     } finally { await close(); }
   });
 
+  // M-2：钉住 stateFrom 的 typeof 守卫（auth.js 的「?state=a&state=b 会被 express 解析成数组」
+  // 那条注释）。守卫本身今天是对的，但此前**零观察者** —— 把它换成「取首元素」这种看起来完全
+  // 合理的兼容写法（Array.isArray(q) ? q[0] : q），19 条用例全绿。注意变异后的行为并不构成
+  // 新洞（cookie 绑定仍然生效），所以这是 Minor；但「注释声称防了某个形状、而该形状无人观察」
+  // 本身就是缺陷。用**与自己 cookie 相同**的值做阳性对照形状：只有守卫真的生效才会被拒。
+  it("rejects an array-shaped state (?state=a&state=b) even when both values match the browser's own cookie", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      insertTestUser({ unionid: "wx-active" });
+      tokenBody = { access_token: "at_1", openid: "op_1", unionid: "wx-active" };
+
+      const cfg = await getConfig(port, jar);
+      const get = await raw(port, `/api/auth/wechat/callback?code=c1&state=${cfg.state}&state=${cfg.state}`, jar);
+      expect(get.status).toBe(302);
+      expect(get.location, "重复的 state query 会被 express 解析成数组，必须拒绝而不是取首元素").toBe(REJECT_TO);
+      expect(jar.cookies.eih_session, "数组形状的 state 绝不能换到会话").toBeUndefined();
+
+      // body 侧同一个守卫（stateFrom 的 body 兜底分支）：JSON 数组同样必须被拒
+      const post = await raw(port, "/api/auth/wechat/callback", jar, {
+        method: "POST",
+        body: { code: "c1", state: [cfg.state, cfg.state] }
+      });
+      expect(post.status, "body 里的数组 state 必须 400").toBe(400);
+      expect(post.body).toEqual({ error: "invalid state" });
+      expect(jar.cookies.eih_session).toBeUndefined();
+      expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
+    } finally { await close(); }
+  });
+
   it("an attacker-minted state from a separate client cannot be replayed into the victim's callback", async () => {
     const { port, close } = await listen(buildApp());
     try {

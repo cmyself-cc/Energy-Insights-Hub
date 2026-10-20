@@ -1,6 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { isMockMode, exchangeIdentity, exchangeIdentityWechat, getAuthorizeUrl } from "./identityProvider.js";
-import { clearAuthTables } from "../testUtils.js";
+// 刻意**不** import ../testUtils.js：clearAuthTables() 内部会调 initDb()，而 initDb() 会遍历
+// server/migrations/ 跑整套迁移 —— 那等于把「identityProvider 的纯逻辑单测」绑到「所有迁移
+// 都健康」上。本文件一行 DB 都不写（只桩打向微信上游的 outbound fetch），被测模块的唯一 import
+// 是 node:crypto，清理钩子在这里收益为零、耦合为实。
+// 规则是「凡是写 auth 表的测试文件才必须 afterAll(clearAuthTables)」，本文件不属于那一类。
 
 // WECHAT_TIMEOUT_MS 也在列：它决定上游 fetch 的 AbortSignal 何时触发，泄漏出去会让
 // 「挂死必须被超时打断」那两条用例的耗时随上一个用例的设置漂移。
@@ -275,7 +279,3 @@ describe("identityProvider wechat path", () => {
     expect(msg).not.toContain("api.weixin.qq.com");
   });
 });
-
-// 本文件一行 DB 都不写（只桩 outbound fetch），这条清理是套件级卫生约定的一部分，
-// 不是这里的前置条件：它保证本文件跑完后不把 auth 表的残行留给后续套件。
-afterAll(() => { clearAuthTables(); });

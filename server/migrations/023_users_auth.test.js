@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import db, { initDb } from "../db.js";
 
 function resetTables() {
@@ -14,6 +14,16 @@ function resetTables() {
 describe("migration 023 users auth", () => {
   beforeEach(() => {
     initDb();
+    resetTables();
+  });
+
+  // 最后一个用例（'creates sessions and pending_identities tables'）会在 users / sessions /
+  // pending_identities 各留一行（u8 / h1 / p1）。beforeEach 只保证**本文件内**每个用例从干净
+  // 状态开始，管不到文件跑完之后 —— 残行会留在 data/test-energy_insights.db 上，让「测试库
+  // 跑完是干净的」这个隐含前提变成假的（它已经连续几轮污染后续套件与手工探针）。
+  // 用本文件自己的 resetTables()，不引入 ../testUtils.js：clearAuthTables() 内部会调 initDb()
+  // 重跑整套迁移，而这是个**迁移测试**，多一层间接只会让失败信息更难读。
+  afterAll(() => {
     resetTables();
   });
 

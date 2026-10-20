@@ -8,7 +8,14 @@ const WX = {
 // 上游超时可由 env 调，默认 10s。做成可配置不是给测试开后门：本模块的微信参数
 // （APP_ID / APP_SECRET / REDIRECT_URI）本来就全部来自 env，超时属于同一类运维可调项；
 // 顺带让「挂死必须被打断」这类断言能在 50ms 内跑完，而不是每次真等 10 秒。
-// 未设置 / 空串 / 0 / 负数 / 非数字一律回落默认值。
+//
+// 回落口径（以 Number() 的实际语义为准，不是「看起来像数字就收」）：
+//   回落默认值的：undefined（未设置）/ ""（Number("") === 0，被 n > 0 挡掉）/ "0" / "-5" /
+//                "abc"（NaN）/ "Infinity"（Number.isFinite 为假）。
+//   **会**被接受的：   "1e3" → 1000、"  50  " → 50。Number() 会 trim 首尾空白并接受指数记法，
+//                这两种写法都是合法数值字面量，不是 bug，别「顺手收紧」。
+// ⚠️ 本函数无直接测试覆盖：upstreamTimeout 未导出，返回值也无法从 AbortSignal 上读回来，
+// 间接断言只能靠真的等满 10s。Task 6 的 M11 已就同一权衡裁定过——保持现状，不在此处补测试。
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 function upstreamTimeout() {

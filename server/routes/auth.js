@@ -106,6 +106,13 @@ function publicUser(u) {
 //   · 必须在 setSessionCookie **之后**：它用 setHeader("Set-Cookie", …) 会整条覆盖，
 //     先 append 的清除指令会被抹掉；
 //   · 必须在 res.json/res.redirect **之前**：响应一发出就不能再动头（ERR_HTTP_HEADERS_SENT）。
+//     ⚠️ 别「顺手简化」成 try/finally。评审把两种形状分开实测过：
+//       - 没有 clearOauthStateCookie 里那道 `if (!res.headersSent)` 守卫（:177）时，裸
+//         res.append 确实抛 ERR_HTTP_HEADERS_SENT —— 上面那句话在那个形状下成立；
+//       - **带着**已发布的守卫时，append 一次都不会被调用：清除指令被静默丢弃，且不抛异常。
+//     所以在当前形状下挪到 finally 不会让测试变红，而是无声地失去一次性——比抛错更危险。
+//     结论不变：clear 必须在 settle() 里、响应发出之前。评审的 M-C 变异（把 clear 挪到响应
+//     之后）被现有用例 KILLED，说明这个顺序已经被钉住。
 // dev-login 传 false：它没有 OAuth 往返，从没铸过 state cookie，不该多发一条无意义的 Set-Cookie。
 function handleIdentity(req, res, identity, { json, oneTimeState }) {
   const settle = (payload, location) => {
@@ -139,8 +146,19 @@ function handleIdentity(req, res, identity, { json, oneTimeState }) {
 // —— OAuth state 与浏览器绑定（login CSRF 防护）——
 //
 // 双提交 cookie：/config 把 state 同时写进 authorizeUrl 和一次性 HttpOnly cookie；回跳时比对
-// 「URL 带回来的」与「**这个浏览器自己存的**」。攻击者可以给自己领到完全合法的 state，但没有
-// 办法把它写进受害者的 cookie jar，所以伪造链接必然比对失败。
+// 「URL 带回来的」与「**这个浏览器自己存的**」。攻击者可以给自己领到完全合法的 state，
+// **只要他没法把那个值写进受害者的 cookie jar**，伪造链接就必然比对失败。
+//
+// ⚠️ 那个前提是有条件的，早先这里写成「没有办法」是不准确的。已知的写 cookie 路径：
+//   · 兄弟子域控制权——本 cookie 是 host-only 的（不带 Domain 属性），但任何能控制
+//     *.cmyself.cc 兄弟子域的一方都可以自己抛一条 Domain=.cmyself.cc 的同名 cookie 盖过来；
+//   · 兄弟源上的 XSS（能把请求打到本站）；
+//   · 无 TLS 的 MITM——生产是 Caddy + HTTPS，且 PROD 下这条 cookie 带 Secure，此路已排除。
+// 评审实测到的绕过形状：请求的 Cookie 头里放两条同名 eih_oauth_state（攻击者的值在前）+
+// query 带攻击者的值 → 302 /，因为 parseCookieValue（server/lib/authMiddleware.js:5-16）
+// 顺序扫描并返回**第一个**同名匹配。
+// 这是双提交 cookie 模式的固有上限，不是本实现的 bug。要彻底消除得上服务端一次性 state 表
+// （需要新迁移，超出本任务范围）——所以这里只订正说法，不改代码。
 //
 // 为什么不用无状态 HMAC 签名：/config 匿名可达，攻击者随时能领一个签名合法的 state 塞进伪造
 // 链接——HMAC 只证明「这个 state 是我们签发的」，而防御需要的是「这个 state 是**这个浏览器**
@@ -150,7 +168,14 @@ function handleIdentity(req, res, identity, { json, oneTimeState }) {
 // /api/auth/wechat/callback?code=<攻击者的code> → 受害者浏览器被写下**攻击者账号**的 session
 // cookie → 受害者此后保存的视角、反馈全部落进攻击者可读的账号。
 const OAUTH_STATE_COOKIE = "eih_oauth_state";
-const OAUTH_STATE_MAX_AGE_S = 600;          // 10 分钟：够扫码，不够重放
+// 10 分钟：够扫码。⚠️ 但这**不等于**服务端意义上的「一次性」——服务端不记消费，那条
+// Max-Age=0 的清除指令只是请浏览器删 cookie；无视它的客户端可以拿同一个 state + 同一条 cookie
+// 反复通过（评审实测连续 3 次成功，铸出 5 条 session 行），而且每次 GET /config 都把 Max-Age
+// 重置回 600，寿命可以无限延长。
+// 这没有在 M-3 之外增加攻击面：重放要求同时出示 state S **和**一条含 S 的 cookie——攻击者自己
+// 满足这两个条件只能登进他自己的账号；要在受害者浏览器里满足，就得先具备 M-3 列的那些前提。
+// 口径订正：它更像「10 分钟内可换多次会话的票」，不是一次性令牌（每次成功重放新铸一条 session 行）。
+const OAUTH_STATE_MAX_AGE_S = 600;
 const OAUTH_STATE_RE = /^[0-9a-f]{16}$/;    // crypto.randomBytes(8).toString("hex") 的形状
 
 // ⚠️ 必须用 res.append 而不是 res.setHeader：authMiddleware.js 的 setSessionCookie /

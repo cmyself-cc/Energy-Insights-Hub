@@ -248,7 +248,12 @@ describe("/api/views", () => {
   // 残留行会让后续测试文件的 DELETE FROM users 抛 FOREIGN KEY constraint failed。
   // 当前「本文件跑完恰好是干净的」只是**数据性质的巧合**（最后一个用例的 beforeEach 清过、
   // 且它自己不建行），不是代码性质。Task 8 的邀请码管理测试会 POST default_view 并走
-  // 「邀请码 → 注册」端到端，届时就会开始留残留行。加这一行把整类顺序脆弱性移掉；
-  // 023_users_auth.test.js 里那条 R4 修复仍然保留（纵深防御，两处一起才对）。
+  // 「邀请码 → 注册」端到端，届时就会开始留残留行。加这一行把整类顺序脆弱性移掉。
+  // ⚠️ 订正：这句话原来还写着「023_users_auth.test.js 里那条 R4 修复仍然保留（纵深防御，
+  // 两处一起才对）」——**那条修复当时并不存在**（该文件只有 beforeEach 里的 resetTables()，
+  // 没有 afterAll），所以它每跑完一轮都会在测试库上留下 users=1 / sessions=1 /
+  // pending_identities=1（u8 / h1 / p1），连续污染了好几轮。现已补上，用的是那个文件自己的
+  // resetTables() 而不是 clearAuthTables()——后者内部会调 initDb() 重跑整套迁移，不该给一个
+  // 迁移测试再加一层间接。规则口径也一并收窄为「凡是写 auth 表的测试文件才需要这个钩子」。
   afterAll(() => { clearAuthTables(); });
 });
