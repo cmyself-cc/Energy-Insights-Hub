@@ -9,6 +9,7 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
   const [currentModel, setCurrentModel] = useState(null);
   const zh = language === "zh";
   const auth = i18n[language].auth;
+  const t = i18n[language];
   // 移动端顶部导航：右上角下划线式切换（绿色粗线为选中态），与页面内 tab 区分
   const navTabStyle = (active) => ({
     padding: "8px 2px",
@@ -74,7 +75,7 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
             同样只给 admin：/api/models/* 整前缀 requireAdmin，且「去设置页管理」对普通用户是死链。 */}
         {!isMobile && isAdmin && (
           <div
-            title={zh ? "当前生效模型（在设置页全局配置中管理）" : "Active model (manage in Settings → Global Config)"}
+            title={t.competitiveIntelligence.modelChipTitle}
             style={{
               padding: "6px 12px", borderRadius: BORDER_RADIUS.md,
               border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,

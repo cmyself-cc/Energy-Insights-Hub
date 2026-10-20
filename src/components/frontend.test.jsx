@@ -188,11 +188,9 @@ describe("Header — 身份块与登出入口", () => {
   // 即将消失的代码上，修 models.js 的那天这条断言会跟着一起失效。
   // title 与那段文案在**同一个** `{!isMobile && isAdmin && (...)}` 块里（Header.jsx:75），
   // 观察到的是完全相同的门禁，而它在生产里确实渲染。
-  // ⚠️ 已知的耦合（评审 N-15，排进 Task 6b）：这个英文字面值**内联在 Header.jsx:77 的
-  // `zh ? … : …` 三元里、不在 i18n.js**，属于「前端新文案一律进 i18n.js」这条 Global
-  // Constraint 的**预存**偏离（本轮 Header.jsx 零改动）。谁为合规把它挪进 i18n.js，
-  // 这条常量就要跟着改成读 `i18n.en.header.…`，否则测试会红 —— 别以为是回归。
-  const CHIP_TITLE = "Active model (manage in Settings → Global Config)";
+  // N-15 已落地（2026-10-21，随 Task 6b）：文案移进 i18n.js 的 competitiveIntelligence
+  // .modelChipTitle，这里直接读 i18n —— 测试与实现共用同一来源，改文案不会弄红测试。
+  const CHIP_TITLE = i18n.en.competitiveIntelligence.modelChipTitle;
 
   it("admin 才渲染模型芯片（R1：/api/models 整前缀 requireAdmin）", () => {
     expect(renderHeader(ADMIN)).toContain(CHIP_TITLE);
