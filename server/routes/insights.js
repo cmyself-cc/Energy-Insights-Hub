@@ -2,6 +2,7 @@ import { Router } from "express";
 import db from "../db.js";
 import { recordFeedback } from "../services/feedbackService.js";
 import { requireAdmin } from "../lib/authMiddleware.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -155,7 +156,7 @@ router.get("/", (req, res) => {
       }
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -165,7 +166,7 @@ router.get("/:id", (req, res) => {
     if (!row) return res.status(404).json({ error: "Insight not found" });
     res.json({ data: parseRow(row) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -174,7 +175,7 @@ router.post("/:id/hide", (req, res) => {
     db.prepare("UPDATE insights SET hidden = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -183,7 +184,7 @@ router.post("/:id/unhide", (req, res) => {
     db.prepare("UPDATE insights SET hidden = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -211,7 +212,7 @@ router.post("/:id/reclassify", (req, res) => {
     const updated = db.prepare("SELECT * FROM insights WHERE id = ?").get(req.params.id);
     res.json({ data: parseRow(updated), fromPurpose });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -227,7 +228,7 @@ router.delete("/:id", requireAdmin, (req, res) => {
     }
     res.json({ success: true, message: "Insight deleted" });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 

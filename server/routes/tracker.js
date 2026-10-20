@@ -3,6 +3,7 @@ import db from "../db.js";
 import { runTracker } from "../services/tracker.js";
 import { parseConfigFile } from "../lib/configParser.js";
 import { importSources, normalizeImportType } from "../services/sourceImporter.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ router.post("/stop", (_req, res) => {
     db.prepare("UPDATE tracker_runs SET stop_requested = 1 WHERE status = 'running'").run();
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -30,7 +31,7 @@ router.post("/run", async (_req, res) => {
 
     res.json({ data: { runId, status: "running" } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -39,7 +40,7 @@ router.get("/runs", (_req, res) => {
     const rows = db.prepare("SELECT * FROM tracker_runs ORDER BY started_at DESC LIMIT 20").all();
     res.json({ data: rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -49,7 +50,7 @@ router.get("/runs/:id", (req, res) => {
     if (!row) return res.status(404).json({ error: "Run not found" });
     res.json({ data: row });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -168,10 +169,7 @@ router.post("/import-config", (req, res) => {
       sourcesImported: sourceResult.imported
     }});
   } catch (e) {
-    if (e.statusCode === 400) {
-      return res.status(400).json({ error: e.message });
-    }
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -188,7 +186,7 @@ router.get("/status", (_req, res) => {
     }
     res.json({ data: { active: true, ...running } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -197,7 +195,7 @@ router.post("/clear-insights", (_req, res) => {
     const result = db.prepare("DELETE FROM insights").run();
     res.json({ data: { success: true, deleted: result.changes } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -223,7 +221,7 @@ router.get("/export-config", (_req, res) => {
       }
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -276,7 +274,7 @@ router.post("/import-config-full", (req, res) => {
 
     res.json({ data: { success: true, message: "Config imported" } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 

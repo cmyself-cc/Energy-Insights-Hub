@@ -2,6 +2,7 @@ import { Router } from "express";
 import fs from "fs";
 import path from "path";
 import db from "../db.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -68,7 +69,7 @@ router.get("/", (_req, res) => {
     const rows = db.prepare("SELECT * FROM model_configs ORDER BY is_active DESC, id ASC").all();
     res.json({ data: safeList(rows) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -87,7 +88,7 @@ router.get("/current", (_req, res) => {
     }
     res.json({ data: null });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -112,7 +113,7 @@ router.post("/", (req, res) => {
     const rows = db.prepare("SELECT * FROM model_configs ORDER BY is_active DESC, id ASC").all();
     res.status(201).json({ data: safeList(rows) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -124,7 +125,7 @@ router.put("/:id/active", (req, res) => {
     const rows = db.prepare("SELECT * FROM model_configs ORDER BY is_active DESC, id ASC").all();
     res.json({ data: safeList(rows) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -137,7 +138,7 @@ router.delete("/:id", (req, res) => {
     // 若删除的是 active，则把 .env 保留当前（不重置），列表可能无 active
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 

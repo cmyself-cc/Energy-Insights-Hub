@@ -1,4 +1,5 @@
 import db from "../db.js";
+import { ApiError } from "../lib/apiError.js";
 
 function safeJson(value) {
   if (!value) return [];
@@ -64,7 +65,7 @@ function updateWeightsFromFeedback(feedback) {
 //   个人口味不许污染全局权重，所以只有 isAdmin 才走 updateWeightsFromFeedback。
 export function recordFeedback({ insightId, action, reason, fromPurpose, toPurpose, userId, isAdmin }) {
   const insight = snapshotInsight(insightId);
-  if (!insight) throw new Error("Insight not found");
+  if (!insight) throw new ApiError("Insight not found", 404);
 
   const result = db.prepare(
     `INSERT INTO user_feedback (insight_id, action, reason, from_purpose, to_purpose, title, summary, keywords, purposes, categories, source_type, user_id)

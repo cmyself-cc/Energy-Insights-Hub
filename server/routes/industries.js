@@ -3,6 +3,7 @@ import db from "../db.js";
 import { fetchWithTimeout } from "../crawlers/utils.js";
 import { generateAliases } from "../lib/llmAlias.js";
 import { requireAdmin } from "../lib/authMiddleware.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.get("/", (_req, res) => {
     }));
     res.json({ data });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -51,7 +52,7 @@ router.post("/", requireAdmin, async (req, res) => {
     if (e.message.includes("UNIQUE")) {
       return res.status(409).json({ error: "Category name already exists" });
     }
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -99,7 +100,7 @@ router.put("/:id", requireAdmin, async (req, res) => {
     if (e.message.includes("UNIQUE")) {
       return res.status(409).json({ error: "Category name already exists" });
     }
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -113,7 +114,7 @@ router.delete("/:id", requireAdmin, (req, res) => {
     db.prepare("DELETE FROM industry_categories WHERE id = ?").run(req.params.id);
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -189,7 +190,7 @@ router.post("/suggest-keywords", requireAdmin, async (req, res) => {
     res.json({ data: { keywords } });
   } catch (e) {
     console.error("Suggest keywords failed:", e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 

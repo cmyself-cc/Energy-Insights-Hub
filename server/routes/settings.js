@@ -4,6 +4,7 @@ import path from "path";
 import db from "../db.js";
 import { loadSettings, toArray, SOURCE_TYPES } from "../lib/trackerSettings.js";
 import { rescheduleScheduler } from "../services/tracker.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ router.get("/", (_req, res) => {
   try {
     res.json({ data: loadSettings() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -106,7 +107,7 @@ router.put("/", (req, res) => {
 
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -149,7 +150,7 @@ router.post("/save-llm-env", (req, res) => {
 
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -171,7 +172,10 @@ router.post("/test-llm", async (req, res) => {
     });
     res.json({ data: { success: resp.ok, status: resp.status } });
   } catch (e) {
-    res.json({ data: { success: false, error: e.message } });
+    // 第三种响应形状（{data:{success:false,...}}，前端当配置结果读）：错误文案不外泄，
+    // 细节进服务端日志（Task 6b / 方案 A）。
+    console.error("[settings] test-llm failed:", e);
+    res.json({ data: { success: false, error: "LLM connection failed" } });
   }
 });
 

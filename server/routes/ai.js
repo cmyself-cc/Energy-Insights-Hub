@@ -2,6 +2,7 @@ import { Router } from "express";
 import db from "../db.js";
 import { fetchWithTimeout } from "../crawlers/utils.js";
 import { getPrompt } from "../services/promptStore.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -80,7 +81,7 @@ URL: ${item.url || ""}`;
     const content = data.choices?.[0]?.message?.content || data.content?.[0]?.text || "";
     res.json({ data: { content } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 

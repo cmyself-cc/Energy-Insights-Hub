@@ -1,4 +1,5 @@
 import db from "../db.js";
+import { ApiError } from "../lib/apiError.js";
 
 export const PROVIDER_TYPES = ["bocha", "tavily"];
 
@@ -25,8 +26,8 @@ export function getActiveSearchProvider() {
 
 export function createSearchProvider(data) {
   const { name, providerType, apiKey, baseUrl } = data;
-  if (!name || !providerType || !apiKey) throw new Error("name, providerType and apiKey are required");
-  if (!PROVIDER_TYPES.includes(providerType)) throw new Error(`providerType must be one of ${PROVIDER_TYPES.join(", ")}`);
+  if (!name || !providerType || !apiKey) throw new ApiError("name, providerType and apiKey are required", 400);
+  if (!PROVIDER_TYPES.includes(providerType)) throw new ApiError(`providerType must be one of ${PROVIDER_TYPES.join(", ")}`, 400);
   const result = db.prepare(
     "INSERT INTO search_providers (name, provider_type, api_key, base_url, is_active) VALUES (?, ?, ?, ?, ?)"
   ).run(String(name), providerType, String(apiKey), baseUrl || DEFAULT_BASE_URLS[providerType] || "", 0);
@@ -35,10 +36,10 @@ export function createSearchProvider(data) {
 
 export function updateSearchProvider(id, data) {
   const existing = db.prepare("SELECT * FROM search_providers WHERE id = ?").get(id);
-  if (!existing) throw new Error("Provider not found");
+  if (!existing) throw new ApiError("Provider not found", 404);
   const { name, providerType, apiKey, baseUrl } = data;
   if (providerType && !PROVIDER_TYPES.includes(providerType)) {
-    throw new Error(`providerType must be one of ${PROVIDER_TYPES.join(", ")}`);
+    throw new ApiError(`providerType must be one of ${PROVIDER_TYPES.join(", ")}`, 400);
   }
   db.prepare(
     `UPDATE search_providers SET
@@ -56,15 +57,15 @@ export function updateSearchProvider(id, data) {
 
 export function deleteSearchProvider(id) {
   const row = db.prepare("SELECT * FROM search_providers WHERE id = ?").get(id);
-  if (!row) throw new Error("Provider not found");
-  if (row.is_active === 1) throw new Error("Cannot delete the active search provider; activate another one first");
+  if (!row) throw new ApiError("Provider not found", 404);
+  if (row.is_active === 1) throw new ApiError("Cannot delete the active search provider; activate another one first", 400);
   db.prepare("DELETE FROM search_providers WHERE id = ?").run(id);
   return { success: true };
 }
 
 export function activateSearchProvider(id) {
   const row = db.prepare("SELECT * FROM search_providers WHERE id = ?").get(id);
-  if (!row) throw new Error("Provider not found");
+  if (!row) throw new ApiError("Provider not found", 404);
   const tx = db.transaction(() => {
     db.prepare("UPDATE search_providers SET is_active = 0").run();
     db.prepare("UPDATE search_providers SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);

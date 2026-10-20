@@ -6,6 +6,7 @@ import { importSources, normalizeImportType } from "../services/sourceImporter.j
 import { discoverSubPages, discoverListSelectors } from "../crawlers/websiteCrawler.js";
 import { randomUserAgent } from "../crawlers/utils.js";
 import { fetchHtmlSmart } from "../crawlers/challenge.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.get("/", (_req, res) => {
     const sources = db.prepare("SELECT * FROM sources ORDER BY created_at DESC").all();
     res.json({ data: sources.map(s => ({ ...s, config: parseConfig(s.config) })) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -38,7 +39,7 @@ router.get("/:id", (req, res) => {
     if (!source) return res.status(404).json({ error: "Source not found" });
     res.json({ data: { ...source, config: parseConfig(source.config) } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -61,7 +62,7 @@ router.post("/", (req, res) => {
     const source = db.prepare("SELECT * FROM sources WHERE id = ?").get(result.lastInsertRowid);
     res.status(201).json({ data: { ...source, config: parseConfig(source.config) } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -101,7 +102,7 @@ router.post("/import-md", (_req, res) => {
 
     res.json({ data: { inserted, existed, failed } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -116,10 +117,7 @@ router.post("/import", (req, res) => {
     const result = importSources(normalized, req.body.mode || "append");
     res.json({ data: result });
   } catch (e) {
-    if (e.statusCode === 400) {
-      return res.status(400).json({ error: e.message });
-    }
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -149,7 +147,7 @@ router.put("/:id", (req, res) => {
     if (!source) return res.status(404).json({ error: "Source not found" });
     res.json({ data: { ...source, config: parseConfig(source.config) } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -161,7 +159,7 @@ router.delete("/:id", (req, res) => {
     const result = db.prepare("DELETE FROM sources WHERE id = ?").run(sourceId);
     res.json({ success: true, deleted: result.changes });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -177,7 +175,7 @@ router.post("/:id/discover-subpages", async (req, res) => {
     const subPages = discoverSubPages(html, source.url);
     res.json({ data: subPages });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -218,7 +216,7 @@ router.post("/:id/confirm-subpages", async (req, res) => {
 
     res.json({ data: { success: true, subPages: config.subPages.length, selectors: config.listSelectors.length } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 

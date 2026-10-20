@@ -3,6 +3,7 @@ import db from "../db.js";
 import { requireAdmin } from "../lib/authMiddleware.js";
 import { recordFeedback, getFeedbackStats } from "../services/feedbackService.js";
 import { generateSuggestions } from "../services/feedbackSuggestionGenerator.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.post("/", (req, res) => {
     });
     res.json({ data: feedback });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -74,7 +75,7 @@ router.post("/:insightId(\\d+)/submit", (req, res) => {
     ).run(type, name, purpose, reason || "", note ? String(note).slice(0, 500) : "", req.user.id);
     res.status(201).json({ data: { suggestionId: Number(r.lastInsertRowid), deduped: false } });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -83,7 +84,7 @@ router.get("/stats", (_req, res) => {
     const stats = getFeedbackStats(30);
     res.json({ data: stats });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -103,7 +104,7 @@ router.get("/suggestions", (req, res) => {
     ).all(req.user.id);
     res.json({ data: rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -133,7 +134,7 @@ router.post("/suggestions/:id/accept", requireAdmin, (req, res) => {
 
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -142,7 +143,7 @@ router.post("/generate-suggestions", requireAdmin, async (req, res) => {
     const result = await generateSuggestions();
     res.json({ data: result });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -154,7 +155,7 @@ router.post("/suggestions/:id/reject", requireAdmin, (req, res) => {
     if (r.changes === 0) return res.status(404).json({ error: "Suggestion not found" });
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 

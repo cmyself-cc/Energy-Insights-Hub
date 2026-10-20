@@ -2,6 +2,7 @@ import { Router } from "express";
 import db from "../db.js";
 import { generateAliases } from "../lib/llmAlias.js";
 import { requireAdmin } from "../lib/authMiddleware.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get("/rules", (_req, res) => {
     // Parse aliases JSON for frontend consumption
     res.json({ data: rows.map(r => ({ ...r, aliases: parseAliasesJson(r.aliases) })) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -43,7 +44,7 @@ router.post("/rules", requireAdmin, async (req, res) => {
     ).run(type, cleanName || null, JSON.stringify(toArray(mustInclude)), JSON.stringify(toArray(mustExclude)), active ? 1 : 0, priority || 0, purpose, JSON.stringify(aliases));
     res.json({ data: { id: result.lastInsertRowid, aliases } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -71,7 +72,7 @@ router.put("/rules/:id", requireAdmin, async (req, res) => {
     ).run(cleanName || null, JSON.stringify(toArray(mustInclude)), JSON.stringify(toArray(mustExclude)), active ? 1 : 0, priority || 0, purpose || "", JSON.stringify(aliases), req.params.id);
     res.json({ data: { success: true, aliases } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -80,7 +81,7 @@ router.delete("/rules/:id", requireAdmin, (req, res) => {
     db.prepare("DELETE FROM filter_rules WHERE id = ?").run(req.params.id);
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -99,7 +100,7 @@ router.post("/rules/:id/regenerate-aliases", requireAdmin, async (req, res) => {
     }
     res.json({ data: { aliases } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -108,7 +109,7 @@ router.get("/categories", (_req, res) => {
     const rows = db.prepare("SELECT * FROM business_categories ORDER BY name ASC").all();
     res.json({ data: rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -120,7 +121,7 @@ router.put("/categories/:id", requireAdmin, (req, res) => {
     ).run(description || "", inclusion_prompt || "", active ? 1 : 0, req.params.id);
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -135,7 +136,7 @@ router.get("/config", (req, res) => {
     }
     res.json({ data: row || { type: "semantic", content: "", active: 1, purpose: purpose || "" } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -158,7 +159,7 @@ router.put("/config", requireAdmin, (req, res) => {
     }
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -183,7 +184,7 @@ router.put("/ai-presets", requireAdmin, (req, res) => {
     }
     res.json({ data: { success: true } });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 

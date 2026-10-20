@@ -1,11 +1,13 @@
 import db from "../db.js";
+import { ApiError } from "../lib/apiError.js";
 
 export const SUPPORTED_IMPORT_TYPES = ["wechat_mcp", "website"];
 
-export class ImportValidationError extends Error {
+// Task 6b / 方案 A：校验错误是「故意的用户可见消息」——继承 ApiError 后
+// 路由层统一 sendError 会原样带 400+message 出去（原来的 statusCode 私有约定退役）。
+export class ImportValidationError extends ApiError {
   constructor(message) {
-    super(message);
-    this.statusCode = 400;
+    super(message, 400);
   }
 }
 

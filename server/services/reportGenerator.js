@@ -1,6 +1,7 @@
 import db from "../db.js";
 import { callLlm } from "../lib/llmClient.js";
 import { webSearch } from "../lib/websearch.js";
+import { ApiError } from "../lib/apiError.js";
 
 let queueRunning = false;
 
@@ -12,9 +13,9 @@ function setJob(id, patch) {
 
 export function createReportJob({ templateId, insightIds, resolutions = [], purpose = "", audience = "", theme = "", ownerId }) {
   const template = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(templateId);
-  if (!template) throw new Error("Template not found");
+  if (!template) throw new ApiError("Template not found", 400);
   const ids = (insightIds || []).map(Number).filter(Boolean);
-  if (ids.length === 0) throw new Error("insightIds are required");
+  if (ids.length === 0) throw new ApiError("insightIds are required", 400);
   const reportResult = db.prepare(
     "INSERT INTO reports (title, content, items, language, template_id, status, owner_id) VALUES (?, ?, ?, ?, ?, 'generating', ?)"
   ).run("报告生成中…", "", JSON.stringify(ids), template.language || "zh", templateId, ownerId ?? null);
@@ -46,7 +47,7 @@ export function listJobs(user) {
 
 export function retryJob(id, user) {
   const job = getJob(id, user);
-  if (!job) throw Object.assign(new Error("Job not found"), { status: 404 });
+  if (!job) throw new ApiError("Job not found", 404);
   db.prepare("UPDATE report_jobs SET status='queued', phase='queued', progress=0, error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
   db.prepare("UPDATE reports SET status='generating', error=NULL WHERE id=?").run(job.report_id);
   return getJob(id, user);

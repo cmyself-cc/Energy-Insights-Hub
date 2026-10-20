@@ -2,6 +2,7 @@ import { execFileSync } from "child_process";
 import path from "path";
 import os from "os";
 import fs from "fs";
+import { ApiError } from "./apiError.js";
 
 function toArray(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -173,5 +174,5 @@ export function parseConfigFile(buffer, filename) {
   if (ext === ".xlsx") {
     return parseExcelBuffer(buffer);
   }
-  throw new Error("Unsupported file type. Use .json or .xlsx");
+  throw new ApiError("Unsupported file type. Use .json or .xlsx", 400);
 }

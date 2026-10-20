@@ -1,4 +1,5 @@
 import db from "../db.js";
+import { ApiError } from "../lib/apiError.js";
 
 export const DEFAULT_TEMPLATES = [
   {
@@ -153,7 +154,7 @@ export function listTemplates(user) {
 
 export function createTemplate(data, user) {
   const { name, description = "", purpose = "", prompt, max_cards = 10, language = "zh" } = data;
-  if (!name || !prompt) throw Object.assign(new Error("name and prompt are required"), { status: 400 });
+  if (!name || !prompt) throw new ApiError("name and prompt are required", 400);
   // 普通 user 强制私有 + 归属自己：公共模板只能由 admin 建（Global Constraint 的归属口径）。
   // admin 不传 is_public 时保持旧的默认 0（「creates a custom template」用例的既有语义）。
   const isAdmin = user?.role === "admin";
@@ -169,10 +170,10 @@ export function createTemplate(data, user) {
 // 归属判定：不存在与非归属统一 404（不泄露存在性）；admin 直通。
 function ownedTemplate(id, user) {
   const row = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(id);
-  if (!row) throw Object.assign(new Error("Template not found"), { status: 404 });
+  if (!row) throw new ApiError("Template not found", 404);
   if (user?.role === "admin") return row;
   if (user && row.owner_id === user.id) return row;
-  throw Object.assign(new Error("Template not found"), { status: 404 });
+  throw new ApiError("Template not found", 404);
 }
 
 export function updateTemplate(id, data, user) {
@@ -197,15 +198,15 @@ export function updateTemplate(id, data, user) {
 
 export function deleteTemplate(id, user) {
   const row = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(id);
-  if (!row) throw Object.assign(new Error("Template not found"), { status: 404 });
+  if (!row) throw new ApiError("Template not found", 404);
   // 公共模板是共享资产：普通 user 一律 403（哪怕它是自己建的——建公共模板本来也只有
   // admin 能办到，owner 在这里只是记账）；admin 才可删。
   if (row.is_public === 1 && user?.role !== "admin") {
-    throw Object.assign(new Error("Public templates can only be deleted by an admin"), { status: 403 });
+    throw new ApiError("Public templates can only be deleted by an admin", 403);
   }
   // 私有模板：只有 owner 或 admin（不泄露存在性 → 404）。
   if (user?.role !== "admin" && row.owner_id !== user?.id) {
-    throw Object.assign(new Error("Template not found"), { status: 404 });
+    throw new ApiError("Template not found", 404);
   }
   db.prepare("DELETE FROM report_templates WHERE id = ?").run(id);
   return { success: true };
@@ -216,7 +217,7 @@ export function deleteTemplate(id, user) {
 export function duplicateTemplate(id, user) {
   const src = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(id);
   const visible = src && (user?.role === "admin" || src.is_public === 1 || src.owner_id === user?.id);
-  if (!visible) throw Object.assign(new Error("Template not found"), { status: 404 });
+  if (!visible) throw new ApiError("Template not found", 404);
   const suffix = src.language === "en" ? " (Copy)" : "（副本）";
   const result = db.prepare(
     "INSERT INTO report_templates (name, description, purpose, prompt, max_cards, is_public, language, owner_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?)"

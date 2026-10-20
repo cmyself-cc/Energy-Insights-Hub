@@ -5,6 +5,7 @@ import {
 } from "../services/reportTemplateService.js";
 import { screenCards, clarifyCards, generateManualPrompt } from "../services/reportScreening.js";
 import { createReportJob, getJob, listJobs, retryJob, processQueue } from "../services/reportGenerator.js";
+import { sendError } from "../lib/apiError.js";
 
 const router = Router();
 
@@ -41,7 +42,7 @@ router.get("/", (req, res) => {
       : db.prepare("SELECT * FROM reports WHERE owner_id = ? ORDER BY created_at DESC").all(req.user.id);
     res.json({ data: rows.map(parseRow) });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -51,7 +52,7 @@ router.get("/:id(\\d+)", (req, res) => {
     if (!row) return res.status(404).json({ error: "Report not found" });
     res.json({ data: parseRow(row) });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -68,7 +69,7 @@ router.post("/", (req, res) => {
     const row = db.prepare("SELECT * FROM reports WHERE id = ?").get(result.lastInsertRowid);
     res.status(201).json({ data: parseRow(row) });
   } catch (e) {
-    res.status(e.status || 400).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -82,7 +83,7 @@ router.put("/:id(\\d+)", (req, res) => {
     const row = db.prepare("SELECT * FROM reports WHERE id = ?").get(req.params.id);
     res.json({ data: parseRow(row) });
   } catch (e) {
-    res.status(e.status || 400).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -92,7 +93,7 @@ router.delete("/:id", (req, res) => {
     db.prepare("DELETE FROM reports WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   } catch (e) {
-    res.status(e.status || 400).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -108,24 +109,24 @@ router.get("/templates", (req, res) => {
       return res.json({ data: rows.map(parseRow) });
     }
     res.json({ data: listTemplates(req.user) });
-  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  } catch (e) { sendError(res, e); }
 });
 router.post("/templates", (req, res) => {
   try { const row = createTemplate(req.body, req.user); res.status(201).json({ data: row }); }
-  catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+  catch (e) { sendError(res, e); }
 });
 router.put("/templates/:id", (req, res) => {
   try { const row = updateTemplate(Number(req.params.id), req.body, req.user); res.json({ data: row }); }
-  catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+  catch (e) { sendError(res, e); }
 });
 router.delete("/templates/:id", (req, res) => {
   try { deleteTemplate(Number(req.params.id), req.user); res.json({ success: true }); }
-  catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+  catch (e) { sendError(res, e); }
 });
 // 另存为副本：源模板必须可见（公共/自己的/admin），新行强制私有 + 归属自己。
 router.post("/templates/:id/duplicate", (req, res) => {
   try { const row = duplicateTemplate(Number(req.params.id), req.user); res.status(201).json({ data: row }); }
-  catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+  catch (e) { sendError(res, e); }
 });
 
 // 筛查
@@ -143,7 +144,7 @@ router.post("/screening", async (req, res) => {
     const result = await screenCards({ template, insights });
     res.json({ data: result });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -162,7 +163,7 @@ router.post("/clarify", async (req, res) => {
     const result = await clarifyCards({ template, insights, answers: answers || [] });
     res.json({ data: result });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -176,7 +177,7 @@ router.post("/generate-prompt", async (req, res) => {
     const result = await generateManualPrompt({ topic, framework, outline, conclusion, language: language || "zh" });
     res.json({ data: result });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -196,25 +197,25 @@ router.post("/generate", (req, res) => {
     processQueue().catch(err => console.error("[report] queue processing failed:", err));
     res.status(201).json({ data: job });
   } catch (e) {
-    res.status(e.status || 400).json({ error: e.message });
+    sendError(res, e);
   }
 });
 router.get("/jobs", (req, res) => {
-  try { res.json({ data: listJobs(req.user) }); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  try { res.json({ data: listJobs(req.user) }); } catch (e) { sendError(res, e); }
 });
 router.get("/jobs/:id", (req, res) => {
   try {
     const job = getJob(Number(req.params.id), req.user);
     if (!job) return res.status(404).json({ error: "Job not found" });
     res.json({ data: job });
-  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  } catch (e) { sendError(res, e); }
 });
 router.post("/jobs/:id/retry", (req, res) => {
   try {
     const job = retryJob(Number(req.params.id), req.user);
     processQueue().catch(err => console.error("[report] queue processing failed:", err));
     res.json({ data: job });
-  } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+  } catch (e) { sendError(res, e); }
 });
 
 export default router;
