@@ -20,14 +20,23 @@ const probeMain = () => {
   // 登录门只有一个主按钮（mock=dev Sign in；真实模式=微信 <a> 主 CTA），取第一个可交互的。
   // cs 必须内联在本函数里：page.evaluate 只序列化这一个函数，外部作用域带不进去。
   const cs = (el) => { const c = getComputedStyle(el); return { backgroundColor: c.backgroundColor, color: c.color, opacity: c.opacity, cursor: c.cursor, disabled: el.disabled }; };
-  const el = [...document.querySelectorAll("button, a")].find((b) => b.tagName === "A" || !b.disabled) ||
+  // 主按钮 = 登录门首个表单的 submit（pair 登录表单的「登录/开通」）。不能用
+  // 「第一个未禁用的 button」——切换链接（type=button）恒启用，会抢走探针
+  // （2026-10-21 用户名+邀请码改造后实证踩中）。
+  const el = document.querySelector("form button[type='submit']") ||
+             [...document.querySelectorAll("button, a")].find((b) => b.tagName === "A" || !b.disabled) ||
              [...document.querySelectorAll("button, a")].find((b) => b.disabled);
   return el ? cs(el) : null;
 };
 
 const disabledProbe = await page.evaluate(probeMain);   // 空输入 → 禁用态
 const devInput = page.locator("input").first();
-if (await devInput.count()) { await devInput.fill("smoke-probe"); await page.waitForTimeout(300); }
+// 用户名+邀请码登录门（2026-10-21 后）：主按钮 = pair 表单 submit，需**两个**字段都
+// 非空才启用 —— 逐个填第一个表单里的所有 input（用户名 + 邀请码）。
+const formInputs = page.locator("form").first().locator("input");
+const inputCount = await formInputs.count();
+for (let i = 0; i < inputCount; i++) await formInputs.nth(i).fill("smoke-probe");
+if (inputCount > 0) await page.waitForTimeout(300);
 const enabledProbe = await page.evaluate(probeMain);    // 有输入 → 启用态
 
 const L = (rgb) => { const m = rgb.match(/[\d.]+/g).map(Number).map((v) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
