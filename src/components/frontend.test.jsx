@@ -5,6 +5,7 @@ import Header from "./Header";
 import LoginGate from "./LoginGate";
 import { i18n } from "../constants/i18n";
 import { COLORS } from "../constants/theme";
+import { storage } from "../utils/storage";
 
 // 这些组件的静态渲染观察者。
 //
@@ -27,6 +28,8 @@ import { COLORS } from "../constants/theme";
 
 // storage.js 的键名（src/utils/storage.js:1-8）。这里硬编码而不是 import：
 // STORAGE_KEYS 没有被导出，而测试要验证的正是「组件通过 storage 读到的值」这条链路。
+// （文件末尾那个值域契约 describe 块直接 import 了 `storage` 对象本身 —— 它导出了，
+//   而那块要观察的正是它的返回值，不经过组件。）
 const LANG_KEY = "energy_insights_language";
 const DARK_KEY = "energy_insights_dark_mode";
 
@@ -258,9 +261,13 @@ describe("LoginGate — 四态都必须渲染真文案", () => {
   });
 
   it("localStorage 里是不认识的语言值时回落到英文，而不是抛异常（M-1）", () => {
-    // storage.getStoredLanguage() 直接返回 localStorage.getItem，**不校验值域**。
-    // 这是登录门：抛异常意味着用户连登录都做不到，也没办法用 UI 把语言改回来。
-    // 去掉 `(i18n[language] || i18n.en)` 里的兜底，这条用例会以 TypeError 失败。
+    // ⚠️ 这条用例观察的机制**换过一次**，别按旧描述理解它。
+    // 原来它钉的是 LoginGate 自己的 `(i18n[language] || i18n.en)` 兜底；那层兜底已经删掉了，
+    // 防御上移到唯一的读取口 —— storage.getStoredLanguage() 现在按 Object.keys(i18n) 校验值域，
+    // 不认识的值返回 null，于是 LoginGate 的 `|| "en"` 才真的触发。
+    // 所以现在这条用例走的是**真实机制**：把 storage.js 的值域校验去掉，language 会变成
+    // "klingon"，`i18n["klingon"]` 是 undefined，`.auth` 抛 TypeError，本条用例红。
+    // 变异 S1 已实测证实（见提交信息）。
     installBrowserStub({ hash: "", language: "klingon" });
     const html = renderGate();
     expect(html).toContain("Sign in to Energy Insights Hub");
@@ -277,4 +284,52 @@ describe("LoginGate — 四态都必须渲染真文案", () => {
     // 双语对称：控制器会机械校验，这里把它变成一条会红的断言
     expect(Object.keys(i18n.zh.auth).sort()).toEqual(Object.keys(i18n.en.auth).sort());
   });
+});
+
+
+// —— storage.getStoredLanguage() 的值域契约（系统性 locale 兜底）——
+//
+// 为什么放在这个文件里而不是新建 src/utils/storage.test.js：本轮 allow-list 只批了一个新文件
+// （server/testGlobalSetup.js），所以不新建；而这个文件已经有现成的 localStorage 桩。
+// 若日后拆分，pinyinIndex.test.js 是「前端非 React 测试」的既有先例。
+//
+// 为什么光有上面那条 LoginGate 用例不够：那条观察的是「坏值不会让登录门崩」，而这里观察的是
+// **契约本身**（坏值 → null）。渲染层分不出这两者 —— 无论 getStoredLanguage() 返回 null
+// 还是返回 "en"，LoginGate 都渲染英文标题，两条用例都绿。只有直接断言返回值才钉得住契约。
+describe("storage.getStoredLanguage — 值域校验", () => {
+  it("存的是受支持的语言时原样返回", () => {
+    installBrowserStub({ language: "zh" });
+    expect(storage.getStoredLanguage()).toBe("zh");
+    installBrowserStub({ language: "en" });
+    expect(storage.getStoredLanguage()).toBe("en");
+  });
+
+  it("存的是不认识的值时返回 null，而不是把垃圾原样吐出去", () => {
+    // 调用方都写 `savedLanguage || "en"`，而任何非空字符串都是真值 —— 兜底不会触发，
+    // 垃圾值会一路走到 i18n[language] 变成 undefined。
+    for (const junk of ["klingon", "EN", "zh-TW", "", " "]) {
+      installBrowserStub({ language: junk });
+      expect(storage.getStoredLanguage(), `language=${JSON.stringify(junk)} 必须被判定为不支持`).toBeNull();
+    }
+  });
+
+  it("从没存过时返回 null，由调用方决定默认值", () => {
+    installBrowserStub({});
+    expect(storage.getStoredLanguage()).toBeNull();
+  });
+
+  it("支持集派生自 Object.keys(i18n)，不是抄死的一份清单", () => {
+    // 抄死的话，日后新增语言会**静默地**被当成垃圾值丢掉：用户存得进去、读不回来，
+    // 而且不会有任何报错。这条让「i18n 加了键但支持集没跟上」变成一条会红的断言。
+    const locales = Object.keys(i18n);
+    expect(locales.length).toBeGreaterThan(0);
+    for (const locale of locales) {
+      installBrowserStub({ language: locale });
+      expect(storage.getStoredLanguage(), `i18n 的顶层键 ${locale} 必须被接受`).toBe(locale);
+    }
+  });
+
+  // 🔴 刻意**不**测 localStorage 不可用时那条 catch 分支：触发它必然走 storage.js 里的
+  // console.error，会往全量输出新增一个 stderr 块（硬指标是 12 块）。而那个分支的返回值
+  // 本轮没有改动，不值得为它破坏指标。
 });

@@ -25,16 +25,25 @@ export default function LoginGate({ onLoggedIn }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   // 语言与暗色只能在这里自决：App 的 language/darkMode state 还没建立（它被本组件挡在外面）。
-  // 取值逻辑与 App.jsx 的初始值逐字一致，否则登录门与登录后的界面会闪一次语言/配色。
+  // 下面这个表达式与 App.jsx 挂载 effect 里的
+  // `setLanguage(isMobileViewport() ? "zh" : (savedLanguage || "en"))` **逐字相同**（同一个
+  // storage.getStoredLanguage()、同一个 || "en"），否则登录门与登录后的界面会闪一次语言。
+  // ⚠️ 措辞订正：这里早先写的是「与 App.jsx 的**初始值**逐字一致」，不准确 —— App 的
+  // useState 种子是 `isMobileViewport() ? "zh" : "en"`（不读 storage），读 storage 发生在
+  // 它挂载后的 effect 里。两边最终收敛到同一个值，但「初始值」不是同一个表达式。
+  // 配色同理：darkMode 两边都是 useState(() => storage.getDarkMode()) 的惰性初始化。
   const [language] = useState(() => (isMobileViewport() ? "zh" : (storage.getStoredLanguage() || "en")));
   const [darkMode] = useState(() => storage.getDarkMode());
 
-  // || i18n.en 这层兜底不能省：storage.getStoredLanguage() 直接返回 localStorage.getItem，
-  // **不校验值域**。里面只要有一个不认识的值（手工改过、浏览器扩展写过、或某个曾经存在过的
-  // 语言被移除后留下的陈旧值），i18n[language] 就是 undefined，而这是**登录门** —— 抛异常
-  // 意味着用户连登录都做不到，也没办法用 UI 把语言改回来。仓里已有 4 处同样的防御写法
-  // （ContentFiltersPage / InsightsGenerator / TrackerSettingsPage ×2），这里沿用惯例。
-  const t = (i18n[language] || i18n.en).auth;
+  // 这里**不需要** `|| i18n.en` 兜底 —— 防御已经上移到唯一的读取口：
+  // storage.getStoredLanguage() 的契约是「受支持的语言，或 null」（它按 Object.keys(i18n)
+  // 校验值域），所以上面那个 `|| "en"` 之后 language 必然是 i18n 的一个真键。
+  // 早先这里写的是 `(i18n[language] || i18n.en).auth`，那只是把崩溃从登录门挪到了鉴权墙之后：
+  // App.jsx 用同样的 `savedLanguage || "en"`，而 "klingon" 是真值、兜底不触发，于是
+  // Header.jsx 的 `i18n[language].auth` 照样抛 TypeError、整个 App 进 ErrorBoundary，
+  // 而语言切换按钮就在崩溃的那棵树里，用户没法用 UI 自救。在消费点逐个补兜底是打地鼠
+  // （仓里一度同时存在两种写法：LoginGate 防、Header/App 不防），校验值域只需一处。
+  const t = i18n[language].auth;
 
   useEffect(() => {
     const onHashChange = () => setHash(window.location.hash);
