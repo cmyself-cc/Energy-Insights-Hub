@@ -58,13 +58,17 @@ function updateWeightsFromFeedback(feedback) {
   }
 }
 
-export function recordFeedback({ insightId, action, reason, fromPurpose, toPurpose }) {
+// Task 12 / M4 角色分流：
+// - user_feedback 行始终落 user_id（归属记录，谁反馈的）；
+// - 权重更新（feedback_semantic_weights）是**全局**学习信号 —— FB-2/5 规定普通用户的
+//   个人口味不许污染全局权重，所以只有 isAdmin 才走 updateWeightsFromFeedback。
+export function recordFeedback({ insightId, action, reason, fromPurpose, toPurpose, userId, isAdmin }) {
   const insight = snapshotInsight(insightId);
   if (!insight) throw new Error("Insight not found");
 
   const result = db.prepare(
-    `INSERT INTO user_feedback (insight_id, action, reason, from_purpose, to_purpose, title, summary, keywords, purposes, categories, source_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO user_feedback (insight_id, action, reason, from_purpose, to_purpose, title, summary, keywords, purposes, categories, source_type, user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     insightId,
     action,
@@ -76,7 +80,8 @@ export function recordFeedback({ insightId, action, reason, fromPurpose, toPurpo
     JSON.stringify(insight.keywords),
     JSON.stringify(insight.purposes),
     JSON.stringify(insight.categories),
-    insight.sourceType
+    insight.sourceType,
+    userId ?? null
   );
 
   const feedback = {
@@ -88,7 +93,7 @@ export function recordFeedback({ insightId, action, reason, fromPurpose, toPurpo
     toPurpose: toPurpose || null,
     keywords: insight.keywords
   };
-  updateWeightsFromFeedback(feedback);
+  if (isAdmin) updateWeightsFromFeedback(feedback);
   return feedback;
 }
 

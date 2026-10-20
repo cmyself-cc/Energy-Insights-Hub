@@ -20,7 +20,7 @@ describe("feedbackService", () => {
 
   it("records bookmark and creates boost weights", () => {
     const insight = db.prepare("SELECT * FROM insights WHERE title = ?").get("Test Insight");
-    const result = recordFeedback({ insightId: insight.id, action: "bookmark" });
+    const result = recordFeedback({ insightId: insight.id, action: "bookmark", isAdmin: true });
     expect(result.id).toBeDefined();
 
     const weights = db.prepare("SELECT * FROM feedback_semantic_weights WHERE action = 'boost'").all();
@@ -30,14 +30,14 @@ describe("feedbackService", () => {
 
   it("records hide with irrelevant reason and creates suppress weights", () => {
     const insight = db.prepare("SELECT * FROM insights WHERE title = ?").get("Test Insight");
-    recordFeedback({ insightId: insight.id, action: "hide", reason: "irrelevant" });
+    recordFeedback({ insightId: insight.id, action: "hide", reason: "irrelevant", isAdmin: true });
     const weights = db.prepare("SELECT * FROM feedback_semantic_weights WHERE action = 'suppress'").all();
     expect(weights.length).toBe(2);
   });
 
   it("returns stats", () => {
     const insight = db.prepare("SELECT * FROM insights WHERE title = ?").get("Test Insight");
-    recordFeedback({ insightId: insight.id, action: "bookmark" });
+    recordFeedback({ insightId: insight.id, action: "bookmark", isAdmin: true });
     recordFeedback({ insightId: insight.id, action: "hide", reason: "duplicate" });
     const stats = getFeedbackStats(7);
     expect(stats.total).toBe(2);
@@ -47,12 +47,14 @@ describe("feedbackService", () => {
   });
 
   it("records reclassify with from/to purpose and purpose-scoped weights", () => {
+
     const insight = db.prepare("SELECT * FROM insights WHERE title = ?").get("Test Insight");
     const result = recordFeedback({
       insightId: insight.id,
       action: "reclassify",
       fromPurpose: "competitor",
-      toPurpose: "tech"
+      toPurpose: "tech",
+      isAdmin: true
     });
     expect(result.id).toBeDefined();
 
@@ -68,6 +70,18 @@ describe("feedbackService", () => {
     expect(boosts.every(w => w.purpose === "tech")).toBe(true);
     expect(suppresses.length).toBe(2);
     expect(suppresses.every(w => w.purpose === "competitor")).toBe(true);
+  });
+
+  it("Task 12 门：非 admin 反馈记录 user_id 但不动全局权重（FB-2/5）", () => {
+    const insight = db.prepare("SELECT * FROM insights WHERE title = ?").get("Test Insight");
+    const before = db.prepare("SELECT COUNT(*) c FROM feedback_semantic_weights").get().c;
+    const result = recordFeedback({ insightId: insight.id, action: "hide", reason: "irrelevant", userId: 7 });
+    expect(result.id).toBeDefined();
+    const row = db.prepare("SELECT * FROM user_feedback WHERE id = ?").get(result.id);
+    expect(row.user_id).toBe(7);
+    expect(row.submit_state).toBe("none");
+    const after = db.prepare("SELECT COUNT(*) c FROM feedback_semantic_weights").get().c;
+    expect(after).toBe(before);   // 个人口味不许污染全局权重
   });
 
   it("stats counts reclassify", () => {
