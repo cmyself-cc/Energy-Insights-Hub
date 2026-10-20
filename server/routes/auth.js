@@ -100,8 +100,24 @@ function publicUser(u) {
 
 // 统一处理身份 -> 登录/待开通/禁用。identity 必须是已 await 的解析结果（不是 Promise），
 // 本函数保持同步。exchangeIdentity 的契约是 total 的：失败走 identity.error 分支。
-function handleIdentity(req, res, identity, { json }) {
-  if (identity.error) return res.status(400).json({ error: identity.error });
+//
+// oneTimeState：回跳路径传 true，state cookie 必须被消费掉（一次性，不给重放窗口）。
+// 清理写在这里而不是调用方，因为这里是唯一同时满足两个约束的位置——
+//   · 必须在 setSessionCookie **之后**：它用 setHeader("Set-Cookie", …) 会整条覆盖，
+//     先 append 的清除指令会被抹掉；
+//   · 必须在 res.json/res.redirect **之前**：响应一发出就不能再动头（ERR_HTTP_HEADERS_SENT）。
+// dev-login 传 false：它没有 OAuth 往返，从没铸过 state cookie，不该多发一条无意义的 Set-Cookie。
+function handleIdentity(req, res, identity, { json, oneTimeState }) {
+  const settle = (payload, location) => {
+    if (oneTimeState) clearOauthStateCookie(res);
+    return json ? res.json(payload) : res.redirect(302, location);
+  };
+  if (identity.error) {
+    // 交换失败也算消费掉了这次回跳：让用户重新走一遍 /config 拿新 state，
+    // 而不是留着一个已经暴露在 URL 里（会进 access log / Referer）的旧值。
+    if (oneTimeState) clearOauthStateCookie(res);
+    return res.status(400).json({ error: identity.error });
+  }
   let user = findUserByUnionid(identity.unionid);
   if (!user && identity.unionid === process.env.ADMIN_UNIONID) {
     // AUTH-6：seed admin 免邀请码
@@ -111,53 +127,131 @@ function handleIdentity(req, res, identity, { json }) {
   }
   if (user) {
     if (user.status !== "active") {
-      return json ? res.json({ data: { status: "disabled" } })
-                  : res.redirect(302, "/login#disabled");
+      return settle({ data: { status: "disabled" } }, "/login#disabled");
     }
     const pu = loginExisting(res, user);
-    return json ? res.json({ data: { status: "active", user: pu } })
-                : res.redirect(302, "/");
+    return settle({ data: { status: "active", user: pu } }, "/");
   }
   const ticket = issuePending(identity);
-  return json ? res.json({ data: { status: "need_invite", ticket } })
-              : res.redirect(302, `/login#invite=${ticket}`);
+  return settle({ data: { status: "need_invite", ticket } }, `/login#invite=${ticket}`);
 }
 
-// ⚠️ 这里的 state 目前只生成、不校验：GET /wechat/callback 只读 req.query.code，全文没有任何
-// 地方读 req.query.state。它现在挡不住任何东西，不要把它当成已有的 CSRF 防护。
-// 为什么不能就地补一个无状态 HMAC 校验：HMAC 只能证明「这个 state 是我们签发的」，而攻击者
-// 可以自己调一次 /config 领到合法 state 再塞进伪造链接，校验照样通过。真正的防御要求 state 与
-// 发起跳转的那个浏览器绑定（一次性 cookie 或服务端存储），契约的另一半在 Task 7 的前端，属
-// Task 6/7 范围（已按高危登记为微信登录上线的阻断项）。
-// 不校验的具体危害（login CSRF / 会话固定）：攻击者用自己的账号取得合法 code，诱使受害者访问
+// —— OAuth state 与浏览器绑定（login CSRF 防护）——
+//
+// 双提交 cookie：/config 把 state 同时写进 authorizeUrl 和一次性 HttpOnly cookie；回跳时比对
+// 「URL 带回来的」与「**这个浏览器自己存的**」。攻击者可以给自己领到完全合法的 state，但没有
+// 办法把它写进受害者的 cookie jar，所以伪造链接必然比对失败。
+//
+// 为什么不用无状态 HMAC 签名：/config 匿名可达，攻击者随时能领一个签名合法的 state 塞进伪造
+// 链接——HMAC 只证明「这个 state 是我们签发的」，而防御需要的是「这个 state 是**这个浏览器**
+// 领的」。少一个绑定，签名再强也没用。
+//
+// 不校验的具体危害（修复前的真实状态）：攻击者用自己的账号取得合法 code，诱使受害者访问
 // /api/auth/wechat/callback?code=<攻击者的code> → 受害者浏览器被写下**攻击者账号**的 session
 // cookie → 受害者此后保存的视角、反馈全部落进攻击者可读的账号。
-router.get("/config", (_req, res) => {
-  res.json({ data: { mockMode: isMockMode(), authorizeUrl: getAuthorizeUrl(crypto.randomBytes(8).toString("hex")) } });
+const OAUTH_STATE_COOKIE = "eih_oauth_state";
+const OAUTH_STATE_MAX_AGE_S = 600;          // 10 分钟：够扫码，不够重放
+const OAUTH_STATE_RE = /^[0-9a-f]{16}$/;    // crypto.randomBytes(8).toString("hex") 的形状
+
+// ⚠️ 必须用 res.append 而不是 res.setHeader：authMiddleware.js 的 setSessionCookie /
+// clearSessionCookie 用的是 setHeader("Set-Cookie", …)，那会**整条覆盖**。回跳成功那一发要
+// 同时下发 session cookie 与 state 清除指令两条，所以这里 append，且调用时机必须在
+// setSessionCookie 之后、响应发出之前（见 handleIdentity 里的 settle）。
+// authMiddleware.js 不在本任务允许改动的清单里，顺序只能由本文件保证。
+function setOauthStateCookie(res, state, maxAge = OAUTH_STATE_MAX_AGE_S) {
+  const attrs = [
+    `${OAUTH_STATE_COOKIE}=${maxAge === 0 ? "" : state}`,
+    "Path=/api/auth", "HttpOnly", "SameSite=Lax", `Max-Age=${maxAge}`
+  ];
+  if (PROD) attrs.push("Secure");
+  res.append("Set-Cookie", attrs.join("; "));
+}
+
+// cookie 是客户端可控输入：形状不对的值既不许被复用/回显进 authorizeUrl，也不许进入下面的
+// 定长比较（timingSafeEqual 遇到长度不等会直接抛）。
+function validState(v) {
+  return typeof v === "string" && OAUTH_STATE_RE.test(v) ? v : undefined;
+}
+
+function clearOauthStateCookie(res) {
+  if (!res.headersSent) setOauthStateCookie(res, "", 0);
+}
+
+// query 优先（微信回跳的形状），body 兜底（程序化 POST 的形状）。
+// ?state=a&state=b 会被 express 解析成数组，typeof 守卫把它挡在外面。
+function stateFrom(req) {
+  const q = req.query?.state;
+  if (typeof q === "string") return validState(q);
+  const b = req.body?.state;
+  return typeof b === "string" ? validState(b) : undefined;
+}
+
+// 定长常量时间比较：=== 会比到第一个不同字节就短路，把 state 变成可逐位爆破的 oracle。
+function stateMatches(req) {
+  const presented = stateFrom(req);
+  const owned = validState(parseCookieValue(req, OAUTH_STATE_COOKIE));
+  if (!presented || !owned) return false;
+  const a = Buffer.from(presented);
+  const b = Buffer.from(owned);
+  if (a.length !== b.length) return false;   // 形状校验已保证等长，这一行是兜底（长度不等时 timingSafeEqual 抛异常）
+  return crypto.timingSafeEqual(a, b);
+}
+
+// state 校验失败的统一出口。GET 回 302、POST 回 400 JSON，与 handleIdentity 的 json 口径一致：
+// GET 是浏览器导航，最常见的**良性**成因是 state cookie 过期（在微信扫码页停留超过 10 分钟）
+// 或用户在另一个浏览器里打开了回跳链接，前端 /login#state_expired 会给出「登录超时，请重试」，
+// 而不是一屏 JSON。
+function rejectState(res, json) {
+  clearOauthStateCookie(res);
+  return json
+    ? res.status(400).json({ error: "invalid state" })
+    : res.redirect(302, "/login#state_expired");
+}
+
+// D2：StrictMode（src/main.jsx）下 LoginGate 的 effect 跑两次 → 两个并发 /config。若每次都新铸
+// state，浏览器留下的是最后到达的 Set-Cookie、React 留下的是最后 resolve 的 promise，两者可能
+// 不是同一个 state，于是合法登录被自己拒掉——交互式偶发、极难查。
+// 所以：cookie 里已有形状正确的 state 就**复用**它（并刷新 Max-Age），端点因此幂等，竞态消失。
+// mock 模式也照铸不误：那时 authorizeUrl 是 null、cookie 用不上，但保持单一代码路径比省一个
+// Set-Cookie 重要（回跳为什么不设 mock 豁免，见下面 GET /wechat/callback）。
+router.get("/config", (req, res) => {
+  const state = validState(parseCookieValue(req, OAUTH_STATE_COOKIE)) || crypto.randomBytes(8).toString("hex");
+  setOauthStateCookie(res, state);
+  res.json({ data: { mockMode: isMockMode(), authorizeUrl: getAuthorizeUrl(state) } });
 });
 
-// 微信回跳（GET，浏览器带 ?code=&state=；state 目前不校验，见 /config 上方说明）
+// 微信回跳（GET，浏览器带 ?code=&state=）。
+//
+// 🔴 state 校验**不设 mock 豁免**。带 dev-mode 旁路的安全检查，迟早会在生产被旁路掉，而这里的
+// 豁免代价是零：测试客户端不是浏览器，HttpOnly 对它无效，它可以直接从 /config 的 Set-Cookie 里
+// 读出 state 再回传（server/routes/auth.test.js 的 oauth state binding 那一组就是这么做的）。
+// 所以 mock 分支与真实微信分支走的是同一套校验，「mock 下测不到」这个借口不成立。
+//
 // exchangeIdentity 的契约是 total 的、不会 reject，所以 catch 目前不可达；但本仓 express 是
 // 4.x，async handler 里逃逸的 rejected promise 不会被转给 next(err)，会变成进程级
 // unhandled rejection。handleIdentity 保持同步，兜底包在它的调用方。
 // catch 里仍然记日志：不可达 ≠ 永远不会可达，而这条路径最难查的形态是 loginExisting 已经挂上
 // Set-Cookie、随后的 UPDATE 才抛出——客户端收到 500、实际却已登录，没有服务端日志无从定位。
 router.get("/wechat/callback", async (req, res) => {
+  if (!stateMatches(req)) return rejectState(res, false);
   try {
     const identity = await exchangeIdentity({ code: req.query.code });
-    handleIdentity(req, res, identity, { json: false });
+    handleIdentity(req, res, identity, { json: false, oneTimeState: true });
   } catch (e) {
     console.error("[auth] login failed:", e?.message || e);
+    clearOauthStateCookie(res);
     res.status(500).json({ error: "login failed" });
   }
 });
 router.post("/wechat/callback", async (req, res) => {
   const { code } = req.body || {};
+  if (!stateMatches(req)) return rejectState(res, true);
   try {
     const identity = await exchangeIdentity({ code });
-    handleIdentity(req, res, identity, { json: true });
+    handleIdentity(req, res, identity, { json: true, oneTimeState: true });
   } catch (e) {
     console.error("[auth] login failed:", e?.message || e);
+    clearOauthStateCookie(res);
     res.status(500).json({ error: "login failed" });
   }
 });
@@ -168,12 +262,18 @@ router.post("/wechat/callback", async (req, res) => {
 // try/catch 的理由与上面两个回调逐字相同：express 4.x 不把 async 逃逸转给 next(err)，
 // 所以 apiRoutes.js 里那个中央 JSON 错误中间件**够不着这里**——逃逸的 rejected promise
 // 会变成进程级 unhandled rejection，连一个 500 响应都不会有。
+//
+// 这条**不做** OAuth state 校验，是有意的、且不是「安全检查可以按模式跳过」的先例：
+// login CSRF 的成立条件是「攻击者能驱动受害者的浏览器去打回跳 URL，并带上自己那份 code/state」，
+// 而 dev-login 没有浏览器跳转、没有 code、没有 state，攻击者手里没有任何可以塞进受害者请求的东西
+// （它是 POST + SameSite=Lax 的会话 cookie 也不参与）。它自身已被 isMockMode() 门禁，生产 404。
+// oneTimeState:false —— 从没铸过 state cookie，不必下发一条无意义的清除指令。
 router.post("/dev-login", async (req, res) => {
   if (!isMockMode()) return res.status(404).json({ error: "not found" });
   const { devUnionid } = req.body || {};
   try {
     const identity = await exchangeIdentity({ devUnionid });
-    handleIdentity(req, res, identity, { json: true });
+    handleIdentity(req, res, identity, { json: true, oneTimeState: false });
   } catch (e) {
     console.error("[auth] login failed:", e?.message || e);
     res.status(500).json({ error: "login failed" });

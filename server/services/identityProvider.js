@@ -5,6 +5,17 @@ const WX = {
   USERINFO_URL: "https://api.weixin.qq.com/sns/userinfo"
 };
 
+// 上游超时可由 env 调，默认 10s。做成可配置不是给测试开后门：本模块的微信参数
+// （APP_ID / APP_SECRET / REDIRECT_URI）本来就全部来自 env，超时属于同一类运维可调项；
+// 顺带让「挂死必须被打断」这类断言能在 50ms 内跑完，而不是每次真等 10 秒。
+// 未设置 / 空串 / 0 / 负数 / 非数字一律回落默认值。
+const DEFAULT_TIMEOUT_MS = 10_000;
+
+function upstreamTimeout() {
+  const n = Number(process.env.WECHAT_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_TIMEOUT_MS;
+}
+
 export function isMockMode() {
   return process.env.AUTH_DEV_MODE === "wechat-mock" && process.env.NODE_ENV !== "production";
 }
@@ -19,16 +30,31 @@ export function getAuthorizeUrl(state) {
 }
 
 // 真实微信：code -> access_token -> userinfo(unionid)。同步路由用 async handler。
-// 契约是 total 的：任何失败都返回 { error }，绝不抛出——server/index.js 未装 4 参错误
-// 中间件，抛出会变成 500 text/html 并在非 production 泄漏堆栈。
+// 契约是 total 的：任何失败都返回 { error }，绝不抛出。
+//
+// ⚠️ 这条契约的**理由**在 Task 6 之后变了，别照抄旧说法：server/apiRoutes.js 如今**已经**装了
+// 4 参中央 JSON 错误中间件（jsonErrorHandler），同步抛出会被它接住变成 JSON 500，不再泄漏堆栈。
+// 但那个中间件对本函数依然无效——这里是 async，三个调用方（auth.js 的 GET/POST 回跳与
+// dev-login）也都是 async handler，而 express 4.x 不把逃逸的 rejected promise 转给 next(err)，
+// 中间件根本看不见它。逃逸的后果不是「难看的 500」，而是**进程级 unhandled rejection**：
+// 客户端连一个响应都收不到。所以 total 契约仍然必须守，只是守的是另一条理由。
+//
 // 错误信息只取 err.message，不能带请求 URL（其 query 里含 secret=）。
 export async function exchangeIdentityWechat(code) {
   const { WECHAT_APP_ID: appid, WECHAT_APP_SECRET: secret } = process.env;
   if (!appid || !secret) return { error: "wechat_not_configured" };
 
+  const timeout = upstreamTimeout();
   let token;
   try {
-    const tokenRes = await fetch(`${WX.TOKEN_URL}?appid=${appid}&secret=${secret}&code=${encodeURIComponent(code)}&grant_type=authorization_code`);
+    // AbortSignal：微信 API 挂死时，没有超时的 fetch 会让整个登录请求无限期挂着——既占着连接，
+    // 也让扫码的用户永远停在等待态。abort 让 fetch reject，落到下面既有的 catch 走
+    // wechat_exchange_failed 通道；AbortSignal.timeout 的 reason 是 TimeoutError DOMException，
+    // 其 message 不含 URL，所以不会把 query 里的 secret 带进错误串。
+    const tokenRes = await fetch(
+      `${WX.TOKEN_URL}?appid=${appid}&secret=${secret}&code=${encodeURIComponent(code)}&grant_type=authorization_code`,
+      { signal: AbortSignal.timeout(timeout) }
+    );
     if (!tokenRes.ok) return { error: `wechat_exchange_failed: HTTP ${tokenRes.status}` };
     token = (await tokenRes.json()) || {};
   } catch (err) {
@@ -41,9 +67,17 @@ export async function exchangeIdentityWechat(code) {
   // 不能让微信资料接口抖动把用户挡在门外。
   let info = {};
   try {
-    const infoRes = await fetch(`${WX.USERINFO_URL}?access_token=${token.access_token}&openid=${token.openid}&lang=zh_CN`);
+    const infoRes = await fetch(
+      `${WX.USERINFO_URL}?access_token=${token.access_token}&openid=${token.openid}&lang=zh_CN`,
+      { signal: AbortSignal.timeout(timeout) }
+    );
     if (infoRes.ok) info = (await infoRes.json()) || {};
-  } catch { /* 降级为兜底昵称 */ }
+  } catch (err) {
+    // 降级本身是对的（资料接口抖动不该挡人登录），静默不对：线上出现「一批用户昵称都变成
+    // wx-xxxxxx」时，没有这行日志就无法区分是资料接口挂了还是 unionid 真的取不到资料。
+    // 只记 message，不记 err 本身——err 的 cause/stack 可能带上 URL，而 URL 里含 access_token。
+    console.warn("[identityProvider] wechat profile endpoint down, falling back to default nickname:", err?.message || err);
+  }
 
   return {
     unionid: token.unionid,

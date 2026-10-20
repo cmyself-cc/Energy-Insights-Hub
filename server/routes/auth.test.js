@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
 import express from "express";
 import db from "../db.js";
 import authRouter, { __resetInviteLimiter } from "./auth.js";
@@ -40,10 +40,27 @@ async function api(port, path, { method = "POST", body } = {}) {
   return { status: res.status, location: res.headers.get("location"), body: await res.json().catch(() => null) };
 }
 
+// 微信回跳的 state 与浏览器绑定（一次性 HttpOnly cookie，见 server/routes/auth.js）。
+// 直接打 /wechat/callback 而不先走 /config，等于在模拟「攻击者伪造链接」——那一形态已由
+// 下面的 oauth state binding 那一组专门覆盖，所以这里的正常流程用例要先握手拿到自己的 state。
+// 测试客户端不是浏览器，HttpOnly 对它无效，因此能从 Set-Cookie 里把 state 读出来再回传。
+const OAUTH_STATE_COOKIE = "eih_oauth_state";
+
+async function oauthState(port) {
+  const res = await fetch(`http://127.0.0.1:${port}/api/auth/config`, {
+    headers: jar.header() ? { Cookie: jar.header() } : {}
+  });
+  await res.json().catch(() => null);
+  jar.absorb(res);
+  return jar.cookies[OAUTH_STATE_COOKIE];
+}
+
 // 本文件会按用例改写 AUTH_DEV_MODE / NODE_ENV / ADMIN_UNIONID / 微信凭证，所以必须成对快照-还原：
 // 少了还原，上一个用例设的 ADMIN_UNIONID 会让下一个用例的「普通用户」静默变成 seed admin，
 // 而泄漏的 WECHAT_APP_ID 会让本该走 mock 的用例走进真实微信分支。
-const ENV_KEYS = ["AUTH_DEV_MODE", "NODE_ENV", "ADMIN_UNIONID", "WECHAT_APP_ID", "WECHAT_APP_SECRET"];
+// WECHAT_REDIRECT_URI 也在列：它决定 getAuthorizeUrl 返回 null 还是真 URL，泄漏出去会让
+// 「未配置」分支的用例假绿。
+const ENV_KEYS = ["AUTH_DEV_MODE", "NODE_ENV", "ADMIN_UNIONID", "WECHAT_APP_ID", "WECHAT_APP_SECRET", "WECHAT_REDIRECT_URI"];
 let envSnapshot = [];
 
 describe("auth flow (mock mode)", () => {
@@ -207,7 +224,8 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
     try {
       insertTestUser({ unionid: "wx-active" });
       tokenBody = { access_token: "at_1", openid: "op_1", unionid: "wx-active" };
-      const r = await api(port, "/api/auth/wechat/callback?code=c1", { method: "GET" });
+      const state = await oauthState(port);
+      const r = await api(port, `/api/auth/wechat/callback?code=c1&state=${state}`, { method: "GET" });
       expect(r.status).toBe(302);
       expect(r.location).toBe("/");
       // 302 之前必须已经写好 session cookie，否则浏览器跳回首页仍是未登录态
@@ -221,7 +239,8 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
     const { port, close } = await listen(buildApp());
     try {
       tokenBody = { access_token: "at_1", openid: "op_new", unionid: "wx-new" };
-      const r = await api(port, "/api/auth/wechat/callback?code=c1", { method: "GET" });
+      const state = await oauthState(port);
+      const r = await api(port, `/api/auth/wechat/callback?code=c1&state=${state}`, { method: "GET" });
       expect(r.status).toBe(302);
       // 票据是 crypto.randomBytes(32).toString("hex")，即 64 位十六进制
       expect(r.location).toMatch(/^\/login#invite=[0-9a-f]{64}$/);
@@ -241,7 +260,9 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
       expect(wxCalls).toHaveLength(2);
       expect(wxCalls.filter((u) => isTokenCall(u))).toHaveLength(1);
       // need_invite 分支只发票据，一行会话都不许写：待开通的人此刻还没通过邀请码校验，
-      // 给它建 session 等于让「持有票据」和「已登录」两件事混为一谈
+      // 给它建 session 等于让「持有票据」和「已登录」两件事混为一谈。
+      // 这条同时钉住了 state cookie 的一次性：握手时 jar 里有过 eih_oauth_state，
+      // 回跳之后必须被清干净，所以「一个 cookie 都不许留」是比「没有 session cookie」更强的断言。
       expect(db.prepare("SELECT COUNT(*) AS n FROM sessions").get().n).toBe(0);
       expect(jar.cookies).toEqual({});
       expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
@@ -253,7 +274,8 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
     try {
       insertTestUser({ unionid: "wx-off", status: "disabled" });
       tokenBody = { access_token: "at_1", openid: "op_1", unionid: "wx-off" };
-      const r = await api(port, "/api/auth/wechat/callback?code=c1", { method: "GET" });
+      const state = await oauthState(port);
+      const r = await api(port, `/api/auth/wechat/callback?code=c1&state=${state}`, { method: "GET" });
       expect(r.status).toBe(302);
       expect(r.location).toBe("/login#disabled");
       // 禁用用户「不得被发出会话」，而不只是「发出的会话不可用」。两者不等价：
@@ -268,3 +290,315 @@ describe("wechat callback redirects (real wechat branch, stubbed upstream fetch)
     } finally { await close(); }
   });
 });
+
+// —— D1：微信 OAuth 的 state 必须与「将要收到回跳的那个浏览器」绑定 ——
+//
+// 修复前的缺陷：/config 铸出的 state 只写进 authorizeUrl，GET /wechat/callback 从不读
+// req.query.state。攻击者用自己的微信账号取得合法 code，诱使受害者访问
+// /api/auth/wechat/callback?code=<攻击者的code> —— 受害者浏览器被写下**攻击者账号**的
+// session cookie，此后保存的视角/反馈全部落进攻击者可读的账号（login CSRF / 会话固定）。
+//
+// 无状态 HMAC 修不了它：/config 匿名可达，攻击者随时能给自己领一个签名合法的 state，
+// 塞进伪造链接照样通过校验。真正的防御要求 state 与浏览器绑定 —— 一次性 HttpOnly cookie
+// （双提交 cookie 模式），服务端只比对「URL 带回来的」和「这个浏览器自己存的」。
+//
+// 这些用例走真实微信分支（只桩掉打向微信上游的 fetch）：mock 分支只认 devUnionid、忽略
+// code，回跳在 mock 下本就不可达。HTTP、SQLite、cookie 往返全是真的。
+describe("oauth state binding (login CSRF) + /config idempotency", () => {
+  const APPID = "wx_appid_test";
+  const SECRET = "super_secret_do_not_leak";
+  const REDIRECT = "https://eih.cmyself.cc/api/auth/wechat/callback";
+  const STATE_COOKIE = OAUTH_STATE_COOKIE;
+  const HEX16 = /^[0-9a-f]{16}$/;
+  const REJECT_TO = "/login#state_expired";
+
+  // 测试客户端不是浏览器，HttpOnly 对它无效 —— 这正是用例能读到 state 再回传的原因，
+  // 也是「state 校验不设 mock 豁免」依然可测的原因（见 auth.js 里的设计说明）。
+  // 必须用 getSetCookie()：headers.get("set-cookie") 在 undici 下只返回第一条，
+  // 而回跳成功那一发同时下发 session cookie 和 state 清除指令两条。
+  const rawStateCookie = (res) => res.headers.getSetCookie().find((c) => c.startsWith(`${STATE_COOKIE}=`));
+  const stateOf = (res) => {
+    const raw = rawStateCookie(res);
+    if (!raw) return undefined;
+    const pair = raw.split(";")[0];
+    return pair.slice(pair.indexOf("=") + 1);
+  };
+  // authorizeUrl 里的 state：它与 cookie 里的必须是**同一个值**，否则双提交无从比对
+  const stateInUrl = (url) => {
+    const m = /[?&]state=([^&#]+)/.exec(url || "");
+    return m ? decodeURIComponent(m[1]) : undefined;
+  };
+
+  // 打 /config 并把 Set-Cookie 吸收进指定 jar（攻击者/受害者各用一个，模拟两个浏览器）
+  async function getConfig(port, useJar) {
+    const res = await fetch(`http://127.0.0.1:${port}/api/auth/config`, {
+      headers: useJar.header() ? { Cookie: useJar.header() } : {}
+    });
+    const body = await res.json();
+    const out = { status: res.status, body, raw: rawStateCookie(res), state: stateOf(res) };
+    useJar.absorb(res);
+    return out;
+  }
+
+  // 带指定 jar 的原始请求：回跳既会 302 又会下发多条 Set-Cookie，api() 的返回值不够用
+  async function raw(port, path, useJar, { method = "GET", body } = {}) {
+    const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", ...(useJar.header() ? { Cookie: useJar.header() } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      redirect: "manual"
+    });
+    const out = {
+      status: res.status,
+      location: res.headers.get("location"),
+      setCookie: res.headers.getSetCookie(),
+      body: await res.json().catch(() => null)
+    };
+    useJar.absorb(res);
+    return out;
+  }
+
+  beforeEach(() => {
+    envSnapshot = ENV_KEYS.map((k) => [k, process.env[k]]);
+    // 必须非 mock：否则 exchangeIdentity({code}) 短路进 mock 分支，测到错的代码
+    delete process.env.AUTH_DEV_MODE;
+    process.env.NODE_ENV = "test";
+    delete process.env.ADMIN_UNIONID;
+    process.env.WECHAT_APP_ID = APPID;
+    process.env.WECHAT_APP_SECRET = SECRET;
+    process.env.WECHAT_REDIRECT_URI = REDIRECT;
+    __resetInviteLimiter();
+    clearAuthTables();
+    jar = makeCookieJar();
+    tokenBody = null;
+    vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+      const u = String(url);
+      // 放行测试客户端自己打到本地服务的请求，只拦微信上游
+      if (u.startsWith("http://127.0.0.1:")) return realFetch(url, init);
+      return isTokenCall(u)
+        ? jsonResponse(tokenBody)
+        : jsonResponse({ nickname: "张三", headimgurl: "https://wx.example/a.png" });
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    for (const [k, v] of envSnapshot) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+
+  it("a callback whose state query matches the browser's own state cookie logs the user in", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      insertTestUser({ unionid: "wx-active" });
+      tokenBody = { access_token: "at_1", openid: "op_1", unionid: "wx-active" };
+
+      const cfg = await getConfig(port, jar);
+      expect(cfg.status).toBe(200);
+      expect(cfg.state, "state cookie 必须是 crypto.randomBytes(8).toString('hex') 的形状").toMatch(HEX16);
+      expect(stateInUrl(cfg.body.data.authorizeUrl), "URL 里的 state 必须与 cookie 里的是同一个值").toBe(cfg.state);
+
+      const r = await raw(port, `/api/auth/wechat/callback?code=c1&state=${cfg.state}`, jar);
+      expect(r.status).toBe(302);
+      expect(r.location).toBe("/");
+      const me = await api(port, "/api/auth/me", { method: "GET" });
+      expect(me.status).toBe(200);
+      expect(me.body.data.user.unionid).toBe("wx-active");
+    } finally { await close(); }
+  });
+
+  it("rejects a well-formed state when the browser presents no state cookie at all", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      // 攻击者的账号；code 也是攻击者的。受害者从没打开过登录页，浏览器里没有 state cookie。
+      insertTestUser({ unionid: "attacker-wx" });
+      tokenBody = { access_token: "at_a", openid: "op_a", unionid: "attacker-wx" };
+
+      const r = await raw(port, `/api/auth/wechat/callback?code=stolen&state=${"a".repeat(16)}`, jar);
+      // 修复前这里回的是 302 "/" 并且**已经写好攻击者账号的 session cookie**
+      expect(r.status).toBe(302);
+      expect(r.location, "没有 state cookie 的回跳必须被拒回登录页，不能发会话").toBe(REJECT_TO);
+      expect(jar.cookies.eih_session, "受害者浏览器绝不能拿到攻击者账号的会话").toBeUndefined();
+      expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
+    } finally { await close(); }
+  });
+
+  it("rejects when the state cookie is present but the state query differs", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      insertTestUser({ unionid: "attacker-wx" });
+      tokenBody = { access_token: "at_a", openid: "op_a", unionid: "attacker-wx" };
+
+      const cfg = await getConfig(port, jar);          // 受害者自己的 state 进了 cookie
+      const forged = "0123456789abcdef";
+      expect(forged, "用例前提：伪造值必须真的不同于受害者自己的 state").not.toBe(cfg.state);
+
+      const r = await raw(port, `/api/auth/wechat/callback?code=stolen&state=${forged}`, jar);
+      expect(r.status).toBe(302);
+      expect(r.location).toBe(REJECT_TO);
+      expect(jar.cookies.eih_session).toBeUndefined();
+      expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
+    } finally { await close(); }
+  });
+
+  it("an attacker-minted state from a separate client cannot be replayed into the victim's callback", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      insertTestUser({ unionid: "attacker-wx" });
+      tokenBody = { access_token: "at_a", openid: "op_a", unionid: "attacker-wx" };
+
+      // 攻击者用**自己的浏览器**领一个完全合法的 state —— 这正是无状态 HMAC 方案挡不住的形态：
+      // 签名有效、由我们签发、格式正确，唯一不对的是它属于另一个浏览器。
+      const attackerJar = makeCookieJar();
+      const attackerCfg = await getConfig(port, attackerJar);
+      expect(attackerCfg.state).toMatch(HEX16);
+
+      // 阳性对照：这个 state 对攻击者自己的浏览器确实有效。少了这一步，
+      // 下面的「拒绝」可能只是 state 校验把所有回跳都挡了，证明不了绑定关系。
+      const attackerOwn = await raw(port, `/api/auth/wechat/callback?code=own&state=${attackerCfg.state}`, attackerJar);
+      expect(attackerOwn.location, "攻击者自己的回跳本该成功").toBe("/");
+      expect(attackerJar.cookies.eih_session, "攻击者自己确实登录进了自己的账号").toBeTruthy();
+
+      // 受害者是另一个浏览器（独立 jar、自己的 state），攻击者把链接丢给他
+      const victimCfg = await getConfig(port, jar);
+      expect(victimCfg.state, "两个客户端的 state 必须不同，否则本用例没有区分力").not.toBe(attackerCfg.state);
+      const replay = await raw(port, `/api/auth/wechat/callback?code=own&state=${attackerCfg.state}`, jar);
+      expect(replay.status).toBe(302);
+      expect(replay.location, "受害者带着攻击者的 state 回跳必须被拒").toBe(REJECT_TO);
+      expect(jar.cookies.eih_session, "受害者绝不能被登进攻击者的账号").toBeUndefined();
+      expect((await api(port, "/api/auth/me", { method: "GET" })).status).toBe(401);
+      // 攻击者的账号确实存在且可登录（否则「受害者没登进去」可能是因为账号本身有问题）
+      expect(db.prepare("SELECT COUNT(*) AS n FROM sessions").get().n).toBe(1);
+    } finally { await close(); }
+  });
+
+  it("the state cookie is one-time: cleared on success, and the same state cannot be replayed", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      insertTestUser({ unionid: "wx-active" });
+      tokenBody = { access_token: "at_1", openid: "op_1", unionid: "wx-active" };
+
+      const cfg = await getConfig(port, jar);
+      const ok = await raw(port, `/api/auth/wechat/callback?code=c1&state=${cfg.state}`, jar);
+      expect(ok.location).toBe("/");
+      expect(ok.setCookie.some((c) => c.startsWith(`${STATE_COOKIE}=`) && /;\s*Max-Age=0/i.test(c)),
+        "成功那一发必须显式下发 state cookie 的清除指令（一次性）").toBe(true);
+      expect(jar.cookies[STATE_COOKIE], "清除之后 jar 里不该还留着 state").toBeUndefined();
+
+      // 同一个 state 再来一次（攻击者截获链接后重放）必须被拒：cookie 已经没了
+      const replay = await raw(port, `/api/auth/wechat/callback?code=c1&state=${cfg.state}`, jar);
+      expect(replay.location).toBe(REJECT_TO);
+    } finally { await close(); }
+  });
+
+  it("a rejected callback also clears the state cookie, so the next /config mints a fresh one", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      tokenBody = { access_token: "at_1", openid: "op_x", unionid: "wx-x" };
+      const first = await getConfig(port, jar);
+      const bad = await raw(port, `/api/auth/wechat/callback?code=c1&state=${"f".repeat(16)}`, jar);
+      expect(bad.location).toBe(REJECT_TO);
+      expect(jar.cookies[STATE_COOKIE], "被拒之后也必须清掉（一次性，不给重放窗口）").toBeUndefined();
+      const second = await getConfig(port, jar);
+      expect(second.state, "cookie 已清，/config 必须重新铸一个而不是复用被拒的那个").not.toBe(first.state);
+    } finally { await close(); }
+  });
+
+  it("the state cookie is HttpOnly + SameSite=Lax, scoped to /api/auth, and short-lived", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      const cfg = await getConfig(port, jar);
+      const cookie = cfg.raw;
+      expect(cookie, "/config 必须下发 state cookie").toBeTruthy();
+      expect(cookie, "必须 HttpOnly：JS 读得到，XSS 就能替攻击者对齐 state，绑定形同虚设").toMatch(/;\s*HttpOnly/i);
+      expect(cookie, "必须 SameSite=Lax").toMatch(/;\s*SameSite=Lax/i);
+      expect(cookie, "Path 必须收窄到 /api/auth，不要让它跟着每个请求跑").toMatch(/;\s*Path=\/api\/auth/i);
+      const maxAge = Number(/;\s*Max-Age=(\d+)/i.exec(cookie)?.[1]);
+      expect(maxAge, "一次性 state 必须短命，不能跟着会话活 7 天").toBeGreaterThan(0);
+      expect(maxAge).toBeLessThanOrEqual(600);
+      // Secure 位不断言：auth.js 顶部的 PROD 在**模块加载时**固化，测试里恒为 false，
+      // 断言它只会钉住一个测试环境的假象（那条注释解释了这个陷阱）。
+    } finally { await close(); }
+  });
+
+  it("D2: /config is idempotent — presenting the first call's cookie reuses the same state", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      // src/main.jsx 是 <React.StrictMode>，dev 下 effect 跑两次 → LoginGate 并发打两次 /config。
+      // 每次都新铸 state 的话，浏览器留下的是最后到达的 Set-Cookie、React 留下的是最后 resolve
+      // 的 promise，两者可能不是同一个 state，于是合法登录被自己拒掉——交互式偶发、极难查。
+      const first = await getConfig(port, jar);
+      const second = await getConfig(port, jar);          // 带上第一次的 cookie
+      expect(second.state, "带着未过期的 state cookie 再打 /config 必须复用同一个 state").toBe(first.state);
+      expect(stateInUrl(second.body.data.authorizeUrl), "复用也必须体现在 authorizeUrl 上").toBe(first.state);
+    } finally { await close(); }
+  });
+
+  it("/config mints a fresh state for a new client and never echoes a malformed cookie value", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      const a = await getConfig(port, jar);
+      const other = makeCookieJar();
+      const b = await getConfig(port, other);
+      expect(b.state, "没有 cookie 的新客户端必须拿到新 state").toMatch(HEX16);
+      expect(b.state).not.toBe(a.state);
+
+      // 畸形/攻击者可控的 cookie 值不得被复用、更不得被回显进 authorizeUrl
+      const bad = makeCookieJar();
+      bad.cookies[STATE_COOKIE] = '"><script>alert(1)</script>';
+      const c = await getConfig(port, bad);
+      expect(c.state, "非法形状的 cookie 必须被丢弃、重新铸一个").toMatch(HEX16);
+      expect(c.body.data.authorizeUrl).not.toContain("script");
+      expect(stateInUrl(c.body.data.authorizeUrl)).toBe(c.state);
+    } finally { await close(); }
+  });
+
+  it("POST /wechat/callback enforces the same binding, taking state from the query or the body", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      tokenBody = { access_token: "at_p", openid: "op_p", unionid: "wx-post" };
+
+      // 错 state：修复前这一发会 200 并发票据
+      const bad = await raw(port, `/api/auth/wechat/callback?state=${"0".repeat(16)}`, jar,
+        { method: "POST", body: { code: "c1" } });
+      expect(bad.status).toBe(400);
+      expect(bad.body).toEqual({ error: "invalid state" });
+      expect(jar.cookies.eih_session).toBeUndefined();
+
+      // state 放 query（微信回跳的形状）
+      const q = await getConfig(port, jar);
+      const okQuery = await raw(port, `/api/auth/wechat/callback?state=${q.state}`, jar,
+        { method: "POST", body: { code: "c1" } });
+      expect(okQuery.status).toBe(200);
+      expect(okQuery.body.data.status).toBe("need_invite");
+
+      // state 放 body（程序化调用的形状）
+      const b = await getConfig(port, jar);
+      const okBody = await raw(port, "/api/auth/wechat/callback", jar,
+        { method: "POST", body: { code: "c1", state: b.state } });
+      expect(okBody.status).toBe(200);
+      expect(okBody.body.data.status).toBe("need_invite");
+    } finally { await close(); }
+  });
+
+  it("dev-login needs no state cookie: it is a POST with no OAuth round-trip", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      // 钉住设计决定，免得将来有人（a）把 state 校验顺手加到 dev-login 上把本地联调打死，
+      // 或（b）拿 dev-login 的豁免当先例去放宽回跳的校验。
+      // 豁免的理由：dev-login 没有浏览器跳转、没有 code 可重放，login CSRF 需要的
+      // 「驱动受害者浏览器去打回跳 URL」这一步在这里不存在；而它本身已被 isMockMode() 门禁
+      // （生产 404）。
+      process.env.AUTH_DEV_MODE = "wechat-mock";
+      const r = await api(port, "/api/auth/dev-login", { body: { devUnionid: "dev-no-state" } });
+      expect(r.status).toBe(200);
+      expect(r.body.data.status).toBe("need_invite");
+      expect(r.body.data.ticket).toMatch(/^[0-9a-f]{64}$/);
+    } finally { await close(); }
+  });
+});
+
+// 测试库跨进程持久：本文件每个用例都在 users / sessions / pending_identities / invite_codes 里
+// 留行，不清就会让后续套件（views / admin / apiRoutes）的 FK 与计数假设踩到别人的数据。
+afterAll(() => { clearAuthTables(); });

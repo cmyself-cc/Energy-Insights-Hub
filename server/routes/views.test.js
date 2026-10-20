@@ -33,8 +33,9 @@ async function authedApi(port, path, { method = "GET", body, cookieJar } = {}) {
     body: body ? JSON.stringify(body) : undefined
   });
   j.absorb(res);
-  // .catch(() => null)：handler 万一 500 成 text/html（server/index.js 还没装 JSON 错误中间件），
-  // 失败要呈现为「expected 200, got 500」，而不是 SyntaxError: Unexpected token '<'
+  // .catch(() => null)：上面 buildApp() 只挂了 router，没有装 server/apiRoutes.js 里那个
+  // JSON 错误中间件，所以 handler 万一逃逸抛出，express 的默认处理会 500 成 text/html。
+  // 加了 catch，失败才会呈现为「expected 200, got 500」，而不是 SyntaxError: Unexpected token '<'
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 

@@ -1,7 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
 import { isMockMode, exchangeIdentity, exchangeIdentityWechat, getAuthorizeUrl } from "./identityProvider.js";
+import { clearAuthTables } from "../testUtils.js";
 
-const ENV_KEYS = ["AUTH_DEV_MODE", "NODE_ENV", "WECHAT_APP_ID", "WECHAT_APP_SECRET", "WECHAT_REDIRECT_URI"];
+// WECHAT_TIMEOUT_MS 也在列：它决定上游 fetch 的 AbortSignal 何时触发，泄漏出去会让
+// 「挂死必须被超时打断」那两条用例的耗时随上一个用例的设置漂移。
+const ENV_KEYS = ["AUTH_DEV_MODE", "NODE_ENV", "WECHAT_APP_ID", "WECHAT_APP_SECRET", "WECHAT_REDIRECT_URI", "WECHAT_TIMEOUT_MS"];
 let envSnapshot = [];
 
 function snapshotEnv() {
@@ -66,6 +69,9 @@ describe("identityProvider wechat path", () => {
   const SECRET = "super_secret_do_not_leak";
   const TOKEN_BODY = { access_token: "at_1", openid: "op_1", unionid: "unionid_ABC123" };
   const isTokenCall = (url) => String(url).includes("/sns/oauth2/access_token");
+  // userinfo 失败会 console.warn（见下面那条断言它的用例）。整个 describe 里统一消音，
+  // 否则「userinfo is best-effort」的 4 个变体会往全量输出里加 4 个新的 stderr 块。
+  let warnSpy;
 
   beforeEach(() => {
     snapshotEnv();
@@ -75,10 +81,12 @@ describe("identityProvider wechat path", () => {
     process.env.WECHAT_APP_ID = APPID;
     process.env.WECHAT_APP_SECRET = SECRET;
     process.env.WECHAT_REDIRECT_URI = "https://eih.cmyself.cc/api/auth/wechat/callback";
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
   afterEach(() => {
     restoreEnv();
     vi.unstubAllGlobals();
+    warnSpy.mockRestore();
   });
 
   it("dispatches to the wechat branch and maps a full profile", async () => {
@@ -194,4 +202,80 @@ describe("identityProvider wechat path", () => {
     }
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  // —— 上游超时必须存在：微信 API 挂死时，登录请求原本会无限期挂着 ——
+  // 桩要复现真实 fetch 的契约（signal abort 时 reject），否则测到的是桩自己的耐心而不是超时。
+  const hangUntilAborted = (_url, init) => new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(init.signal.reason));
+  });
+
+  it("both wechat fetches are handed an AbortSignal", async () => {
+    const seen = [];
+    vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+      seen.push(init?.signal);
+      return isTokenCall(url) ? jsonResponse(TOKEN_BODY) : jsonResponse({ nickname: "张三" });
+    }));
+    await exchangeIdentityWechat("c1");
+    expect(seen).toHaveLength(2);
+    expect(seen[0], "token 交换在登录关键路径上，必须有超时").toBeInstanceOf(AbortSignal);
+    expect(seen[1], "userinfo 只是装饰，更不该把登录挂住").toBeInstanceOf(AbortSignal);
+  });
+
+  // 超时值从 env 读、默认 10s：把它写死成 10s 的话，这条用例就得真等 10 秒——
+  // 为一个断言花 10 秒不成比例（同一个理由在 Task 6 的 M11 上已经裁定过一次）。
+  // env 配置不是「测试专用后门」：本模块的微信参数（APP_ID / APP_SECRET / REDIRECT_URI）
+  // 本来就全部来自 env，超时值属于同一类运维可调项。
+  it("a hung token endpoint is aborted by WECHAT_TIMEOUT_MS instead of hanging the login", async () => {
+    process.env.WECHAT_TIMEOUT_MS = "50";
+    const hung = vi.fn(hangUntilAborted);
+    vi.stubGlobal("fetch", hung);
+
+    const started = Date.now();
+    const out = await exchangeIdentityWechat("c1");
+    const elapsed = Date.now() - started;
+
+    expect(elapsed, "必须被超时打断；挂死意味着登录请求永远不返回").toBeLessThan(3000);
+    expect(elapsed).toBeGreaterThanOrEqual(40);   // 证明确实等到了超时，而不是提前短路
+    expect(out.error, "超时算交换失败，走既有的 error 通道而不是抛出").toMatch(/^wechat_exchange_failed: /);
+    expect(out.error).not.toContain(SECRET);
+    expect(out.error).not.toContain("api.weixin.qq.com");
+    expect(out.unionid).toBeUndefined();
+  }, 8000);
+
+  it("a hung userinfo endpoint degrades to the wx- fallback instead of hanging", async () => {
+    process.env.WECHAT_TIMEOUT_MS = "50";
+    vi.stubGlobal("fetch", vi.fn((url, init) => (isTokenCall(url) ? jsonResponse(TOKEN_BODY) : hangUntilAborted(url, init))));
+
+    const started = Date.now();
+    const id = await exchangeIdentityWechat("c1");
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(id.error).toBeUndefined();
+    expect(id.unionid).toBe("unionid_ABC123");
+    expect(id.nickname).toBe("wx-ABC123");
+    expect(id.avatar_url).toBe("");
+  }, 8000);
+
+  it("a failed userinfo call leaves a console.warn trace instead of vanishing silently", async () => {
+    // 降级是对的（资料只是装饰，不该把用户挡在门外），但**静默**降级不对：
+    // 线上出现「所有人头像和昵称都变成 wx-xxxxxx 兜底值」时，没有一行日志就无从判断
+    // 是微信资料接口挂了、还是 access_token 权限没开、还是本模块自己写错了。
+    // warnSpy 由 describe 的 beforeEach 装（既消音、也让这里可以直接断言）。
+    vi.stubGlobal("fetch", vi.fn(async (url) =>
+      isTokenCall(url) ? jsonResponse(TOKEN_BODY) : Promise.reject(new Error("profile endpoint down"))));
+
+    const id = await exchangeIdentityWechat("c1");
+    expect(id.unionid, "降级路径本身不许被这条改动破坏").toBe("unionid_ABC123");
+    expect(id.nickname).toBe("wx-ABC123");
+    expect(warnSpy, "userinfo 失败必须留下可查的痕迹").toHaveBeenCalled();
+    const msg = warnSpy.mock.calls.flat().join(" ");
+    expect(msg).toContain("profile endpoint down");
+    // 日志里不许出现 access_token / secret / 上游 URL（其 query 里带凭证）
+    expect(msg).not.toContain(SECRET);
+    expect(msg).not.toContain("at_1");
+    expect(msg).not.toContain("api.weixin.qq.com");
+  });
 });
+
+// 本文件一行 DB 都不写（只桩 outbound fetch），这条清理是套件级卫生约定的一部分，
+// 不是这里的前置条件：它保证本文件跑完后不把 auth 表的残行留给后续套件。
+afterAll(() => { clearAuthTables(); });
