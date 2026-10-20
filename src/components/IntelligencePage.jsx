@@ -83,7 +83,11 @@ export default function IntelligencePage(props) {
   useEffect(() => {
     if (!gridRef.current) return;
     const update = () => {
-      const w = gridRef.current.clientWidth;
+      // null 守卫：ResizeObserver 回调可能在组件卸载后/ref 复位后才触发，
+      // 之前这里裸读 gridRef.current.clientWidth，切视图时偶发 pageerror（2026-10 冒烟实证）
+      const el = gridRef.current;
+      if (!el) return;
+      const w = el.clientWidth;
       setColCount(Math.max(1, Math.floor(w / 340)));
     };
     update();

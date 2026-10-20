@@ -94,14 +94,57 @@ export default function ViewsBar({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {/* 布局（产品负责人定版，2026-10）：自定义视角文字 → 保存为视角（常显）→
-          [开关打开时才有] 下拉/设为默认/删除 → 开关（marginLeft:auto 钉死最右）。
-          开关开合时左侧三项（文字/保存/开关）位置不变，只有中间的管理控件出现/消失，
-          保证组件不跳来跳去。 */}
+      {/* 布局（产品负责人定版 2026-10-21，从右到左）：
+          开关 > 「自定义视角」文字 > 保存为视角 > 删除 > 设为默认 > 下拉。
+          即从左到右：下拉 → 设为默认 → 删除 → 保存 → 文字 → 开关。
+          开关开合时消失的只剩中间三项（下拉/设为默认/删除），文字/保存/开关
+          三样位置钉死（开关 marginLeft:auto 钉最右），组件不跳来跳去。 */}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ fontSize: FONT_SIZES.sm, fontWeight: 600, color: p.text, whiteSpace: "nowrap" }}>
-          {t.views.toggleLabel}
-        </span>
+        {activeView && (
+          <>
+            <select
+              value={String(activeView.id)}
+              onChange={handleSelect}
+              aria-label={t.views.myViews}
+              style={{
+                padding: "5px 10px", borderRadius: BORDER_RADIUS.sm,
+                border: `1px solid ${p.border}`, background: p.fieldBg, color: p.text,
+                fontSize: FONT_SIZES.sm, outline: "none", maxWidth: 200
+              }}
+            >
+              <option value="">{t.views.backToPublic}</option>
+              {(views || []).map((v) => (
+                <option key={v.id} value={String(v.id)}>
+                  {v.name}{v.is_default ? " ★" : ""}
+                </option>
+              ))}
+            </select>
+            {/* 设为默认 = 可选中五角星（产品负责人 2026-10-21）：非默认=空心 ☆，
+                默认=黄色实心 ★（theme status.warning）；已是默认时点击是 no-op。 */}
+            <button
+              onClick={async () => {
+                if (activeView.is_default) return;
+                setError("");
+                try { await onSetDefault(activeView); } catch (e) { setError(e?.message || ""); }
+              }}
+              aria-label={t.views.setDefault}
+              aria-pressed={activeView.is_default ? "true" : "false"}
+              title={t.views.setDefault}
+              style={{
+                border: `1px solid ${p.border}`, background: "transparent",
+                borderRadius: BORDER_RADIUS.sm, cursor: "pointer",
+                color: activeView.is_default ? COLORS.status.warning : p.muted,
+                fontSize: 18, lineHeight: 1, padding: "3px 9px", flexShrink: 0
+              }}
+            >
+              {activeView.is_default ? "★" : "☆"}
+            </button>
+            <button onClick={async () => { if (!confirm(zh ? "删除该视角？" : "Delete this view?")) return; setError(""); try { await onDelete(activeView); } catch (e) { setError(e?.message || ""); } }}
+              style={{ ...BTN, border: "1px solid #c00", background: "transparent", color: "#c00" }}>
+              {t.views.deleteView}
+            </button>
+          </>
+        )}
 
         {!saveOpen && (
           <button onClick={() => setSaveOpen(true)} style={{ ...BTN, border: `1px solid ${p.border}`, background: "transparent", color: p.text }}>
@@ -131,35 +174,9 @@ export default function ViewsBar({
           </>
         )}
 
-        {activeView && (
-          <>
-            <select
-              value={String(activeView.id)}
-              onChange={handleSelect}
-              aria-label={t.views.myViews}
-              style={{
-                padding: "5px 10px", borderRadius: BORDER_RADIUS.sm,
-                border: `1px solid ${p.border}`, background: p.fieldBg, color: p.text,
-                fontSize: FONT_SIZES.sm, outline: "none", maxWidth: 200
-              }}
-            >
-              <option value="">{t.views.backToPublic}</option>
-              {(views || []).map((v) => (
-                <option key={v.id} value={String(v.id)}>
-                  {v.name}{v.is_default ? " ★" : ""}
-                </option>
-              ))}
-            </select>
-            <button onClick={async () => { setError(""); try { await onSetDefault(activeView); } catch (e) { setError(e?.message || ""); } }}
-              style={{ ...BTN, border: `1px solid ${p.border}`, background: "transparent", color: p.text }}>
-              {t.views.setDefault}
-            </button>
-            <button onClick={async () => { if (!confirm(zh ? "删除该视角？" : "Delete this view?")) return; setError(""); try { await onDelete(activeView); } catch (e) { setError(e?.message || ""); } }}
-              style={{ ...BTN, border: "1px solid #c00", background: "transparent", color: "#c00" }}>
-              {t.views.deleteView}
-            </button>
-          </>
-        )}
+        <span style={{ fontSize: FONT_SIZES.sm, fontWeight: 600, color: p.text, whiteSpace: "nowrap" }}>
+          {t.views.toggleLabel}
+        </span>
 
         {/* 总开关：永远在行最右（marginLeft:auto），开关开合时位置不变 */}
         <button

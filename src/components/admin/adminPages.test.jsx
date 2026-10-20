@@ -1323,29 +1323,36 @@ describe("ViewsBar — 视角控件（嵌监控框内布局，产品负责人定
     expect(html).not.toContain(`>${i18n.en.views.deleteView}<`);
   });
 
-  it("🔴 顺序稳定（产品负责人：开合时组件不跳）：文字 < 保存按钮 < [管理控件] < 开关", () => {
+  it("🔴 顺序稳定（产品负责人定版，从右到左）：开关 > 文字 > 保存 > 删除 > 设为默认 > 下拉", () => {
+    // 从左到右：下拉 → 设为默认 → 删除 → 保存 → 文字 → 开关。
+    // 开关开合时文字/保存/开关三样位置不变，消失的只剩中间三项 → 组件不跳。
     for (const html of [renderBar(), renderBar({ activeViewId: 2 })]) {
-      const iLabel = html.indexOf(i18n.en.views.toggleLabel);
       const iSave = html.indexOf(i18n.en.views.saveAsView);
+      const iLabel = html.indexOf(`>${i18n.en.views.toggleLabel}<`);
       const iSwitch = html.indexOf('role="switch"');
-      expect(iLabel).toBeGreaterThanOrEqual(0);
-      expect(iSave).toBeGreaterThan(iLabel);
-      expect(iSwitch).toBeGreaterThan(iSave);   // 开关永远在保存按钮之后（最右）
+      expect(iSave).toBeGreaterThanOrEqual(0);
+      expect(iLabel).toBeGreaterThan(iSave);
+      expect(iSwitch).toBeGreaterThan(iLabel);   // 开关永远最右
     }
-    // 开关打开时管理控件夹在保存按钮与开关之间
+    // 开关打开时：下拉 < 设为默认(星标按钮) < 删除 < 保存
     const on = renderBar({ activeViewId: 2 });
+    const iSelect = on.indexOf("<select");
+    const iSetDef = on.indexOf(`aria-label="${i18n.en.views.setDefault}"`);
+    const iDelete = on.indexOf(i18n.en.views.deleteView);
     const iSave = on.indexOf(i18n.en.views.saveAsView);
-    const iSetDef = on.indexOf(i18n.en.views.setDefault);
-    const iSwitch = on.indexOf('role="switch"');
-    expect(iSetDef).toBeGreaterThan(iSave);
-    expect(iSwitch).toBeGreaterThan(iSetDef);
+    expect(iSelect).toBeGreaterThanOrEqual(0);
+    expect(iSetDef).toBeGreaterThan(iSelect);
+    expect(iDelete).toBeGreaterThan(iSetDef);
+    expect(iSave).toBeGreaterThan(iDelete);
   });
 
-  it("🔴 视角开启：[开关(checked)] + 下拉 + 设为默认 + 删除；视角名只在 option 出现一次", () => {
+  it("🔴 视角开启：[开关(checked)] + 下拉 + 星标(设为默认) + 删除；视角名只在 option 出现一次", () => {
     const html = renderBar({ activeViewId: 2 });
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain("<select");
-    expect(html).toContain(i18n.en.views.setDefault);
+    expect(html).toContain(`aria-label="${i18n.en.views.setDefault}"`);
+    expect(html).toContain("☆");                    // 非默认 = 空心
+    expect(html).toContain('aria-pressed="false"');
     expect(html).toContain(i18n.en.views.deleteView);
     const occurrences = html.split("竞品雷达").length - 1;
     expect(occurrences).toBe(1);                       // 不重复显示视角名
@@ -1356,6 +1363,13 @@ describe("ViewsBar — 视角控件（嵌监控框内布局，产品负责人定
     const html = renderBar({ views: [] });
     expect(html).toContain('aria-checked="false"');
     expect(html).toContain("disabled");
+  });
+
+  it("激活的视角是默认时：星标为黄色实心 ★ + aria-pressed=true", () => {
+    const html = renderBar({ activeViewId: 1 });   // VIEWS[0].is_default = true
+    expect(html).toContain("★");
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain(COLORS.status.warning); // 黄色 = theme status.warning 字面值
   });
 
   it("下拉第一项是「回公共池」（与开关等价的双重关闭入口）；默认视角带 ★", () => {
