@@ -169,11 +169,11 @@ export default function LoginGate({ onLoggedIn }) {
   // 换底色 + 换标签色，而不是压 opacity。原来那版（background 恒为 primary、opacity 0.45）
   // 的问题出在标签：白字落在「α=0.45 的 primary 与浅色卡片合成」出来的 #98bca7 上只有
   // **2.08:1**，远低于 WCAG AA 的 4.5:1。而「#555 填充 + 白字」那个候选更糟：#555 与
-  // primary(#1a6b3c) 的亮度差只有 **1.14**，两者几乎同亮度、只靠色相区分 —— 灰度与红绿色盲下
+  // primary(#1a6b3c) 的对比度只有 **1.14:1**，两者几乎同亮度、只靠色相区分 —— 灰度与红绿色盲下
   // 等于没区分，正好把 A4 原本的缺陷重造一遍。
   // 现在这一对（background.disabled #f0f0f0 填充 + text.secondary #555 标签）：标签对比
   // **6.54:1**，且这一对里没有任何随 darkMode 变化的量，所以两种配色模式下是同一个数；
-  // 与启用态填充的亮度差 **5.74**，灰度下依然分得清。两个值都是 theme.js 的 token。
+  // 与启用态填充的对比度 **5.74:1**（1.4.11 非文本下限 3:1），灰度下依然分得清。两个值都是 theme.js 的 token。
   // transition 也从 opacity 改成 background-color：opacity 已经不是那个变化量了。
   const primaryBtn = (off) => ({
     width: "100%",

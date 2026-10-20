@@ -188,6 +188,10 @@ describe("Header — 身份块与登出入口", () => {
   // 即将消失的代码上，修 models.js 的那天这条断言会跟着一起失效。
   // title 与那段文案在**同一个** `{!isMobile && isAdmin && (...)}` 块里（Header.jsx:75），
   // 观察到的是完全相同的门禁，而它在生产里确实渲染。
+  // ⚠️ 已知的耦合（评审 N-15，排进 Task 6b）：这个英文字面值**内联在 Header.jsx:77 的
+  // `zh ? … : …` 三元里、不在 i18n.js**，属于「前端新文案一律进 i18n.js」这条 Global
+  // Constraint 的**预存**偏离（本轮 Header.jsx 零改动）。谁为合规把它挪进 i18n.js，
+  // 这条常量就要跟着改成读 `i18n.en.header.…`，否则测试会红 —— 别以为是回归。
   const CHIP_TITLE = "Active model (manage in Settings → Global Config)";
 
   it("admin 才渲染模型芯片（R1：/api/models 整前缀 requireAdmin）", () => {
@@ -318,9 +322,13 @@ describe("storage.getStoredLanguage — 值域校验", () => {
     expect(storage.getStoredLanguage()).toBeNull();
   });
 
-  it("支持集派生自 Object.keys(i18n)，不是抄死的一份清单", () => {
-    // 抄死的话，日后新增语言会**静默地**被当成垃圾值丢掉：用户存得进去、读不回来，
-    // 而且不会有任何报错。这条让「i18n 加了键但支持集没跟上」变成一条会红的断言。
+  it("i18n 的每个顶层键都被 getStoredLanguage 接受", () => {
+    // 抄死一份清单的话，日后新增语言会**静默地**被当成垃圾值丢掉：用户存得进去、读不回来，
+    // 而且不会有任何报错。这条把「i18n 加了键但支持集没跟上」变成一条会红的断言。
+    // ⚠️ 诚实说明它今天强制到什么程度：storage.js 的实现确实是 `Object.keys(i18n)`，
+    // 但只要 i18n 仍然只有 en/zh，把它换成硬编码 `["en","zh"]` 是**等价变异体**、
+    // 全套件照样绿（评审 G15 实测 SURVIVED）。这条的牙齿要等第三种语言出现才长得出来 ——
+    // 它买的是「那一天不会静默漂移」，不是「今天能抓住抄死」。
     const locales = Object.keys(i18n);
     expect(locales.length).toBeGreaterThan(0);
     for (const locale of locales) {
@@ -329,9 +337,13 @@ describe("storage.getStoredLanguage — 值域校验", () => {
     }
   });
 
-  // 🔴 刻意**不**测 localStorage 不可用时那条 catch 分支：触发它必然走 storage.js 里的
-  // console.error，会往全量输出新增一个 stderr 块（硬指标是 12 块）。而那个分支的返回值
-  // 本轮没有改动，不值得为它破坏指标。
+  // 🔴 刻意**不**测 localStorage 不可用时那条 catch 分支。理由是价值，不是做不到：
+  // 那个分支返回 null，而「返回 null」已经被上面「从没存过时返回 null」那条钉住了 ——
+  // 补一条只能证明「换个原因也走到同一个 null」，钉不住任何新行为。
+  // （附注：stderr 块不是硬阻塞。触发它确实会走 storage.js 的 console.error、往全量输出
+  // 多一个 stderr 块，但仓里已有 4 处 `vi.spyOn(console, "error").mockImplementation(() => {})`
+  // 的惯例：views.test.js:188、admin.test.js:387、apiRoutes.test.js:240，以及
+  // identityProvider.test.js:94 的 warn 版。真要测，压掉那条日志即可。）
 });
 
 
@@ -339,7 +351,7 @@ describe("storage.getStoredLanguage — 值域校验", () => {
 //
 // 为什么需要这一块：控制器的变异 C-C 把 COLORS.background.disabled 从 #f0f0f0 换成 #555，
 // 全量 336 条**全绿**。而 #555 正是评审提出、被控制器否掉的那个候选 —— 它与启用态
-// primary(#1a6b3c) 的亮度差只有 **1.14**，几乎同亮度、只靠色相区分；灰度打印与红绿色盲下
+// primary(#1a6b3c) 的对比度只有 **1.14:1**，几乎同亮度、只靠色相区分；灰度打印与红绿色盲下
 // 「禁用」与「启用」不可分辨，正好把 A4 原本要修的缺陷重造一遍。
 // 组件层那几条断言引用 token 而不是抄字面值（这是对的：调 token 不该让测试红），代价就是
 // **token 之间的关系无人观察**。这一块补的正是那个关系：断言的是比例，不是色值。
@@ -384,15 +396,23 @@ describe("theme tokens — A4 禁用态配色契约", () => {
     expect(contrastRatio("#fff", COLORS.primary)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("🔴 禁用态填充与启用态填充在**灰度**下可分辨（C-C 变异体就是打这里）", () => {
+  it("🔴 禁用态填充与启用态填充在**灰度**下可分辨", () => {
     // 阈值 3:1 取自 WCAG 1.4.11 对非文本对比度的下限。今天实测 5.737；被否掉的 #555 候选只有
     // 1.140 —— 那条路会让「禁用」只靠色相表达。要改这个 token，先重算这条比例再改断言。
+    // ⚠️ 这条与上面那条的关系，别搞错：C-C 变异体（disabled → #555）**同时**死在②③④三条上，
+    // 而②一条就够。事实上「标签是 #555 且填充比 primary 浅」时，②+④在数学上蕴含③
+    // （cr(#555,fill)≥4.5 ⇒ L(fill)≥0.5838 ⇒ cr(fill,primary)≥3.946），所以③**今天的边际
+    // 价值为零**。但③不是装饰品：它约束的是「填充 vs primary」这一对，与标签色无关，
+    // 评审 G22 用 text.secondary→#000 + disabled→#777777 实测只有③红。保留它。
     expect(contrastRatio(COLORS.background.disabled, COLORS.primary)).toBeGreaterThanOrEqual(3);
   });
 
   it("禁用态填充比启用态**更浅**（「洗掉」的通用视觉语言）", () => {
-    // 这是上一条之外独立的性质：#555 的亮度(0.0908)比 primary(0.1106)还低，即使亮度差过了 3:1，
+    // 这是上一条之外独立的性质：#555 的亮度(0.0908)比 primary(0.1106)还低，即使对比度过了 3:1，
     // 「比启用态更暗」也会与 disabled 的通用观感相反。今天 #f0f0f0 的亮度是 0.8714。
+    // ⚠️ 这一条是 4 条里唯一编码**品味**而非 WCAG 标准的（②③都有明确出处）。未来若真要
+    // 做「更暗的禁用态」，需要刻意推翻的是这一条，不是②③ —— 评审实测可行域：填充调暗到
+    // #c9c9c9 仍全绿，更暗则必须同时把标签调深（如 #333 on #c8c8c8 = 7.55 / 灰度 3.91）。
     expect(relativeLuminance(COLORS.background.disabled)).toBeGreaterThan(relativeLuminance(COLORS.primary));
   });
 
