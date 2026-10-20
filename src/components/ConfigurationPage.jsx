@@ -312,23 +312,35 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
     <div>
       {actionButtonsPortal}
 
-      <div style={{
-        display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap"
+      <div role="tablist" style={{
+        display: "flex", gap: 4, marginBottom: 20,
+        borderBottom: `1px solid ${border}`, overflowX: "auto"
       }}>
-        {tabsFor(user).map(item => (
-          <button key={item.key} onClick={() => setTab(item.key)} style={{
-            flex: "1 1 140px", maxWidth: 200,
-            padding: "16px 20px", borderRadius: BORDER_RADIUS.lg,
-            border: `1px solid ${border}`,
-            background: tab === item.key ? COLORS.primary : darkMode ? COLORS.background.cardDark : COLORS.background.card,
-            color: tab === item.key ? "#fff" : text,
-            fontSize: FONT_SIZES.md, fontWeight: tab === item.key ? 700 : 500,
-            cursor: "pointer", textAlign: "left"
-          }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>{item.icon}</div>
-            <div>{t.competitiveIntelligence[item.labelKey] || item.labelKey}</div>
-          </button>
-        ))}
+        {/* 页签样式（产品负责人 2026-10-21）：紧凑单行，激活态 = 绿字 + 3px 下划线
+            （与 Header 顶部导航同一范式）；窄屏横向滚动不折行。 */}
+        {tabsFor(user).map(item => {
+          const active = tab === item.key;
+          return (
+            <button
+              key={item.key}
+              onClick={() => setTab(item.key)}
+              aria-selected={active}
+              role="tab"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "8px 10px", border: "none",
+                borderBottom: active ? `3px solid ${COLORS.primary}` : "3px solid transparent",
+                background: "transparent",
+                color: active ? COLORS.primary : text,
+                fontSize: FONT_SIZES.sm, fontWeight: active ? 700 : 500,
+                cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0
+              }}
+            >
+              <span style={{ fontSize: FONT_SIZES.base }}>{item.icon}</span>
+              <span>{t.competitiveIntelligence[item.labelKey] || item.labelKey}</span>
+            </button>
+          );
+        })}
       </div>
 
       {configMessage && (
