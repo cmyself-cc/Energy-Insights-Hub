@@ -4,10 +4,17 @@ import SourcesPage from "./SourcesPage";
 import ContentFiltersPage from "./ContentFiltersPage";
 import TrackerSettingsPage from "./TrackerSettingsPage";
 import FeedbackPage from "./FeedbackPage";
+import UsersPage from "./admin/UsersPage";
+import InviteCodesPage from "./admin/InviteCodesPage";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
 import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 
+// adminOnly 的两个标签只对 user.role === "admin" 可见。
+// 🔴 这不是安全边界：整个 /api/admin 前缀在服务端已经 requireAdmin（server/apiRoutes.js），
+// 过滤掉标签只是省掉几个必然 403 的请求与 console 噪音。判定刻意写成「显式等于 admin」，
+// 于是 user 缺省 / null / role 是别的字符串时一律落到「看不见」这一侧（fail-closed），
+// 与 Sidebar 的 Configuration 入口、Header 的模型芯片用的是同一个口径。
 const TABS = [
   { key: "sources", icon: "◎", labelKey: "sources" },
   { key: "filters", icon: "▣", labelKey: "contentFiltersTab" },
@@ -15,9 +22,22 @@ const TABS = [
   { key: "feedback", icon: "✦", labelKey: "feedback" },
   { key: "tracker", icon: "⚙", labelKey: "trackerSettingsTab" },
   { key: "models", icon: "⊙", labelKey: "globalConfigTab" },
+  { key: "users", icon: "☺", labelKey: "usersTab", adminOnly: true },
+  { key: "invites", icon: "⌘", labelKey: "invitesTab", adminOnly: true },
 ];
 
-export default function ConfigurationPage({ darkMode, language, onTrackerComplete, titleSlotEl }) {
+// 按角色过滤后的标签。导出为纯函数会触发 react-refresh/only-export-components
+// （混合导出的文件里小写函数一律 warn，而 lint 带 --max-warnings 0），而本文件的默认导出
+// 是组件，所以不导出 —— 改由 adminPages.test.jsx **直接静态渲染 ConfigurationPage** 来观察：
+// 实测它能被 renderToStaticMarkup 渲染（需要 localStorage 桩，因为 :29 的 useState 初始化器
+// 会同步读它；titleSlotEl 缺省时 actionButtonsPortal 是 falsy，createPortal 不会被调用）。
+// 那样测到的是真实接线，比测一个抽出来的辅助函数更强。
+function tabsFor(user) {
+  const isAdmin = user?.role === "admin";
+  return TABS.filter((item) => !item.adminOnly || isAdmin);
+}
+
+export default function ConfigurationPage({ darkMode, language, onTrackerComplete, titleSlotEl, user }) {
   const [tab, setTab] = useState("sources");
   const t = i18n[language];
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
@@ -295,7 +315,7 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
       <div style={{
         display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap"
       }}>
-        {TABS.map(item => (
+        {tabsFor(user).map(item => (
           <button key={item.key} onClick={() => setTab(item.key)} style={{
             flex: "1 1 140px", maxWidth: 200,
             padding: "16px 20px", borderRadius: BORDER_RADIUS.lg,
@@ -641,6 +661,11 @@ export default function ConfigurationPage({ darkMode, language, onTrackerComplet
         </div>
         </>
       )}
+      {/* ADM-1 / ADM-2。分支本身不再重复判角色：tab 只能由上面那排按钮设置，而按钮已经
+          按角色过滤过了（tabsFor），非 admin 根本没有办法把 tab 变成这两个值。
+          真正的边界在服务端 /api/admin 的 requireAdmin。 */}
+      {tab === "users" && <UsersPage darkMode={darkMode} language={language} />}
+      {tab === "invites" && <InviteCodesPage darkMode={darkMode} language={language} />}
     </div>
   );
 }
