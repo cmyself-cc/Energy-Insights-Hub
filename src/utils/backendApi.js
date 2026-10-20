@@ -119,6 +119,10 @@ export const backendApi = {
   getAuthConfig: () => request("/auth/config"),
   devLogin: (devUnionid) => request("/auth/dev-login", { method: "POST", body: JSON.stringify({ devUnionid }) }),
   registerWithInvite: (ticket, code) => request("/auth/register", { method: "POST", body: JSON.stringify({ ticket, code }) }),
+  // 用户名+邀请码体系（产品负责人 2026-10-21）：首开 registerPair（码须有效），
+  // 之后 loginPair（码过期不挡存量登录）。浏览器本地记住 pair、默认免登。
+  registerPair: (code, username) => request("/auth/register-pair", { method: "POST", body: JSON.stringify({ code, username }) }),
+  loginPair: (code, username) => request("/auth/login-pair", { method: "POST", body: JSON.stringify({ code, username }) }),
   me: () => request("/auth/me"),
   logout: () => request("/auth/logout", { method: "POST" }),
 

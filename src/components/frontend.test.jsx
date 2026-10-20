@@ -419,3 +419,67 @@ describe("theme tokens — A4 禁用态配色契约", () => {
   // 那条标签对比 —— 两个目标互相打架，所以这里选择保住标签可读性。深色下同一对是 14.394，
   // 即这个豁免只在浅色模式里真正起作用。这个取舍是有意的，别当缺陷「顺手修」。
 });
+
+// ── 用户名+邀请码体系（产品负责人 2026-10-21）──
+import { PairLoginForm, PairSaveReminder } from "./LoginGate";
+
+const PROPS = {
+  t: i18n.en.auth, text: "#111", muted: "#555", border: "#f0f0f0", darkMode: false,
+  onUsernameChange: () => {}, onCodeChange: () => {}, onSubmit: () => {}, onToggleMode: () => {}
+};
+
+describe("PairLoginForm —— 用户名+邀请码表单", () => {
+  it("login 态：字段顺序 用户名 → 邀请码，标题/按钮/切换文案按 i18n", () => {
+    const html = renderToStaticMarkup(<PairLoginForm mode="login" username="" code="" busy={false} {...PROPS} />);
+    expect(html).toContain(i18n.en.auth.pairTitle);
+    expect(html.indexOf(i18n.en.auth.pairUsername)).toBeLessThan(html.indexOf(i18n.en.auth.pairCode));
+    expect(html).toContain(i18n.en.auth.pairSubmit);
+    expect(html).toContain(i18n.en.auth.pairToRegister);
+    // 空输入 → disabled（属性与样式同一布尔值，A4 不变量）
+    expect(html).toContain("disabled");
+  });
+
+  it("register 态：字段顺序反过来（先码后人），常驻保存提醒，开通按钮 + 已有账号切换", () => {
+    const html = renderToStaticMarkup(<PairLoginForm mode="register" username="" code="" busy={false} {...PROPS} />);
+    expect(html).toContain(i18n.en.auth.pairRegisterTitle);
+    expect(html.indexOf(i18n.en.auth.pairCode)).toBeLessThan(html.indexOf(i18n.en.auth.pairUsername));
+    expect(html).toContain(i18n.en.auth.pairSaveReminder);
+    expect(html).toContain(i18n.en.auth.inviteSubmit);
+    expect(html).toContain(i18n.en.auth.pairToLogin);
+  });
+
+  it("两态都渲染 aria-label 便于自动化/读屏定位", () => {
+    for (const mode of ["login", "register"]) {
+      const html = renderToStaticMarkup(<PairLoginForm mode={mode} username="" code="" busy={false} {...PROPS} />);
+      expect(html).toContain(`aria-label="${i18n.en.auth.pairUsername}"`);
+      expect(html).toContain(`aria-label="${i18n.en.auth.pairCode}"`);
+    }
+  });
+});
+
+describe("PairSaveReminder —— 注册成功保存提醒屏", () => {
+  it("大字呈现用户名与邀请码 + 提醒文案 + 进入按钮", () => {
+    const html = renderToStaticMarkup(
+      <PairSaveReminder code="TEST01" username="Alice" t={i18n.en.auth} text="#111" muted="#555" warnColor="#c00" onEnter={() => {}} />
+    );
+    expect(html).toContain(i18n.en.auth.pairSaveReminder);
+    expect(html).toContain("<code");
+    expect(html).toContain("Alice");
+    expect(html).toContain("TEST01");
+  });
+});
+
+describe("storage.pairLogin —— 本机记忆", () => {
+  beforeEach(() => { globalThis.localStorage.clear(); });
+  it("set → get 往返；缺字段/坏 JSON → null；clear 后 → null", () => {
+    storage.setPairLogin("Alice", "TEST01");
+    expect(storage.getPairLogin()).toEqual({ username: "Alice", code: "TEST01" });
+    globalThis.localStorage.setItem("energy_insights_pair_login", '{"username":"X"}');
+    expect(storage.getPairLogin()).toBeNull();
+    globalThis.localStorage.setItem("energy_insights_pair_login", "not-json{");
+    expect(storage.getPairLogin()).toBeNull();
+    storage.setPairLogin("A", "B");
+    storage.clearPairLogin();
+    expect(storage.getPairLogin()).toBeNull();
+  });
+});

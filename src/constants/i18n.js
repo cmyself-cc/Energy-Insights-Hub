@@ -292,7 +292,19 @@ export const i18n = {
       notConfigured: "WeChat sign-in is not configured (missing WECHAT_APP_ID / REDIRECT_URI)",
       inviteError: "Invite code is invalid or fully used",
       rateLimited: "Too many attempts. Please wait a moment and try again.",
-      stateExpired: "Your sign-in timed out. Please scan the QR code again."
+      stateExpired: "Your sign-in timed out. Please scan the QR code again.",
+      pairTitle: "Sign in with invite code",
+      pairUsername: "Username",
+      pairCode: "Invite code",
+      pairSubmit: "Sign in",
+      pairToRegister: "First time? Activate with an invite code",
+      pairToLogin: "Already registered? Sign in",
+      pairRegisterTitle: "Activate with invite code",
+      pairSaveReminder: "Save your invite code and username — you will need BOTH to sign in after logging out.",
+      pairStoredHint: "Signed-in credentials are remembered on this device.",
+      pairClear: "Forget saved sign-in",
+      pairForgotHint: "Both fields are required. Contact your admin for a new invite code.",
+      pairLoginFailed: "Sign-in failed. Check your username and invite code."
     },
     views: {
       toggleLabel: "Custom views",
@@ -659,7 +671,19 @@ export const i18n = {
       notConfigured: "微信登录未配置（缺 WECHAT_APP_ID / REDIRECT_URI）",
       inviteError: "邀请码无效或已用完",
       rateLimited: "尝试次数过多，请稍后再试",
-      stateExpired: "登录已超时，请重新扫码"
+      stateExpired: "登录已超时，请重新扫码",
+      pairTitle: "邀请码登录",
+      pairUsername: "用户名",
+      pairCode: "邀请码",
+      pairSubmit: "登录",
+      pairToRegister: "首次使用？凭邀请码开通",
+      pairToLogin: "已有账号？去登录",
+      pairRegisterTitle: "邀请码开通",
+      pairSaveReminder: "请保存好邀请码和用户名 —— 登出后需要二者同时匹配才能登录。",
+      pairStoredHint: "本机已记住登录凭证。",
+      pairClear: "清除本机记住的登录",
+      pairForgotHint: "两项都必填；邀请码遗失请联系管理员重新获取。",
+      pairLoginFailed: "登录失败，请检查用户名与邀请码。"
     },
     views: {
       toggleLabel: "自定义视角",

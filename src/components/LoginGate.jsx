@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { backendApi } from "../utils/backendApi";
 import { i18n } from "../constants/i18n";
 import { storage } from "../utils/storage";
@@ -22,6 +22,13 @@ export default function LoginGate({ onLoggedIn }) {
   const [config, setConfig] = useState(null);
   const [code, setCode] = useState("");
   const [devUnionid, setDevUnionid] = useState("");
+  // ── 用户名+邀请码体系（产品负责人 2026-10-21，替代微信扫码成为主登录方式）──
+  const [pairMode, setPairMode] = useState("login");       // "login" | "register"
+  const [username, setUsername] = useState("");
+  const [pairCode, setPairCode] = useState("");
+  // 注册成功后的「保存提醒」屏：{ user, code, username }。点「进入应用」才 finish ——
+  // 提醒必须在用户离开登录门之前被看见（finish 后整个 LoginGate 就被 App 替换了）。
+  const [regReminder, setRegReminder] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   // 语言与暗色只能在这里自决：App 的 language/darkMode state 还没建立（它被本组件挡在外面）。
@@ -65,6 +72,31 @@ export default function LoginGate({ onLoggedIn }) {
         if (!cancelled) setConfig({ mockMode: false, authorizeUrl: null });
       });
     return () => { cancelled = true; };
+  }, []);
+
+  // 本地记住的 pair 优先静默免登（默认不用再次登录）。StrictMode 双跑守卫：
+  // 该 effect  deps 为 []，开发模式会执行两次，没有 ref 就会发两条 login-pair。
+  const pairTriedRef = useRef(false);
+  useEffect(() => {
+    if (pairTriedRef.current) return;
+    const stored = storage.getPairLogin();
+    if (!stored) return;
+    pairTriedRef.current = true;
+    let cancelled = false;
+    backendApi.loginPair(stored.code, stored.username)
+      .then((res) => { if (!cancelled && res?.data?.user) finish(res.data.user); })
+      .catch((err) => {
+        if (cancelled) return;
+        // 免登失败 = 记忆失效（用户被禁用 / 凭证对不上）：清掉本机记忆、回填表单让用户手输。
+        // 403 走既有 #disabled 页，不在这里覆盖。
+        storage.clearPairLogin();
+        if (err?.status === 403) { window.location.hash = "#disabled"; return; }
+        setUsername(stored.username);
+        setPairCode(stored.code);
+        setError(err?.status === 429 ? t.rateLimited : t.pairLoginFailed);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- finish/t 随挂载定型；storage 读一次
   }, []);
 
   const ticket = hash.startsWith("#invite=") ? hash.slice("#invite=".length) : null;
@@ -134,6 +166,49 @@ export default function LoginGate({ onLoggedIn }) {
       // （dev_unionid_required / not found / invalid state）本身就是写给开发者看的，
       // 翻译成用户话术反而丢信息。用户可见的微信路径不走这个分支。
       setError(err?.status === 429 ? t.rateLimited : (err?.message || t.notConfigured));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // pair 登录：成功后把 pair 写进本机记忆（默认下次免登），再 finish。
+  const handlePairLogin = async (e) => {
+    e.preventDefault();
+    const u = username.trim();
+    const c = pairCode.trim();
+    if (!u || !c || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await backendApi.loginPair(c, u);
+      if (res?.data?.user) {
+        storage.setPairLogin(u, c);
+        finish(res.data.user);
+      }
+    } catch (err) {
+      console.error("[LoginGate] pair login failed:", err?.message || err);
+      if (err?.status === 403) { window.location.hash = "#disabled"; return; }
+      setError(err?.status === 429 ? t.rateLimited : t.pairLoginFailed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // pair 开通：成功**不立刻 finish** —— 先停在保存提醒屏（提醒用户保存码+用户名）。
+  const handlePairRegister = async (e) => {
+    e.preventDefault();
+    const u = username.trim();
+    const c = pairCode.trim();
+    if (!u || !c || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await backendApi.registerPair(c, u);
+      if (res?.data?.user) setRegReminder({ user: res.data.user, code: c, username: u });
+    } catch (err) {
+      // register-pair 的 400 是 ApiError 风格的人话（invalid/expired/exhausted），直接显示
+      console.error("[LoginGate] pair register failed:", err?.message || err);
+      setError(err?.status === 429 ? t.rateLimited : (err?.message || t.inviteError));
     } finally {
       setBusy(false);
     }
@@ -256,14 +331,42 @@ export default function LoginGate({ onLoggedIn }) {
                 />
                 <button type="submit" disabled={inviteOff} style={primaryBtn(inviteOff)}>{t.inviteSubmit}</button>
               </form>
+            ) : regReminder ? (
+              <PairSaveReminder
+                code={regReminder.code}
+                username={regReminder.username}
+                t={t}
+                text={text}
+                muted={muted}
+                warnColor={COLORS.status.error}
+                onEnter={() => {
+                  // 进入应用时才写本机记忆：用户在提醒屏上还没答应「保存」，先把pair写进
+                  // localStorage 会让「提醒」失去意义。
+                  storage.setPairLogin(regReminder.username, regReminder.code);
+                  finish(regReminder.user);
+                }}
+              />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {config === null ? (
-                  <div style={{ height: 40 }} />
-                ) : config.authorizeUrl ? (
-                  <a href={config.authorizeUrl} style={primaryBtn(false)}>{t.wechatLogin}</a>
-                ) : (
-                  <p style={{ margin: 0, fontSize: FONT_SIZES.sm, color: muted, lineHeight: 1.6 }}>{t.notConfigured}</p>
+                <PairLoginForm
+                  mode={pairMode}
+                  username={username}
+                  code={pairCode}
+                  busy={busy}
+                  t={t}
+                  text={text}
+                  muted={muted}
+                  border={border}
+                  darkMode={darkMode}
+                  onUsernameChange={setUsername}
+                  onCodeChange={setPairCode}
+                  onSubmit={pairMode === "login" ? handlePairLogin : handlePairRegister}
+                  onToggleMode={() => setPairMode(pairMode === "login" ? "register" : "login")}
+                />
+
+                {/* 微信扫码：仅在真实模式配好凭证时存在（产品负责人 2026-10-21：保留备用） */}
+                {config?.authorizeUrl && (
+                  <a href={config.authorizeUrl} style={{ ...primaryBtn(false), marginTop: 4 }}>{t.wechatLogin}</a>
                 )}
 
                 {config?.mockMode && (
@@ -287,6 +390,96 @@ export default function LoginGate({ onLoggedIn }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// 用户名+邀请码表单（纯展示组件，抽出给静态渲染测试观察三态）：
+//   login    ：用户名 → 邀请码 → 登录 + 「首次使用？」切换
+//   register ：邀请码 → 用户名 → 开通 + 保存提醒常驻文案 + 「已有账号？」切换
+// 🔴 两态的字段顺序**不同**是产品语义：首开先验码（码决定角色与能否注册）、登录先人（人为主键）。
+// disabled 遵循 A4 不变量：属性与样式由同一个布尔值驱动。
+export function PairLoginForm({ mode, username, code, busy, t, text, muted, border, darkMode, onUsernameChange, onCodeChange, onSubmit, onToggleMode }) {
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box", padding: "10px 12px",
+    borderRadius: BORDER_RADIUS.md, border: `1px solid ${border}`,
+    background: darkMode ? COLORS.background.dark : "#fff",
+    color: text, fontSize: FONT_SIZES.base, outline: "none"
+  };
+  const primaryBtn = (off) => ({
+    width: "100%", padding: "11px 16px", borderRadius: BORDER_RADIUS.md, border: "none",
+    background: off ? COLORS.background.disabled : COLORS.primary,
+    color: off ? COLORS.text.secondary : "#fff",
+    fontSize: FONT_SIZES.base, fontWeight: 600,
+    cursor: off ? "not-allowed" : "pointer",
+    boxSizing: "border-box", textAlign: "center",
+    transition: `background-color ${TRANSITIONS.fast}`
+  });
+  const off = busy || !username.trim() || !code.trim();
+  const fields = mode === "login"
+    ? [
+        { key: "u", label: t.pairUsername, value: username, onChange: onUsernameChange },
+        { key: "c", label: t.pairCode, value: code, onChange: onCodeChange }
+      ]
+    : [
+        { key: "c", label: t.pairCode, value: code, onChange: onCodeChange },
+        { key: "u", label: t.pairUsername, value: username, onChange: onUsernameChange }
+      ];
+  return (
+    <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <label style={{ fontSize: FONT_SIZES.sm, color: muted, fontWeight: 500 }}>
+        {mode === "login" ? t.pairTitle : t.pairRegisterTitle}
+      </label>
+      {fields.map((f) => (
+        <input
+          key={f.key}
+          type="text"
+          value={f.value}
+          onChange={(e) => f.onChange(e.target.value)}
+          placeholder={f.label}
+          aria-label={f.label}
+          autoComplete="off"
+          style={inputStyle}
+        />
+      ))}
+      {/* 注册态常驻提醒：保存码+用户名是唯一的找回路径（产品负责人明确要求） */}
+      {mode === "register" && (
+        <p style={{ margin: 0, fontSize: FONT_SIZES.sm, color: muted, lineHeight: 1.6 }}>{t.pairSaveReminder}</p>
+      )}
+      <button type="submit" disabled={off} style={primaryBtn(off)}>
+        {mode === "login" ? t.pairSubmit : t.inviteSubmit}
+      </button>
+      <button
+        type="button"
+        onClick={onToggleMode}
+        style={{ border: "none", background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer", textAlign: "center", padding: "4px 0" }}
+      >
+        {mode === "login" ? t.pairToRegister : t.pairToLogin}
+      </button>
+    </form>
+  );
+}
+
+// 注册成功后的保存提醒屏（纯展示）：把码与用户名大字呈现，用户点「进入」才离开登录门。
+export function PairSaveReminder({ code, username, t, text, muted, warnColor, onEnter }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <p style={{ margin: 0, fontSize: FONT_SIZES.base, color: warnColor, lineHeight: 1.6, fontWeight: 600 }}>
+        {t.pairSaveReminder}
+      </p>
+      <div style={{ padding: "12px 14px", borderRadius: BORDER_RADIUS.md, background: "rgba(245,197,24,0.12)", border: "1px solid #f5c518" }}>
+        <div style={{ fontSize: FONT_SIZES.sm, color: muted, marginBottom: 6 }}>{t.pairUsername}</div>
+        <code style={{ fontSize: FONT_SIZES.lg, fontWeight: 700, color: text }}>{username}</code>
+        <div style={{ fontSize: FONT_SIZES.sm, color: muted, margin: "10px 0 6px" }}>{t.pairCode}</div>
+        <code style={{ fontSize: FONT_SIZES.lg, fontWeight: 700, color: text, letterSpacing: 1 }}>{code}</code>
+      </div>
+      <button onClick={onEnter} style={{
+        width: "100%", padding: "11px 16px", borderRadius: BORDER_RADIUS.md, border: "none",
+        background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.base, fontWeight: 600,
+        cursor: "pointer", boxSizing: "border-box"
+      }}>
+        {t.pairSubmit}
+      </button>
     </div>
   );
 }

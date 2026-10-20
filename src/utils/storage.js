@@ -161,6 +161,27 @@ export const storage = {
   // 崩溃的那棵树里，**用户没有办法用 UI 自救**，只能去清 localStorage。
   // 在唯一的读取口校验值域，比在每个消费点补 `|| i18n.en` 靠得住：消费点会随组件数量增长
   // （仓里一度同时存在两种写法），而这个函数只有一个。
+  // 用户名+邀请码的本地记忆（产品负责人 2026-10-21）：登录成功后写入，登录门优先
+  // 静默免登；用户点「清除」或静默失败时清掉。仅存本机 localStorage。
+  getPairLogin: () => {
+    try {
+      const raw = localStorage.getItem("energy_insights_pair_login");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && parsed.username && parsed.code ? parsed : null;
+    } catch {
+      return null;
+    }
+  },
+  setPairLogin: (username, code) => {
+    try {
+      localStorage.setItem("energy_insights_pair_login", JSON.stringify({ username: String(username), code: String(code) }));
+    } catch { /* 本地存储不可用时静默降级为每次手输 */ }
+  },
+  clearPairLogin: () => {
+    try { localStorage.removeItem("energy_insights_pair_login"); } catch { /* 同上 */ }
+  },
+
   getStoredLanguage: () => {
     try {
       const language = localStorage.getItem(STORAGE_KEYS.LANGUAGE);
