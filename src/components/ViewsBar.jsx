@@ -2,28 +2,29 @@ import { useState, useEffect } from "react";
 import { i18n } from "../constants/i18n";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 
-// 情报页视角条（Task 11 / M3；本文件 2026-10 按产品负责人要求重做布局）：
-//   · 与 FilterBar（监控筛选行）同一行、右对齐 —— 由 IntelligencePage 的 flex 父容器保证；
-//   · 关闭态（公共池）：**只**渲染「保存为视角」一个按钮 —— 无下拉、无管理按钮；
-//     保存成功由 App 侧自动启用新视角（否则关闭态没有入口打开视角）。
-//   · 激活态：下拉（选中项即视角名，option 里带 ★ 默认标记；第一项「回公共池」= 关闭
-//     入口，原开关按钮已删，功能被它吸收）+「设为默认」+「删除」。
-//   · 刻意**不重复渲染视角名**：下拉选中项已经显示名字（产品负责人明确要求）。
-// 纯展示组件：数据/动作全走 props，静态渲染可观察三态；保存表单开合与「忽略」是
-// 纯 UI 瞬态（内部 state），照实登记为静态盲区。
+// 情报页视角控件（Task 11 / M3；2026-10 按产品负责人要求定版布局）：
+//   · 嵌在 FilterBar 的白色框内（经 IntelligencePage → FilterBar rightSlot 传入），
+//     与「监控」同一行、框内右对齐 —— 不是框外独立条；
+//   · **开关**是视角的总开关（产品负责人明确要求保留）：
+//       关（公共池）：只显示 [开关] + [保存为视角]；
+//       开：显示 [开关] + [下拉] + [设为默认] + [删除]；
+//     开且没有激活视角时（如用户曾手动回公共池）→ 启用默认视角（无默认则第一个）；
+//   · 下拉第一项「回公共池」也等于关，两个入口等价；
+//   · 视角名只在下拉选中项里出现一次，不另行渲染。
+// 纯展示组件：数据/动作全走 props；开关/表单开合/「忽略」里的 handler 与瞬态
+// 静态渲染够不着，照实登记为盲区（浏览器冒烟覆盖）。
 
 function palette(darkMode) {
   return {
     text: darkMode ? "#e8e8e8" : COLORS.text.primary,
     muted: darkMode ? "#888" : COLORS.text.secondary,
-    cardBg: darkMode ? COLORS.background.cardDark : COLORS.background.card,
     border: darkMode ? COLORS.border.dark : COLORS.border.light,
     fieldBg: darkMode ? "#141722" : COLORS.background.card
   };
 }
 
 const BTN = {
-  padding: "6px 12px",
+  padding: "5px 12px",
   borderRadius: BORDER_RADIUS.sm,
   fontSize: FONT_SIZES.sm,
   fontWeight: 600,
@@ -53,9 +54,17 @@ export default function ViewsBar({
 
   const handleSelect = (e) => {
     const id = e.target.value;
-    if (id === "") return onSelect(null);   // 「回公共池」= 关闭视角
+    if (id === "") return onSelect(null);   // 「回公共池」= 关
     const view = (views || []).find((v) => String(v.id) === id);
     if (view) onSelect(view);
+  };
+
+  // 开关：关 → 开 = 启用默认视角（无默认则第一个）；开 → 关 = 回公共池
+  const handleToggle = () => {
+    if (activeView) return onSelect(null);
+    const list = views || [];
+    const def = list.find((v) => v.is_default) || list[0];
+    if (def) onSelect(def);
   };
 
   const handleSave = async () => {
@@ -84,8 +93,31 @@ export default function ViewsBar({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        {/* 总开关：公共池（关）时它是唯一与视角相关的控件之一 */}
+        <button
+          role="switch"
+          aria-checked={Boolean(activeView)}
+          aria-label={t.views.toggleLabel}
+          onClick={handleToggle}
+          disabled={!activeView && (views || []).length === 0}
+          title={t.views.toggleLabel}
+          style={{
+            width: 40, height: 22, borderRadius: 11, border: "none",
+            background: activeView ? COLORS.primary : p.border,
+            cursor: "pointer", position: "relative",
+            transition: `background ${TRANSITIONS.fast}`,
+            flexShrink: 0
+          }}
+        >
+          <span style={{
+            position: "absolute", top: 3, left: activeView ? 21 : 3,
+            width: 16, height: 16, borderRadius: "50%", background: "#fff",
+            transition: `left ${TRANSITIONS.fast}`
+          }} />
+        </button>
+
         {!activeView && !saveOpen && (
           <button onClick={() => setSaveOpen(true)} style={{ ...BTN, border: `1px solid ${p.border}`, background: "transparent", color: p.text }}>
             {t.views.saveAsView}
@@ -100,9 +132,9 @@ export default function ViewsBar({
               placeholder={zh ? "视角名称" : "View name"}
               aria-label={zh ? "视角名称" : "View name"}
               style={{
-                padding: "6px 10px", borderRadius: BORDER_RADIUS.sm,
+                padding: "5px 10px", borderRadius: BORDER_RADIUS.sm,
                 border: `1px solid ${p.border}`, background: p.fieldBg, color: p.text,
-                fontSize: FONT_SIZES.sm, outline: "none", width: 160
+                fontSize: FONT_SIZES.sm, outline: "none", width: 150
               }}
             />
             <button onClick={handleSave} disabled={busy || !saveName.trim()} style={{ ...BTN, border: "none", background: COLORS.primary, color: "#fff" }}>
@@ -121,9 +153,9 @@ export default function ViewsBar({
               onChange={handleSelect}
               aria-label={t.views.myViews}
               style={{
-                padding: "6px 10px", borderRadius: BORDER_RADIUS.sm,
+                padding: "5px 10px", borderRadius: BORDER_RADIUS.sm,
                 border: `1px solid ${p.border}`, background: p.fieldBg, color: p.text,
-                fontSize: FONT_SIZES.sm, outline: "none", maxWidth: 220
+                fontSize: FONT_SIZES.sm, outline: "none", maxWidth: 200
               }}
             >
               <option value="">{t.views.backToPublic}</option>
@@ -148,7 +180,7 @@ export default function ViewsBar({
       {showDriftBar && (
         <div style={{
           display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end",
-          padding: "8px 12px", borderRadius: BORDER_RADIUS.sm,
+          padding: "6px 10px", borderRadius: BORDER_RADIUS.sm,
           background: darkMode ? "#2a2d3a" : "#fff8e1",
           border: `1px solid ${darkMode ? COLORS.border.dark : "#f5c518"}`
         }}>

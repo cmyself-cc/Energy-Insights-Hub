@@ -19,7 +19,7 @@ export default function FilterBar({
   onChange,
   onSearch,
   loading
-}) {
+, rightSlot }) {
   const t = i18n[language];
   const isMobile = useIsMobile();
   const [businessCategories, setBusinessCategories] = useState([]);
@@ -147,6 +147,10 @@ export default function FilterBar({
           }} />}
           {language === "zh" ? "全部" : "All"}
         </button>
+        {/* 视角控件（ViewsBar）嵌在框内监控行右端；非移动端才有空间 */}
+        {!isMobile && rightSlot && (
+          <div style={{ marginLeft: "auto", flexShrink: 0 }}>{rightSlot}</div>
+        )}
         {isMobile && (
           <button
             onClick={() => setSearchOpen(!searchOpen)}

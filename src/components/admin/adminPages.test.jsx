@@ -1311,48 +1311,54 @@ const renderBar = (props = {}) =>
       {...props} />
   );
 
-describe("ViewsBar — 视角条（Task 11 布局；2026-10 按产品负责人要求重做）", () => {
-  it("🔴 关闭态（公共池）：只渲染「保存为视角」一个按钮 —— 无下拉、无设为默认/删除", () => {
+describe("ViewsBar — 视角控件（嵌监控框内布局，产品负责人定版）", () => {
+  it("🔴 公共池（关）：只有 [开关(unchecked)] + [保存为视角] —— 无下拉、无设为默认/删除", () => {
     const html = renderBar();
+    expect(html).toContain('role="switch"');
+    expect(html).toContain('aria-checked="false"');
     expect(html).toContain(i18n.en.views.saveAsView);
     expect(html).not.toContain("<select");
     expect(html).not.toContain(`>${i18n.en.views.setDefault}<`);
     expect(html).not.toContain(`>${i18n.en.views.deleteView}<`);
   });
 
-  it("🔴 激活态：下拉 + 设为默认 + 删除；视角名只在 option 里出现一次（不重复显示）", () => {
+  it("🔴 视角开启：[开关(checked)] + 下拉 + 设为默认 + 删除；视角名只在 option 出现一次", () => {
     const html = renderBar({ activeViewId: 2 });
+    expect(html).toContain('aria-checked="true"');
     expect(html).toContain("<select");
     expect(html).toContain(i18n.en.views.setDefault);
     expect(html).toContain(i18n.en.views.deleteView);
-    // 「竞品雷达」只应作为下拉 option 出现一次（产品负责人：名字下拉里已有，别重复）
     const occurrences = html.split("竞品雷达").length - 1;
-    expect(occurrences).toBe(1);
-    // 且必须包在 <option> 里
-    expect(html).toMatch(/<option[^>]*>竞品雷达/);
+    expect(occurrences).toBe(1);                       // 不重复显示视角名
+    expect(html).toMatch(/<option[^>]*>竞品雷达/);      // 且包在 option 里
   });
 
-  it("下拉第一项是「回公共池」（关闭视角的入口 —— 原开关按钮已删，功能被它吸收）", () => {
+  it("视角列表为空且未开启时开关禁用（没有可开的视角）", () => {
+    const html = renderBar({ views: [] });
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain("disabled");
+  });
+
+  it("下拉第一项是「回公共池」（与开关等价的双重关闭入口）；默认视角带 ★", () => {
     const html = renderBar({ activeViewId: 1 });
-    expect(html).toContain(i18n.en.views.backToPublic);
-    expect(html).toMatch(/<option value="">/);   // 空 value = 回公共池分支
+    expect(html).toMatch(/<option value="">/);
+    expect(html).toContain("光伏追踪 ★");
   });
 
-  it("默认视角在 option 文案里带 ★；drift 条仅激活+drift 时出现", () => {
-    const on = renderBar({ activeViewId: 1 });
-    expect(on).toContain("光伏追踪 ★");
+  it("drift 条仅「开启 + drift」时出现", () => {
     expect(renderBar({ activeViewId: 1, drift: true })).toContain(i18n.en.views.driftHint);
     expect(renderBar({ activeViewId: 1, drift: false })).not.toContain(i18n.en.views.driftHint);
     expect(renderBar({ drift: true })).not.toContain(i18n.en.views.driftHint);
   });
 
-  it("「保存为视角」入口 en/zh 文案（views 9 键的消费者）", () => {
+  it("「保存为视角」/开关 en/zh 文案（views 9 键的消费者）", () => {
     expect(renderBar()).toContain(i18n.en.views.saveAsView);
     const zh = renderToStaticMarkup(
       <ViewsBar darkMode={false} language="zh" views={VIEWS} activeViewId={null} drift={false}
         onSelect={noopT10} onSave={noopT10} onUpdateCurrent={noopT10} onDelete={noopT10} onSetDefault={noopT10} />
     );
     expect(zh).toContain(i18n.zh.views.saveAsView);
+    expect(zh).toContain('role="switch"');
   });
 });
 
