@@ -107,8 +107,14 @@ export default function IntelligencePage(props) {
     <div>
       {subTab === "feed" && (
         <>
-          {props.viewsBar}
-          <FilterBar darkMode={darkMode} language={language} filters={filters} onChange={onFilterChange} onSearch={onSearch} loading={loading} />
+          {/* 视角条与监控筛选同一行、右对齐（产品负责人 2026-10 布局要求）。
+              FilterBar 占剩余宽度；视角条内容右对齐由 ViewsBar 自身的 flex-end 保证。 */}
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <FilterBar darkMode={darkMode} language={language} filters={filters} onChange={onFilterChange} onSearch={onSearch} loading={loading} />
+            </div>
+            <div>{props.viewsBar}</div>
+          </div>
         </>
       )}
 

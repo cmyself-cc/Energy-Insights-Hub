@@ -294,8 +294,15 @@ export default function App() {
   };
   const saveViewAs = async (name) => {
     try {
-      await backendApi.createView({ name, filters: filtersToView(filters) });
+      const res = await backendApi.createView({ name, filters: filtersToView(filters) });
       await reloadViews();
+      // 保存即启用：ViewsBar 关闭态只有「保存为视角」一个按钮（无下拉），
+      // 若不在这里激活，新视角没有任何入口被打开。视角用的就是当前筛选，无需改 filters。
+      const created = res?.data;
+      if (created?.id) {
+        setActiveViewId(created.id);
+        localStorage.removeItem(`view_off_${userId}`);
+      }
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e?.message || "" };  // 超限（400 view limit reached）走这条

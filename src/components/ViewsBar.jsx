@@ -2,11 +2,15 @@ import { useState, useEffect } from "react";
 import { i18n } from "../constants/i18n";
 import { COLORS, FONT_SIZES, BORDER_RADIUS, TRANSITIONS } from "../constants/theme";
 
-// 情报页视角开关与管理条（Task 11 / M3，对齐 VIEW-4/5/6/8）。
-// 刻意做成**纯展示组件**：数据与动作全部走 props（views/activeViewId/drift/on*），
-// 数据加载与筛选应用由 App 负责 —— 这样 renderToStaticMarkup 能直接观察
-// 「列表渲染 / 激活态 / 偏离提示 / 错误态」，不依赖 effect。
-// 唯一的内部状态是表单开合与「忽略本次偏离」这类纯 UI 瞬态。
+// 情报页视角条（Task 11 / M3；本文件 2026-10 按产品负责人要求重做布局）：
+//   · 与 FilterBar（监控筛选行）同一行、右对齐 —— 由 IntelligencePage 的 flex 父容器保证；
+//   · 关闭态（公共池）：**只**渲染「保存为视角」一个按钮 —— 无下拉、无管理按钮；
+//     保存成功由 App 侧自动启用新视角（否则关闭态没有入口打开视角）。
+//   · 激活态：下拉（选中项即视角名，option 里带 ★ 默认标记；第一项「回公共池」= 关闭
+//     入口，原开关按钮已删，功能被它吸收）+「设为默认」+「删除」。
+//   · 刻意**不重复渲染视角名**：下拉选中项已经显示名字（产品负责人明确要求）。
+// 纯展示组件：数据/动作全走 props，静态渲染可观察三态；保存表单开合与「忽略」是
+// 纯 UI 瞬态（内部 state），照实登记为静态盲区。
 
 function palette(darkMode) {
   return {
@@ -19,7 +23,7 @@ function palette(darkMode) {
 }
 
 const BTN = {
-  padding: "5px 12px",
+  padding: "6px 12px",
   borderRadius: BORDER_RADIUS.sm,
   fontSize: FONT_SIZES.sm,
   fontWeight: 600,
@@ -49,8 +53,8 @@ export default function ViewsBar({
 
   const handleSelect = (e) => {
     const id = e.target.value;
-    if (id === "") return onSelect(null);
-    const view = views.find((v) => String(v.id) === id);
+    if (id === "") return onSelect(null);   // 「回公共池」= 关闭视角
+    const view = (views || []).find((v) => String(v.id) === id);
     if (view) onSelect(view);
   };
 
@@ -68,6 +72,7 @@ export default function ViewsBar({
     }
     setSaveOpen(false);
     setSaveName("");
+    // 激活由 App 的 saveViewAs 完成（它拿得到新视角 id）
   };
 
   const handleUpdate = async () => {
@@ -79,63 +84,55 @@ export default function ViewsBar({
   };
 
   return (
-    <div style={{
-      background: p.cardBg, border: `1px solid ${p.border}`, borderRadius: BORDER_RADIUS.md,
-      padding: "10px 14px", marginBottom: 12,
-      display: "flex", flexDirection: "column", gap: 10
-    }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ fontSize: FONT_SIZES.sm, fontWeight: 600, color: p.text }}>{t.views.toggleLabel}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        {!activeView && !saveOpen && (
+          <button onClick={() => setSaveOpen(true)} style={{ ...BTN, border: `1px solid ${p.border}`, background: "transparent", color: p.text }}>
+            {t.views.saveAsView}
+          </button>
+        )}
 
-        {/* 开关：开 = 启用视角（列表非空时启用第一个）；关 = 回公共池（VIEW-4） */}
-        <button
-          role="switch"
-          aria-checked={Boolean(activeView)}
-          onClick={() => {
-            if (activeView) return onSelect(null);
-            const first = (views || [])[0];
-            if (first) onSelect(first);
-          }}
-          disabled={!activeView && (views || []).length === 0}
-          style={{
-            width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
-            background: activeView ? COLORS.primary : p.border,
-            position: "relative", transition: `background ${TRANSITIONS.fast}`
-          }}
-          aria-label={t.views.toggleLabel}
-        >
-          <span style={{
-            position: "absolute", top: 3, left: activeView ? 21 : 3,
-            width: 16, height: 16, borderRadius: "50%", background: "#fff",
-            transition: `left ${TRANSITIONS.fast}`
-          }} />
-        </button>
-
-        <select
-          value={activeView ? String(activeView.id) : ""}
-          onChange={handleSelect}
-          aria-label={t.views.myViews}
-          style={{
-            padding: "6px 10px", borderRadius: BORDER_RADIUS.sm,
-            border: `1px solid ${p.border}`, background: p.fieldBg, color: p.text,
-            fontSize: FONT_SIZES.sm, outline: "none", maxWidth: 260
-          }}
-        >
-          <option value="">{t.views.backToPublic}</option>
-          {(views || []).map((v) => (
-            <option key={v.id} value={String(v.id)}>
-              {v.name}{v.is_default ? " ★" : ""}
-            </option>
-          ))}
-        </select>
-
-        <button onClick={() => setSaveOpen(!saveOpen)} style={{ ...BTN, border: `1px solid ${p.border}`, background: "transparent", color: p.text }}>
-          {t.views.saveAsView}
-        </button>
+        {!activeView && saveOpen && (
+          <>
+            <input
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder={zh ? "视角名称" : "View name"}
+              aria-label={zh ? "视角名称" : "View name"}
+              style={{
+                padding: "6px 10px", borderRadius: BORDER_RADIUS.sm,
+                border: `1px solid ${p.border}`, background: p.fieldBg, color: p.text,
+                fontSize: FONT_SIZES.sm, outline: "none", width: 160
+              }}
+            />
+            <button onClick={handleSave} disabled={busy || !saveName.trim()} style={{ ...BTN, border: "none", background: COLORS.primary, color: "#fff" }}>
+              {zh ? "保存" : "Save"}
+            </button>
+            <button onClick={() => { setSaveOpen(false); setError(""); }} style={{ ...BTN, border: `1px solid ${p.border}`, background: "transparent", color: p.text }}>
+              {zh ? "取消" : "Cancel"}
+            </button>
+          </>
+        )}
 
         {activeView && (
           <>
-            <span style={{ fontSize: FONT_SIZES.sm, color: p.muted }}>{activeView.name}</span>
+            <select
+              value={String(activeView.id)}
+              onChange={handleSelect}
+              aria-label={t.views.myViews}
+              style={{
+                padding: "6px 10px", borderRadius: BORDER_RADIUS.sm,
+                border: `1px solid ${p.border}`, background: p.fieldBg, color: p.text,
+                fontSize: FONT_SIZES.sm, outline: "none", maxWidth: 220
+              }}
+            >
+              <option value="">{t.views.backToPublic}</option>
+              {(views || []).map((v) => (
+                <option key={v.id} value={String(v.id)}>
+                  {v.name}{v.is_default ? " ★" : ""}
+                </option>
+              ))}
+            </select>
             <button onClick={async () => { setError(""); try { await onSetDefault(activeView); } catch (e) { setError(e?.message || ""); } }}
               style={{ ...BTN, border: `1px solid ${p.border}`, background: "transparent", color: p.text }}>
               {t.views.setDefault}
@@ -148,36 +145,14 @@ export default function ViewsBar({
         )}
       </div>
 
-      {saveOpen && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <input
-            value={saveName}
-            onChange={(e) => setSaveName(e.target.value)}
-            placeholder={zh ? "视角名称" : "View name"}
-            aria-label={zh ? "视角名称" : "View name"}
-            style={{
-              padding: "6px 10px", borderRadius: BORDER_RADIUS.sm,
-              border: `1px solid ${p.border}`, background: p.fieldBg, color: p.text,
-              fontSize: FONT_SIZES.sm, outline: "none"
-            }}
-          />
-          <button onClick={handleSave} disabled={busy || !saveName.trim()} style={{ ...BTN, border: "none", background: COLORS.primary, color: "#fff" }}>
-            {zh ? "保存" : "Save"}
-          </button>
-          <button onClick={() => { setSaveOpen(false); setError(""); }} style={{ ...BTN, border: `1px solid ${p.border}`, background: "transparent", color: p.text }}>
-            {zh ? "取消" : "Cancel"}
-          </button>
-        </div>
-      )}
-
       {showDriftBar && (
         <div style={{
-          display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
+          display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end",
           padding: "8px 12px", borderRadius: BORDER_RADIUS.sm,
           background: darkMode ? "#2a2d3a" : "#fff8e1",
           border: `1px solid ${darkMode ? COLORS.border.dark : "#f5c518"}`
         }}>
-          <span style={{ fontSize: FONT_SIZES.sm, color: p.text, flex: 1, minWidth: 200 }}>{t.views.driftHint}</span>
+          <span style={{ fontSize: FONT_SIZES.sm, color: p.text }}>{t.views.driftHint}</span>
           <button onClick={handleUpdate} disabled={busy} style={{ ...BTN, border: "none", background: COLORS.primary, color: "#fff" }}>
             {t.views.updateView}
           </button>
