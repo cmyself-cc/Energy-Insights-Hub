@@ -32,8 +32,7 @@ function statusBadge(status, language) {
   return { text: "", color: "", bg: "" };
 }
 
-// eslint-disable-next-line no-unused-vars -- App.jsx:430 传入但本组件未调用（报告查看已改由 openReportId 驱动）；待产品确认是恢复接线还是移除
-export default function ReportsPage({ darkMode, language, user, openReportId, onOpenReportHandled, titleSlotEl, onViewReport, onGenerateDailyBriefing }) {
+export default function ReportsPage({ darkMode, language, user, openReportId, onOpenReportHandled, titleSlotEl, onGenerateDailyBriefing }) {
   const t = i18n[language];
   const isMobile = useIsMobile();
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;

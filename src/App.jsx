@@ -602,9 +602,6 @@ export default function App() {
               titleSlotEl={titleSlotEl}
               openReportId={openReportId}
               onOpenReportHandled={() => setOpenReportId(null)}
-              onViewReport={(report) => {
-                setNewsletter(report.content);
-              }}
               onGenerateDailyBriefing={() => {
                 // 获取昨天和今天的所有 insights
                 const today = new Date();
