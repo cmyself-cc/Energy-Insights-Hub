@@ -333,3 +333,71 @@ describe("storage.getStoredLanguage — 值域校验", () => {
   // console.error，会往全量输出新增一个 stderr 块（硬指标是 12 块）。而那个分支的返回值
   // 本轮没有改动，不值得为它破坏指标。
 });
+
+
+// —— theme token 之间的对比度契约（A4 禁用态配色的**理由**）——
+//
+// 为什么需要这一块：控制器的变异 C-C 把 COLORS.background.disabled 从 #f0f0f0 换成 #555，
+// 全量 336 条**全绿**。而 #555 正是评审提出、被控制器否掉的那个候选 —— 它与启用态
+// primary(#1a6b3c) 的亮度差只有 **1.14**，几乎同亮度、只靠色相区分；灰度打印与红绿色盲下
+// 「禁用」与「启用」不可分辨，正好把 A4 原本要修的缺陷重造一遍。
+// 组件层那几条断言引用 token 而不是抄字面值（这是对的：调 token 不该让测试红），代价就是
+// **token 之间的关系无人观察**。这一块补的正是那个关系：断言的是比例，不是色值。
+//
+// 算法是 WCAG 2.x 的相对亮度 + 对比度，纯算术、零依赖、不需要 jsdom。
+// 先自检三个已发表参考值，免得算法本身错了却把结论当证据 —— 本分支已经三次算错对比度：
+// 注释里的 4.77 实为 4.627；控制器派发表里的 6.751/6.15/1.16/15.29 实为 6.542/5.737/1.140/14.394
+// （根因是手算亮度时对高于阈值的通道误用了线性分支）。
+function srgbChannel(v) {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(hex) {
+  const s = hex.replace("#", "");
+  const full = s.length === 3 ? s.split("").map((c) => c + c).join("") : s;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+  return 0.2126 * srgbChannel(r) + 0.7152 * srgbChannel(g) + 0.0722 * srgbChannel(b);
+}
+
+function contrastRatio(a, b) {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+describe("theme tokens — A4 禁用态配色契约", () => {
+  it("算法自检：三个已发表参考值必须先对得上", () => {
+    expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21.0, 3);
+    expect(contrastRatio("#767676", "#ffffff")).toBeCloseTo(4.5422, 3);
+    expect(contrastRatio("#777777", "#ffffff")).toBeCloseTo(4.4781, 3);
+    // 3 位 hex 展开必须与 6 位等价（theme.js 里两种写法都有：text.secondary 是 "#555"）
+    expect(contrastRatio("#555", "#f0f0f0")).toBeCloseTo(contrastRatio("#555555", "#f0f0f0"), 6);
+  });
+
+  it("两种状态的标签都过 WCAG AA 4.5:1，且禁用态那一对与配色模式无关", () => {
+    // 禁用态：#555 on #f0f0f0 实测 6.542。这一对里没有任何随 darkMode 变化的量，
+    // 所以浅色/深色是同一个数 —— 旧实现（primary 填充 + opacity 0.45）在浅色下只有 2.082。
+    expect(contrastRatio(COLORS.text.secondary, COLORS.background.disabled)).toBeGreaterThanOrEqual(4.5);
+    // 启用态：白字 on primary 实测 6.537
+    expect(contrastRatio("#fff", COLORS.primary)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("🔴 禁用态填充与启用态填充在**灰度**下可分辨（C-C 变异体就是打这里）", () => {
+    // 阈值 3:1 取自 WCAG 1.4.11 对非文本对比度的下限。今天实测 5.737；被否掉的 #555 候选只有
+    // 1.140 —— 那条路会让「禁用」只靠色相表达。要改这个 token，先重算这条比例再改断言。
+    expect(contrastRatio(COLORS.background.disabled, COLORS.primary)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("禁用态填充比启用态**更浅**（「洗掉」的通用视觉语言）", () => {
+    // 这是上一条之外独立的性质：#555 的亮度(0.0908)比 primary(0.1106)还低，即使亮度差过了 3:1，
+    // 「比启用态更暗」也会与 disabled 的通用观感相反。今天 #f0f0f0 的亮度是 0.8714。
+    expect(relativeLuminance(COLORS.background.disabled)).toBeGreaterThan(relativeLuminance(COLORS.primary));
+  });
+
+  // 🔴 刻意**不**断言「禁用态填充 vs 卡片轮廓」的下限：浅色下实测只有 1.140，而 WCAG 对
+  // inactive 控件豁免（1.4.3 / 1.4.11）。要把它提到 3:1 就必须压暗填充，而压暗会同时压掉上面
+  // 那条标签对比 —— 两个目标互相打架，所以这里选择保住标签可读性。深色下同一对是 14.394，
+  // 即这个豁免只在浅色模式里真正起作用。这个取舍是有意的，别当缺陷「顺手修」。
+});

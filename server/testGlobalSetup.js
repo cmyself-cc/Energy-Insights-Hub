@@ -40,10 +40,15 @@ export async function teardown() {
   // 的情况：那时上面的解析会得到生产库名，于是这里会响亮地失败，而不是去检查一个错的库、
   // 然后「安静地通过」。
   if (path.basename(DB_PATH) !== TEST_DB_BASENAME) {
-    throw new Error(
-      `[testGlobalSetup] refusing to inspect a non-test database: resolved path is "${DB_PATH}" `
-      + `(basename must be exactly "${TEST_DB_BASENAME}"). Check NODE_ENV / DB_PATH / DATA_DIR.`
-    );
+    const msg = `[testGlobalSetup] refusing to inspect a non-test database: resolved path is "${DB_PATH}" `
+      + `(basename must be exactly "${TEST_DB_BASENAME}"). Check NODE_ENV / DB_PATH / DATA_DIR.`;
+    // 🔴 这条护栏自己也必须**摁下退出码**，理由与下面那个 dirty 分支完全相同：光 throw 是没有牙的
+    // （vitest 的 close() 只 logger.error 一条 "error during close"，不参与退出码）。而这条护栏
+    // 触发的场景恰恰是「环境变量指错了库」—— 此时整轮测试已经用错误的库跑完了，如果退出码还是 0，
+    // CI 会绿灯放过一次可能读写过生产库的运行。控制器实测：只 throw 时 process.exitCode 是 undefined。
+    process.exitCode = 1;
+    console.error(msg);
+    throw new Error(msg);
   }
 
   // 全新克隆还没跑过任何测试时文件不存在，这不是失败。
@@ -69,14 +74,16 @@ export async function teardown() {
         + `管不到文件跑完之后。单跑可疑文件（npx vitest run <file>）再读这 5 张表即可定位。`
         + ` 库路径：${DB_PATH}`;
       // 🔴 光 throw 是**没有牙的**，实测过：vitest 4.1.10 的 Vitest.close()
-      // （node_modules/vitest/dist/chunks/cli-api.BK8pd4xc.js:13937-13950）把 teardown 的错误
-      // 收进 teardownErrors，然后只 `logger.error("error during close", …)` 打一条日志，
-      // **不参与退出码计算** —— 掏空 023_users_auth.test.js 的 afterAll 之后重跑，
-      // 输出是 `Test Files 1 passed (1)` + 一条 "error during close"，而 `npx vitest run`
-      // 仍然 **exit 0**。那样的话这个钩子只是装饰。
+      // （node_modules/vitest/dist/chunks/cli-api.BK8pd4xc.js —— teardown 错误在 :13938 被
+      // push 进 teardownErrors，:13954 只 `logger.error("error during close", …)` 打一条日志，
+      // 整条路径上**没有任何 process.exitCode 赋值**）—— 掏空 023_users_auth.test.js 的
+      // afterAll 之后重跑，输出是 `Test Files 1 passed (1)` + 一条 "error during close"，而
+      // `npx vitest run` 仍然 **exit 0**。那样的话这个钩子只是装饰。
       // 所以退出码必须自己摁下去：globalSetup 与 vitest 主进程同一个进程，vitest 自己的
-      // 错误路径也是用 process.exitCode = 1（同文件 :14565），而它退出时调的
+      // 错误路径也是用 process.exitCode = 1（同文件 :14566），而它退出时调的
       // process.exit() 不带参数、会沿用这个值。
+      // 控制器复核：以上行号与「:13900-14000 区间内唯一的 exitCode 赋值在 :13914、属
+      // unhandled-error 路径、与本路径无关」均已亲自 grep 过。
       process.exitCode = 1;
       console.error(msg);
       // 仍然 throw：让 vitest 那条 "error during close" 也带上消息与栈，两处都看得见。

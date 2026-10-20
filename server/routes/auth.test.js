@@ -442,11 +442,16 @@ describe("oauth state binding (login CSRF) + /config idempotency", () => {
     } finally { await close(); }
   });
 
-  // M-2：钉住 stateFrom 的 typeof 守卫（auth.js 的「?state=a&state=b 会被 express 解析成数组」
-  // 那条注释）。守卫本身今天是对的，但此前**零观察者** —— 把它换成「取首元素」这种看起来完全
-  // 合理的兼容写法（Array.isArray(q) ? q[0] : q），19 条用例全绿。注意变异后的行为并不构成
-  // 新洞（cookie 绑定仍然生效），所以这是 Minor；但「注释声称防了某个形状、而该形状无人观察」
-  // 本身就是缺陷。用**与自己 cookie 相同**的值做阳性对照形状：只有守卫真的生效才会被拒。
+  // M-2：钉住「数组形状的 state 必须被拒」。⚠️ **归属订正**：这里早先写的是「钉住 stateFrom 的
+  // typeof 守卫」，记错了承重墙。这条链上有两层 typeof 检查 —— stateFrom 自己那层，和 validState
+  // 里那层（`typeof v === "string" && OAUTH_STATE_RE.test(v)`）。评审的 G10 变异把 stateFrom 的
+  // `if (typeof q === "string")` 换成 `if (q !== undefined)`（其余控制流不变），**全量套件 SURVIVED**
+  // → stateFrom 那层是纵深冗余，数组最终是被 **validState** 拒掉的。
+  // 那本用例到底钉住了什么？钉住的是「**不许把数组摊平**」：换成 `Array.isArray(q) ? q[0] : q`
+  // 这种看起来完全合理的兼容写法时，摊平之后 validState 看到的就是合法字符串了，于是这条用例会红
+  // （19 条用例的时代全绿，所以此前确实零观察者）。注意摊平后的行为并不构成新洞（cookie 绑定仍然
+  // 生效），所以那是 Minor；但「注释声称防了某个形状、而该形状无人观察」本身就是缺陷。
+  // 用**与自己 cookie 相同**的值做阳性对照形状：只有拒绝真的发生才会走到 REJECT_TO。
   it("rejects an array-shaped state (?state=a&state=b) even when both values match the browser's own cookie", async () => {
     const { port, close } = await listen(buildApp());
     try {
