@@ -26,6 +26,10 @@ export default function App() {
   // Task 11 / M3 自定义视角：activeViewId=null 表示公共池（VIEW-4）
   const [views, setViews] = useState([]);
   const [activeViewId, setActiveViewId] = useState(null);
+  // 视角列表是否已解析：登录首拉 /api/insights 必须等它 —— 否则默认视角还没生效
+  // 就会先按默认筛选白打一次请求（2026-10-21 实测登录连发两次 page=1 请求的根因）。
+  // getViews 无论成败都要置 true，否则请求永远不发。
+  const [viewsReady, setViewsReady] = useState(false);
   const activeView = views.find((v) => v.id === activeViewId) || null;
   const viewDrift = activeView ? isDrift(activeView.filters, filters) : false;
   const [insights, setInsights] = useState([]);
@@ -116,9 +120,14 @@ export default function App() {
   // 登录之后根本不会再跑一次 —— 只在里面加 if 守卫是修不好的，必须让它依赖身份。
   useEffect(() => {
     if (!userId) return;
-    loadInsightsFromBackend();
+    // 首屏 insights 不在这里拉：下方防抖 effect（依赖 userId）会做。这里若再拉
+    // 一次（loadInsightsFromBackend，且无筛选参数）就会与 fetchInsights 职责重叠、
+    // 登录瞬间连发两次 /api/insights（2026-10-21 实测）。loadInsightsFromBackend
+    // 现在只服务 onTrackerComplete（抓取完成后的静默全量刷新）。
     backendApi.getReportTemplates(user?.role === "admin").then(r => setReportTemplates(r.data || [])).catch(() => {});
-    // 视角列表 + 默认视角自动启用（VIEW-5）：用户显式关过（view_off_<id>）则尊重其选择
+    // 视角列表 + 默认视角自动启用（VIEW-5）：用户显式关过（view_off_<id>）则尊重其选择。
+    // viewsReady 先复位再等 getViews 解析：换用户登录时不拿旧用户的视角列表做判断。
+    setViewsReady(false);
     backendApi.getViews().then(r => {
       const list = r.data || [];
       setViews(list);
@@ -127,7 +136,7 @@ export default function App() {
         setActiveViewId(def.id);
         setFilters(viewToFilters(def.filters));
       }
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setViewsReady(true));
     // 主体关键词：用于洞察卡片标题中突出显示主体
     // 来源：企业/主体规则（competitor/policy/tech）+ 行业初筛关键词（industry）
     Promise.all([backendApi.getFilterRules(), backendApi.getIndustryCategories()])
@@ -369,12 +378,14 @@ export default function App() {
     // 未登录时不打 /api/insights（Task 6 之后它在鉴权墙内，只会收到 401）。
     // 依赖里带上 userId：登录那一刻 filters 没变，不靠这个依赖不会自动拉首屏数据。
     // ⚠️ 绝不能加 insights.length —— 见上面 fetchInsights 的依赖说明。
-    if (!userId) return;
+    // viewsReady 门：登录首拉必须等视角列表解析完（默认视角可能改写 filters），
+    // 否则默认筛选白打一次、视角筛选再打一次（双请求根因，2026-10-21）。
+    if (!userId || !viewsReady) return;
     const timer = setTimeout(() => {
       fetchInsights(false);
     }, filters.query ? 500 : 0);
     return () => clearTimeout(timer);
-  }, [filters, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters, userId, viewsReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load more function for infinite scroll
   const loadMore = useCallback(() => {
