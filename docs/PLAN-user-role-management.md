@@ -1327,7 +1327,7 @@ git commit -m "feat(auth): 全局鉴权挂载、requireAdmin 收紧配置面、a
 - Modify: `src/utils/backendApi.js`（credentials + auth 方法）、`src/App.jsx`、`src/components/Header.jsx`、`src/components/Sidebar.jsx`、`src/constants/i18n.js`
 
 **Interfaces:**
-- Produces: `backendApi.getAuthConfig/devLogin/wechatRegister/me/logout`；App 状态 `user`（`null | {id,unionid,nickname,avatar_url,role}`）与 `authUnknown`；`LoginGate` props `{ onLoggedIn }`
+- Produces: `backendApi.getAuthConfig/devLogin/registerWithInvite/me/logout`（`backendApi.js:35-39`；`registerWithInvite` 打 `POST /auth/register`、走 ticket + 邀请码，**与微信无关**，原名 `wechatRegister` 是计划阶段的误名）；App 状态 `user`（`null | {id,unionid,nickname,avatar_url,role,status}`，由 `sessions.js:30` 构造，`id` 就是 user id）与 `authReady`（`App.jsx:62`，原名 `authUnknown` 是误名，语义也已反转为「问完了」）；`LoginGate` props `{ onLoggedIn }`
 - 路由语义：`/login` hash `#invite=<ticket>` → 邀请码输入态；`#disabled` → 提示态；其余未登录 → 扫码等待态
 
 - [ ] **Step 1: backendApi 支持凭据与新端点**
