@@ -1312,14 +1312,33 @@ const renderBar = (props = {}) =>
   );
 
 describe("ViewsBar — 视角控件（嵌监控框内布局，产品负责人定版）", () => {
-  it("🔴 公共池（关）：只有 [开关(unchecked)] + [保存为视角] —— 无下拉、无设为默认/删除", () => {
+  it("🔴 公共池（关）：[自定义视角] 文字 + [保存为视角] + [开关 unchecked] 三项常在，无管理控件", () => {
     const html = renderBar();
+    expect(html).toContain(i18n.en.views.toggleLabel);      // 「自定义视角」文字
+    expect(html).toContain(i18n.en.views.saveAsView);
     expect(html).toContain('role="switch"');
     expect(html).toContain('aria-checked="false"');
-    expect(html).toContain(i18n.en.views.saveAsView);
     expect(html).not.toContain("<select");
     expect(html).not.toContain(`>${i18n.en.views.setDefault}<`);
     expect(html).not.toContain(`>${i18n.en.views.deleteView}<`);
+  });
+
+  it("🔴 顺序稳定（产品负责人：开合时组件不跳）：文字 < 保存按钮 < [管理控件] < 开关", () => {
+    for (const html of [renderBar(), renderBar({ activeViewId: 2 })]) {
+      const iLabel = html.indexOf(i18n.en.views.toggleLabel);
+      const iSave = html.indexOf(i18n.en.views.saveAsView);
+      const iSwitch = html.indexOf('role="switch"');
+      expect(iLabel).toBeGreaterThanOrEqual(0);
+      expect(iSave).toBeGreaterThan(iLabel);
+      expect(iSwitch).toBeGreaterThan(iSave);   // 开关永远在保存按钮之后（最右）
+    }
+    // 开关打开时管理控件夹在保存按钮与开关之间
+    const on = renderBar({ activeViewId: 2 });
+    const iSave = on.indexOf(i18n.en.views.saveAsView);
+    const iSetDef = on.indexOf(i18n.en.views.setDefault);
+    const iSwitch = on.indexOf('role="switch"');
+    expect(iSetDef).toBeGreaterThan(iSave);
+    expect(iSwitch).toBeGreaterThan(iSetDef);
   });
 
   it("🔴 视角开启：[开关(checked)] + 下拉 + 设为默认 + 删除；视角名只在 option 出现一次", () => {
