@@ -357,6 +357,69 @@ router.post("/register", (req, res) => {
   res.json({ data: { user: pu } });
 });
 
+// ── 用户名 + 邀请码登录体系（产品负责人 2026-10-21 定的主登录方式，微信扫码保留备用）──
+// 首开：有效邀请码 + 自设用户名 → 建号（码过期/达上限/停用只挡新注册，不挡老用户登录）；
+// 之后：同 pair 配对登录。身份 = 合成 unionid（"pair-" + sha256(码:用户名)）——
+// 天然把「用户名+邀请码」绑成全局唯一键，跨码重名互不冲突（不同码合成不同 unionid）。
+// 密码学上邀请码即凭证：暴力破解靠 5 次/分/IP 限速（复用 register 的同一闸门），
+// 配对失败一律统一文案，不泄露「用户名存在但码错」这种对半信息。
+const pairUnionid = (code, username) =>
+  "pair-" + sha256(`${String(code || "").trim().toUpperCase()}:${String(username || "").trim()}`);
+
+// 邀请码通用校验（与 /register 同一口径；注册类端点用，登录类端点**不**校验码状态——
+// 「邀请码过期后不可再添加新用户」，存量用户登录权不受码生命周期影响）
+const inviteRejectReason = (invite) =>
+  !invite ? "invalid invite code"
+  : invite.expires_at && db.prepare("SELECT datetime('now') < ? AS ok").get(invite.expires_at).ok !== 1 ? "invite code expired"
+  : invite.max_uses != null && invite.used_count >= invite.max_uses ? "invite code exhausted"
+  : null;
+
+router.post("/register-pair", (req, res) => {
+  const { code, username } = req.body || {};
+  if (rateLimited(clientKey(req))) return res.status(429).json({ error: "too many attempts, slow down" });
+  const name = String(username || "").trim();
+  if (!name || name.length > 30) return res.status(400).json({ error: "username must be 1-30 characters" });
+  const invite = db.prepare("SELECT * FROM invite_codes WHERE code = ? AND active = 1").get(String(code || "").trim().toUpperCase());
+  const reason = inviteRejectReason(invite);
+  if (reason) return res.status(400).json({ error: reason });
+  const unionid = pairUnionid(code, name);
+  if (findUserByUnionid(unionid)) {
+    return res.status(409).json({ error: "this username is already registered with that invite code" });
+  }
+  const register = db.transaction(() => {
+    db.prepare("UPDATE invite_codes SET used_count = used_count + 1 WHERE id = ?").run(invite.id);
+    db.prepare(
+      `INSERT INTO users (unionid, nickname, role, invited_by_code_id) VALUES (?, ?, ?, ?)`
+    ).run(unionid, name, invite.role, invite.id);
+    return findUserByUnionid(unionid);
+  });
+  let user;
+  try {
+    user = register();
+  } catch (e) {
+    // 不回显 e.message（匿名可达端点，better-sqlite3 原始消息会带 schema 内部信息），与 /register 同口径
+    console.error("[auth] register-pair failed:", e?.message || e);
+    return res.status(400).json({ error: "register failed" });
+  }
+  applyInviteDefaults(user.id, invite);
+  const pu = loginExisting(res, user);
+  res.status(201).json({ data: { user: pu } });
+});
+
+router.post("/login-pair", (req, res) => {
+  const { code, username } = req.body || {};
+  if (rateLimited(clientKey(req))) return res.status(429).json({ error: "too many attempts, slow down" });
+  const name = String(username || "").trim();
+  if (!name || !String(code || "").trim()) {
+    return res.status(400).json({ error: "username and invite code are required" });
+  }
+  const user = findUserByUnionid(pairUnionid(code, name));
+  if (!user) return res.status(401).json({ error: "invalid username or invite code" });
+  if (user.status !== "active") return res.status(403).json({ error: "account disabled" });
+  const pu = loginExisting(res, user);
+  res.json({ data: { user: pu } });
+});
+
 router.get("/me", requireAuth, (req, res) => res.json({ data: { user: req.user } }));
 
 router.post("/logout", requireAuth, (req, res) => {

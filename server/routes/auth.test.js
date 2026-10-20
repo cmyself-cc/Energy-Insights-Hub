@@ -636,3 +636,148 @@ describe("oauth state binding (login CSRF) + /config idempotency", () => {
 // 测试库跨进程持久：本文件每个用例都在 users / sessions / pending_identities / invite_codes 里
 // 留行，不清就会让后续套件（views / admin / apiRoutes）的 FK 与计数假设踩到别人的数据。
 afterAll(() => { clearAuthTables(); });
+
+describe("pair login 用户名+邀请码体系（产品负责人 2026-10-21）", () => {
+  beforeEach(() => {
+    __resetInviteLimiter();
+    clearAuthTables();
+    jar = makeCookieJar();
+  });
+
+  afterAll(() => {
+    clearAuthTables();
+  });
+
+  const seedCode = (code, extra = "") =>
+    db.prepare(`INSERT INTO invite_codes (code, label, role) VALUES (?, 'pair', 'user') ${extra}`).run(code);
+
+  it("register-pair：码+用户名建号 → 201、used_count+1、直接带会话，可用 /me 验证", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR01");
+      const r = await api(port, "/api/auth/register-pair", { body: { code: "pair01", username: "Alice" } });
+      expect(r.status).toBe(201);
+      expect(r.body.data.user.nickname).toBe("Alice");
+      expect(r.body.data.user.role).toBe("user");
+      expect(db.prepare("SELECT used_count FROM invite_codes WHERE code='PAIR01'").get().used_count).toBe(1);
+      const me = await api(port, "/api/auth/me", { method: "GET" });
+      expect(me.body.data.user.nickname).toBe("Alice");
+    } finally { await close(); }
+  });
+
+  it("register-pair：大小写不敏感（码大写存储，输入小写也能命中）", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR02");
+      const r = await api(port, "/api/auth/register-pair", { body: { code: "Pair02", username: "Bob" } });
+      expect(r.status).toBe(201);
+    } finally { await close(); }
+  });
+
+  it("register-pair：同码同用户名重复注册 → 409", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR03");
+      await api(port, "/api/auth/register-pair", { body: { code: "PAIR03", username: "Carol" } });
+      const r = await api(port, "/api/auth/register-pair", { body: { code: "PAIR03", username: "Carol" } });
+      expect(r.status).toBe(409);
+      expect(db.prepare("SELECT used_count FROM invite_codes WHERE code='PAIR03'").get().used_count).toBe(1);
+    } finally { await close(); }
+  });
+
+  it("register-pair：不同码同名不冲突（合成 unionid 天然隔离）", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR04A");
+      seedCode("PAIR04B");
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "PAIR04A", username: "Dave" } })).status).toBe(201);
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "PAIR04B", username: "Dave" } })).status).toBe(201);
+    } finally { await close(); }
+  });
+
+  it("register-pair：码过期 / 达上限 / 停用 → 400 且全仓统一文案", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      db.prepare(`INSERT INTO invite_codes (code, label, role, expires_at) VALUES ('EXPIRED', 'x', 'user', '2020-01-01 00:00:00')`).run();
+      db.prepare(`INSERT INTO invite_codes (code, label, role, max_uses, used_count) VALUES ('FULL', 'x', 'user', 1, 1)`).run();
+      db.prepare(`INSERT INTO invite_codes (code, label, role, active) VALUES ('OFF', 'x', 'user', 0)`).run();
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "EXPIRED", username: "E" } })).body.error).toBe("invite code expired");
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "FULL", username: "F" } })).body.error).toBe("invite code exhausted");
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "OFF", username: "O" } })).body.error).toBe("invalid invite code");
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "NOPE", username: "N" } })).body.error).toBe("invalid invite code");
+    } finally { await close(); }
+  });
+
+  it("register-pair：用户名为空或超长 → 400", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR05");
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "PAIR05", username: "  " } })).status).toBe(400);
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "PAIR05", username: "x".repeat(31) } })).status).toBe(400);
+    } finally { await close(); }
+  });
+
+  it("login-pair：配对成功 → 200 + 会话；码输入大小写不敏感", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR06");
+      await api(port, "/api/auth/register-pair", { body: { code: "PAIR06", username: "Eve" } });
+      jar = makeCookieJar();  // 换「浏览器」
+      const r = await api(port, "/api/auth/login-pair", { body: { code: "pair06", username: "Eve" } });
+      expect(r.status).toBe(200);
+      const me = await api(port, "/api/auth/me", { method: "GET" });
+      expect(me.body.data.user.nickname).toBe("Eve");
+    } finally { await close(); }
+  });
+
+  it("login-pair：pair 对不上 → 401 统一文案（不泄露哪一半错）", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR07");
+      await api(port, "/api/auth/register-pair", { body: { code: "PAIR07", username: "Frank" } });
+      const wrongCode = await api(port, "/api/auth/login-pair", { body: { code: "OTHER99", username: "Frank" } });
+      const wrongName = await api(port, "/api/auth/login-pair", { body: { code: "PAIR07", username: "Grace" } });
+      expect(wrongCode.status).toBe(401);
+      expect(wrongName.status).toBe(401);
+      expect(wrongCode.body.error).toBe(wrongName.body.error);
+    } finally { await close(); }
+  });
+
+  it("🔴 码过期后**存量用户仍可登录**（过期只挡新注册，产品负责人原话）", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR08");
+      await api(port, "/api/auth/register-pair", { body: { code: "PAIR08", username: "Hank" } });
+      db.prepare(`UPDATE invite_codes SET expires_at = '2020-01-01 00:00:00' WHERE code = 'PAIR08'`).run();
+      // 新注册被挡
+      expect((await api(port, "/api/auth/register-pair", { body: { code: "PAIR08", username: "Ivy" } })).status).toBe(400);
+      // 存量登录放行
+      jar = makeCookieJar();
+      const r = await api(port, "/api/auth/login-pair", { body: { code: "PAIR08", username: "Hank" } });
+      expect(r.status).toBe(200);
+    } finally { await close(); }
+  });
+
+  it("login-pair：被禁用的存量用户 → 403", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      seedCode("PAIR09");
+      await api(port, "/api/auth/register-pair", { body: { code: "PAIR09", username: "Iris" } });
+      db.prepare(`UPDATE users SET status = 'disabled' WHERE nickname = 'Iris'`).run();
+      const r = await api(port, "/api/auth/login-pair", { body: { code: "PAIR09", username: "Iris" } });
+      expect(r.status).toBe(403);
+      expect(r.body.error).toBe("account disabled");
+    } finally { await close(); }
+  });
+
+  it("限速：同一 IP 连打 6 次 login-pair → 第 6 次 429（复用 register 的 5/分闸门）", async () => {
+    const { port, close } = await listen(buildApp());
+    try {
+      for (let i = 0; i < 5; i++) {
+        await api(port, "/api/auth/login-pair", { body: { code: "X", username: `u${i}` } });
+      }
+      const r = await api(port, "/api/auth/login-pair", { body: { code: "X", username: "u5" } });
+      expect(r.status).toBe(429);
+    } finally { await close(); }
+  });
+});
