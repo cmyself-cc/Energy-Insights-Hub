@@ -78,8 +78,11 @@ export function mountApiRoutes(app) {
   // 之后**的 express.static 与 SPA 的 sendFile 若抛错（磁盘故障、路径问题），next(err)
   // 会绕过本中间件、落到 express 默认的 HTML 错误页。这是刻意接受的——那两条路径本来就是
   // 在给浏览器回 HTML，回一段 HTML 错误页比回一个 JSON 信封更对。
-  // 也不要为了「统一」把这个中间件在 index.js 末尾再注册一遍：重复注册会让同一个错误被
-  // 处理两次，第二次走进下面的 headersSent 分支、把连接直接销毁。
+  // 不要在 index.js 末尾再注册一遍——理由是上面那条（API 之外的错误本来就该回 HTML），
+  // **不是**「会处理两次」。实测（express 4.22.2，同一个 handler 注册两次、中间夹一层
+  // express.static）：4 参处理器只要不调 next()，中间件链就此终止，第二个注册点根本到不了，
+  // handler 只被调用 1 次、headersSent 恒为 false。重复注册的真实效果只是让它还能接住
+  // **两个注册点之间**那些层（express.static / SPA sendFile）的错误——那恰好是我们不想要的。
   app.use(jsonErrorHandler);
 }
 

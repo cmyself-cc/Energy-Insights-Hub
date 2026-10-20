@@ -147,7 +147,7 @@ router.post("/invite-codes", (req, res) => {
   const info = db.prepare(
     `INSERT INTO invite_codes (code, label, role, default_view, max_uses, expires_at, note, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(code, String(b.label || ""), b.role || "user", dv,
+  ).run(code, String(b.label || ""), b.role ?? "user", dv,
         mu.value, ex.value, String(b.note || ""), req.user.id);
   res.json({ data: db.prepare("SELECT * FROM invite_codes WHERE id=?").get(info.lastInsertRowid) });
 });

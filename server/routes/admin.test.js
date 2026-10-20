@@ -8,6 +8,9 @@ import { clearAuthTables, insertTestUser, listen, makeCookieJar } from "../testU
 
 function buildApp() {
   const app = express();
+  // 裸 express.json()（默认 100kb），刻意不与 apiRoutes.test.js 的 JSON_LIMIT（10mb，
+  // 为与 index.js 同构而设）对齐：本文件不断言 body 解析错误（entity.too.large 之类），
+  // limit 取值与这里任何一条断言都无关。要加这类断言时再同步。
   app.use(express.json());
   // 挂载形状与 views.test.js 的宿主 app 一致：中间件写在 router 之前（apiRoutes.js 里
   // 「挂载形状是硬约束」那段注释说明了为什么）。刻意不引用行号——行号会随改动漂移。
@@ -329,8 +332,9 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
       // 此时 active admin 只剩 adm 一个，但 role='admin' 的行有 2 个——
       // 少了 status 条件的计数会算出 2、放行，于是 active admin 归零、
       // 整个管理面永久失联，只能直接改库恢复。这正是 C5 存在的唯一理由。
-      // （上面 :280 那条 409 抓不到这个变异：那时 second 的 role 已经变成 'user'，
-      //   role='admin' 的行本来就只剩 1 个，带不带 status 条件结果一样。）
+      // （上面 C5 里「把 second 降成 user 之后、adm 仍是最后一个」那条 409 抓不到这个变异：
+      //   那时 second 的 role 已经变成 'user'，role='admin' 的行本来就只剩 1 个，
+      //   带不带 status 条件结果一样。刻意不引用行号——行号会随改动漂移。）
       expect((await api(port, `/api/admin/users/${second.id}`, admin.id, { method: "PATCH", body: { status: "disabled" } })).status).toBe(200);
       expect(adminCount(), "停用之后 active admin 只剩 adm").toBe(1);
       expect(db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin'").get().c,
