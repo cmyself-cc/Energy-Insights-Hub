@@ -112,7 +112,7 @@ export default function App() {
   useEffect(() => {
     if (!userId) return;
     loadInsightsFromBackend();
-    backendApi.getReportTemplates().then(r => setReportTemplates(r.data || [])).catch(() => {});
+    backendApi.getReportTemplates(user?.role === "admin").then(r => setReportTemplates(r.data || [])).catch(() => {});
     // 主体关键词：用于洞察卡片标题中突出显示主体
     // 来源：企业/主体规则（competitor/policy/tech）+ 行业初筛关键词（industry）
     Promise.all([backendApi.getFilterRules(), backendApi.getIndustryCategories()])
@@ -507,6 +507,7 @@ export default function App() {
             <ReportsPage
               darkMode={darkMode}
               language={language}
+              user={user}
               titleSlotEl={titleSlotEl}
               openReportId={openReportId}
               onOpenReportHandled={() => setOpenReportId(null)}
@@ -602,7 +603,7 @@ export default function App() {
           autoMode={dailyBriefingMode}
           onClose={() => { setShowReportModal(false); setDailyBriefingMode(false); }}
           onStarted={() => addToast(language === "zh" ? "报告已开始生成，进度见顶部进度条" : "Report generation started — see the progress bar at the top", "info")}
-          onTemplatesChanged={() => backendApi.getReportTemplates().then(r => setReportTemplates(r.data || [])).catch(() => {})}
+          onTemplatesChanged={() => backendApi.getReportTemplates(user?.role === "admin").then(r => setReportTemplates(r.data || [])).catch(() => {})}
         />
       )}
 

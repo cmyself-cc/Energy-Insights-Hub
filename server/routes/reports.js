@@ -100,7 +100,14 @@ router.delete("/:id", (req, res) => {
 router.get("/templates", (req, res) => {
   try {
     const all = req.query.scope === "all" && req.user?.role === "admin";
-    res.json({ data: listTemplates(all ? null : req.user) });
+    if (all) {
+      // scope=all 给管理界面用：每行 JOIN 出 owner_nickname，前端直接渲染归属徽标。
+      const rows = db.prepare(`SELECT r.*, u.nickname AS owner_nickname FROM report_templates r
+                               LEFT JOIN users u ON u.id = r.owner_id
+                               ORDER BY r.is_public DESC, r.id ASC`).all();
+      return res.json({ data: rows.map(parseRow) });
+    }
+    res.json({ data: listTemplates(req.user) });
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 router.post("/templates", (req, res) => {

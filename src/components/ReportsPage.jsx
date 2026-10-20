@@ -33,11 +33,12 @@ function statusBadge(status, language) {
 }
 
 // eslint-disable-next-line no-unused-vars -- App.jsx:430 传入但本组件未调用（报告查看已改由 openReportId 驱动）；待产品确认是恢复接线还是移除
-export default function ReportsPage({ darkMode, language, openReportId, onOpenReportHandled, titleSlotEl, onViewReport, onGenerateDailyBriefing }) {
+export default function ReportsPage({ darkMode, language, user, openReportId, onOpenReportHandled, titleSlotEl, onViewReport, onGenerateDailyBriefing }) {
   const t = i18n[language];
   const isMobile = useIsMobile();
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
+  const isAdmin = user?.role === "admin";
   const [reports, setReports] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -49,9 +50,11 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
   const [editError, setEditError] = useState(null);
   const [exportOpen, setExportOpen] = useState(false);
 
+  // Task 10 / M2：admin 拉全量（?scope=all，行带 owner_nickname 供归属徽标），
+  // user 拉后端默认的可见集合（已按 owner 隔离，Task 9）。
   const loadReports = async () => {
     try {
-      const res = await backendApi.getReports();
+      const res = await backendApi.getReports(isAdmin);
       setReports(res.data || []);
     } catch (e) {
       console.error("Failed to load reports:", e);
@@ -60,16 +63,20 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
 
   const loadTemplates = async () => {
     try {
-      const res = await backendApi.getReportTemplates();
+      const res = await backendApi.getReportTemplates(isAdmin);
       setTemplates(res.data || []);
     } catch (e) {
       console.error("Failed to load templates:", e);
     }
   };
 
+  // loadReports/loadTemplates 刻意只在挂载时跑一次：isAdmin 由 App 的鉴权门在渲染本页
+  // 之前就已定型（role 变化需要重新登录/整树重渲染），加进依赖数组反而会在身份抖动时
+  // 多刷一次加载态。
   useEffect(() => {
     setLoading(true);
     Promise.all([loadReports(), loadTemplates()]).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 生成弹窗"查看报告"跳转：按 id 选中
@@ -86,6 +93,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
     if (!reports.some(r => r.status === "generating")) return;
     const timer = setInterval(loadReports, 5000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reports]);
 
   const deleteReport = async (id, e) => {
@@ -337,6 +345,7 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
         <TemplateManager
           darkMode={darkMode}
           language={language}
+          user={user}
           templates={templates}
           onChanged={loadTemplates}
           onGenerateDailyBriefing={onGenerateDailyBriefing}
@@ -369,90 +378,110 @@ export default function ReportsPage({ darkMode, language, openReportId, onOpenRe
 
       {view === "reports" && !loading && reports.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {reports.map(report => {
-            const badge = statusBadge(report.status, language);
-            const tpl = templates.find(t => t.id === report.template_id);
-            return (
-              <div
-                key={report.id}
-                onClick={() => setSelectedReport(report)}
-                style={{
-                  background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
-                  borderRadius: BORDER_RADIUS.lg,
-                  border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-                  padding: "16px 20px",
-                  cursor: "pointer",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  transition: `all ${TRANSITIONS.fast}`,
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: FONT_SIZES.lg,
-                    fontWeight: 700,
-                    color: darkMode ? "#fff" : COLORS.text.primary,
-                    marginBottom: 4,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    flexWrap: "wrap"
-                  }}>
-                    {report.title}
-                    {badge.text && (
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: BORDER_RADIUS.sm, color: badge.color, background: badge.bg }}>{badge.text}</span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.light }}>
-                    {new Date(report.created_at).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}
-                    {tpl && ` · ${tpl.name}`}
-                    {report.status === "failed" && ` · ${report.error || ""}`}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, marginLeft: 12 }}>
-                  {report.status === "failed" && (
-                    <button
-                      onClick={(e) => retryReport(report.id, e)}
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: BORDER_RADIUS.md,
-                        border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-                        background: "transparent",
-                        color: darkMode ? "#e8e8e8" : COLORS.text.primary,
-                        fontSize: FONT_SIZES.sm,
-                        cursor: "pointer"
-                      }}
-                    >
-                      {language === "zh" ? "重试" : "Retry"}
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => deleteReport(report.id, e)}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: BORDER_RADIUS.md,
-                      border: "1px solid #c00",
-                      background: "transparent",
-                      color: "#c00",
-                      fontSize: FONT_SIZES.sm,
-                      cursor: "pointer"
-                    }}
-                  >
-                    {language === "zh" ? "删除" : "Delete"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          {reports.map(report => (
+            <ReportRow
+              key={report.id}
+              report={report}
+              tpl={templates.find(t => t.id === report.template_id)}
+              language={language}
+              darkMode={darkMode}
+              isAdmin={isAdmin}
+              onOpen={() => setSelectedReport(report)}
+              onRetry={(e) => retryReport(report.id, e)}
+              onDelete={(e) => deleteReport(report.id, e)}
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function TemplateManager({ darkMode, language, templates, onChanged, onGenerateDailyBriefing }) {
+// 报告行（纯展示组件，抽出来给静态渲染测试观察）。
+// isAdmin 且行带 owner_nickname 时显示「归属：{nickname}」徽标（Task 9 的 scope=all JOIN 产出）；
+// 普通用户后端已隔离、行里根本没有别人的数据，无需也不该显示归属。
+export function ReportRow({ report, tpl, language, darkMode, isAdmin, onOpen, onRetry, onDelete }) {
+  const t = i18n[language];
+  const badge = statusBadge(report.status, language);
+  const secondary = darkMode ? "#888" : COLORS.text.light;
+  const primary = darkMode ? "#fff" : COLORS.text.primary;
+  return (
+    <div
+      onClick={onOpen}
+      style={{
+        background: darkMode ? COLORS.background.cardDark : COLORS.background.card,
+        borderRadius: BORDER_RADIUS.lg,
+        border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+        padding: "16px 20px",
+        cursor: "pointer",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        transition: `all ${TRANSITIONS.fast}`,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: FONT_SIZES.lg,
+          fontWeight: 700,
+          color: primary,
+          marginBottom: 4,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap"
+        }}>
+          {report.title}
+          {badge.text && (
+            <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: BORDER_RADIUS.sm, color: badge.color, background: badge.bg }}>{badge.text}</span>
+          )}
+        </div>
+        <div style={{ fontSize: FONT_SIZES.sm, color: secondary }}>
+          {new Date(report.created_at).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}
+          {tpl && ` · ${tpl.name}`}
+          {isAdmin && report.owner_nickname && ` · ${t.reports.ownerLabel}: ${report.owner_nickname}`}
+          {report.status === "failed" && ` · ${report.error || ""}`}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginLeft: 12 }}>
+        {report.status === "failed" && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRetry(e); }}
+            style={{
+              padding: "6px 12px",
+              borderRadius: BORDER_RADIUS.md,
+              border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+              background: "transparent",
+              color: darkMode ? "#e8e8e8" : COLORS.text.primary,
+              fontSize: FONT_SIZES.sm,
+              cursor: "pointer"
+            }}
+          >
+            {language === "zh" ? "重试" : "Retry"}
+          </button>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(e); }}
+          style={{
+            padding: "6px 12px",
+            borderRadius: BORDER_RADIUS.md,
+            border: "1px solid #c00",
+            background: "transparent",
+            color: "#c00",
+            fontSize: FONT_SIZES.sm,
+            cursor: "pointer"
+          }}
+        >
+          {language === "zh" ? "删除" : "Delete"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// 导出给静态渲染测试（R0 教训：列表数据来自 effect，行/卡片必须纯 props 化才可观察）。
+export function TemplateManager({ darkMode, language, user, templates, onChanged, onGenerateDailyBriefing }) {
   const zh = language === "zh";
   const [form, setForm] = useState({ name: "", description: "", purpose: "", prompt: "", max_cards: 10, language: "zh" });
   const [editingId, setEditingId] = useState(null);
@@ -516,6 +545,18 @@ function TemplateManager({ darkMode, language, templates, onChanged, onGenerateD
     if (!confirm(zh ? "确定删除该模板？" : "Delete this template?")) return;
     try {
       await backendApi.deleteReportTemplate(id);
+      onChanged();
+    } catch (e) {
+      setMessage({ type: "error", text: e.message });
+    }
+  };
+
+  // 「另存为副本」（Task 10）：对任何**可见**模板都能复制成自己的私有副本
+  // （服务端 duplicateTemplate 强制 is_public=0 + owner=自己，Task 9）。
+  const duplicate = async (id) => {
+    try {
+      await backendApi.duplicateReportTemplate(id);
+      setMessage({ type: "success", text: zh ? "已另存为副本" : "Saved as copy" });
       onChanged();
     } catch (e) {
       setMessage({ type: "error", text: e.message });
@@ -600,45 +641,81 @@ function TemplateManager({ darkMode, language, templates, onChanged, onGenerateD
             marginBottom: 20, fontWeight: 600
           }}>{zh ? "+ 新建自定义模板" : "+ New custom template"}</button>
 
-          {templates.map(t => {
-            const isPublic = t.is_public === true;
-            const isDailyBriefing = t.name.includes("每日能源要闻") || t.name === "Daily Energy Briefing";
-            return (
-              <div key={t.id} style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: "14px 18px", marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                  <div>
-                    <span style={{ fontWeight: 700, color: text, fontSize: FONT_SIZES.base }}>{t.name}</span>
-                    <span style={{ fontSize: 11, color: secondary, marginLeft: 8 }}>
-                      {isPublic ? (zh ? "公用" : "Public") : (zh ? "自定义" : "Custom")} · {zh ? `上限 ${t.max_cards} 张` : `max ${t.max_cards}`} · {t.language}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {isDailyBriefing && onGenerateDailyBriefing && (
-                      <button onClick={onGenerateDailyBriefing} style={{
-                        padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: "none",
-                        background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.sm, cursor: "pointer",
-                        fontWeight: 600
-                      }}>{zh ? "生成今日简报" : "Generate Today's Briefing"}</button>
-                    )}
-                    <button onClick={() => startEdit(t)} style={{
-                      padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: `1px solid ${border}`,
-                      background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
-                    }}>{zh ? "编辑" : "Edit"}</button>
-                    {!isPublic && !isDailyBriefing && (
-                      <button onClick={() => remove(t.id)} style={{
-                        padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: "1px solid #c00",
-                        background: "transparent", color: "#c00", fontSize: FONT_SIZES.sm, cursor: "pointer"
-                      }}>{zh ? "删除" : "Delete"}</button>
-                    )}
-                  </div>
-                </div>
-                {t.description && <div style={{ fontSize: FONT_SIZES.sm, color: secondary, marginTop: 4 }}>{t.description}</div>}
-                <div style={{ fontSize: 12, color: secondary, marginTop: 6, fontFamily: "monospace", whiteSpace: "pre-wrap", maxHeight: 90, overflow: "hidden" }}>{t.prompt.slice(0, 200)}{t.prompt.length > 200 ? "…" : ""}</div>
-              </div>
-            );
-          })}
+          {templates.map(tpl => (
+            <TemplateCard
+              key={tpl.id}
+              tpl={tpl}
+              language={language}
+              darkMode={darkMode}
+              currentUserId={user?.id}
+              onEdit={() => startEdit(tpl)}
+              onDelete={() => remove(tpl.id)}
+              onDuplicate={() => duplicate(tpl.id)}
+              onGenerateDailyBriefing={onGenerateDailyBriefing}
+            />
+          ))}
         </>
       )}
+    </div>
+  );
+}
+
+// 模板卡片（纯展示组件，抽出来给静态渲染测试观察）。
+// 归属徽标（Task 10 / M2）：公共 → 公共/Public；自己的 → 我的/Mine；
+// admin 全量视图（?scope=all 带 owner_nickname，Task 9）里别人的私有模板 → 昵称；
+// 兜底沿用旧的「自定义/Custom」。「另存为副本」对任何可见模板都显示（user 与 admin 均见）。
+export function TemplateCard({ tpl, language, darkMode, currentUserId, onEdit, onDelete, onDuplicate, onGenerateDailyBriefing }) {
+  const zh = language === "zh";
+  const t = i18n[language];
+  const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
+  const border = `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`;
+  const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
+  const secondary = darkMode ? "#888" : COLORS.text.secondary;
+
+  const isPublic = tpl.is_public === true;
+  const isMine = currentUserId != null && tpl.owner_id === currentUserId;
+  const isDailyBriefing = tpl.name.includes("每日能源要闻") || tpl.name === "Daily Energy Briefing";
+  const badge = isPublic
+    ? t.reports.badgePublic
+    : isMine
+      ? t.reports.badgeMine
+      : tpl.owner_nickname || (zh ? "自定义" : "Custom");
+
+  return (
+    <div style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: "14px 18px", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <span style={{ fontWeight: 700, color: text, fontSize: FONT_SIZES.base }}>{tpl.name}</span>
+          <span style={{ fontSize: 11, color: secondary, marginLeft: 8 }}>
+            {badge} · {zh ? `上限 ${tpl.max_cards} 张` : `max ${tpl.max_cards}`} · {tpl.language}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {isDailyBriefing && onGenerateDailyBriefing && (
+            <button onClick={onGenerateDailyBriefing} style={{
+              padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: "none",
+              background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.sm, cursor: "pointer",
+              fontWeight: 600
+            }}>{zh ? "生成今日简报" : "Generate Today's Briefing"}</button>
+          )}
+          <button onClick={onEdit} style={{
+            padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+            background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
+          }}>{zh ? "编辑" : "Edit"}</button>
+          <button onClick={onDuplicate} style={{
+            padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+            background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
+          }}>{t.reports.saveAsCopy}</button>
+          {!isPublic && !isDailyBriefing && (
+            <button onClick={onDelete} style={{
+              padding: "5px 12px", borderRadius: BORDER_RADIUS.sm, border: "1px solid #c00",
+              background: "transparent", color: "#c00", fontSize: FONT_SIZES.sm, cursor: "pointer"
+            }}>{zh ? "删除" : "Delete"}</button>
+          )}
+        </div>
+      </div>
+      {tpl.description && <div style={{ fontSize: FONT_SIZES.sm, color: secondary, marginTop: 4 }}>{tpl.description}</div>}
+      <div style={{ fontSize: 12, color: secondary, marginTop: 6, fontFamily: "monospace", whiteSpace: "pre-wrap", maxHeight: 90, overflow: "hidden" }}>{tpl.prompt.slice(0, 200)}{tpl.prompt.length > 200 ? "…" : ""}</div>
     </div>
   );
 }

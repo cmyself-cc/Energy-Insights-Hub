@@ -300,6 +300,12 @@ export const i18n = {
       deleteView: "Delete view",
       setDefault: "Set as default"
     },
+    reports: {
+      ownerLabel: "Owner",
+      badgePublic: "Public",
+      badgeMine: "Mine",
+      saveAsCopy: "Save as copy"
+    },
     admin: {
       usersTitle: "User Management",
       usersEmpty: "No users yet.",
@@ -655,6 +661,12 @@ export const i18n = {
       updateView: "更新视角",
       deleteView: "删除视角",
       setDefault: "设为默认"
+    },
+    reports: {
+      ownerLabel: "归属",
+      badgePublic: "公共",
+      badgeMine: "我的",
+      saveAsCopy: "另存为副本"
     },
     admin: {
       usersTitle: "用户管理",

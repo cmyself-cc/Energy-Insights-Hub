@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import ConfigurationPage from "../ConfigurationPage";
+import { ReportRow, TemplateCard } from "../ReportsPage";
 import UsersPage, { UserRow, UsersList } from "./UsersPage";
 import InviteCodesPage, { InviteForm, InviteRow, InviteList, UsagesPanel } from "./InviteCodesPage";
 import { i18n } from "../../constants/i18n";
@@ -1198,4 +1199,93 @@ describe("配色契约 — WCAG AA 4.5:1", () => {
   //     （#555 on #f0f0f0 = 6.5419 已经不算宽裕）。两个目标互相打架，选择保住文字可读性。
   //   · 与 frontend.test.jsx 末尾「A4 禁用态配色契约」里那条 inactive 豁免同理
   //     （WCAG 1.4.3 / 1.4.11 对 inactive 控件豁免）。别当缺陷「顺手修」。
+});
+
+// ── Task 10 / M2：ReportsPage 的归属标注与另存为 ──────────────────
+//
+// 覆盖边界同上：ReportRow / TemplateCard 是纯展示组件（数据经 props 进来），可静态观察；
+// 数据加载在 ReportsPage 的 effect 里，删除/另存为的实际请求在 handler 里，均无观察者。
+const REPORT = {
+  id: 7, title: "Weekly Briefing", created_at: "2026-10-20 08:00:00",
+  status: "done", template_id: null, items: [], owner_id: 3, owner_nickname: "Alice"
+};
+const TPL = {
+  id: 5, name: "模板甲", prompt: "写报告 {{insights}}", description: "d",
+  is_public: false, max_cards: 10, language: "zh", owner_id: 3, owner_nickname: "Alice"
+};
+const noopT10 = () => {};
+
+describe("ReportRow — 归属标注（Task 10 / M2）", () => {
+  const render = (props = {}) =>
+    renderToStaticMarkup(
+      <ReportRow report={REPORT} tpl={null} language="en" darkMode={false}
+        isAdmin onOpen={noopT10} onRetry={noopT10} onDelete={noopT10} {...props} />
+    );
+
+  it("admin 且行带 owner_nickname 时显示「归属」标注（en/zh）", () => {
+    expect(render()).toContain(`Owner: ${REPORT.owner_nickname}`);
+    const zh = renderToStaticMarkup(
+      <ReportRow report={REPORT} tpl={null} language="zh" darkMode={false}
+        isAdmin onOpen={noopT10} onRetry={noopT10} onDelete={noopT10} />
+    );
+    expect(zh).toContain(`归属: ${REPORT.owner_nickname}`);
+  });
+
+  it("非 admin 不显示归属标注 —— 后端已隔离，行里根本不会有别人的数据（防误标）", () => {
+    expect(render({ isAdmin: false })).not.toContain("Owner:");
+  });
+
+  it("admin 的行缺 owner_nickname 时不留悬空标注（如服务端旧响应/自己的行）", () => {
+    expect(render({ report: { ...REPORT, owner_nickname: null } })).not.toContain("Owner:");
+  });
+
+  it("failed 状态有重试按钮，done 状态没有；删除按钮恒在", () => {
+    expect(render()).not.toContain("Retry");
+    expect(render()).toContain("Delete");
+    const failed = render({ report: { ...REPORT, status: "failed", error: "boom" } });
+    expect(failed).toContain("Retry");
+    expect(failed).toContain("boom");
+  });
+});
+
+describe("TemplateCard — 归属徽标与另存为（Task 10 / M2）", () => {
+  const render = (props = {}) =>
+    renderToStaticMarkup(
+      <TemplateCard tpl={TPL} language="en" darkMode={false} currentUserId={9}
+        onEdit={noopT10} onDelete={noopT10} onDuplicate={noopT10} {...props} />
+    );
+
+  it("公共模板 → 公共/Public 徽标；自己的 → 我的/Mine；别人的私有 → 昵称", () => {
+    expect(render({ tpl: { ...TPL, is_public: true, owner_id: 1, owner_nickname: "Sys" } }))
+      .toContain("Public");
+    expect(render({ tpl: { ...TPL, owner_id: 9 } })).toContain("Mine");   // currentUserId=9
+    expect(render()).toContain("Alice");                                   // 别人的私有 → 昵称
+  });
+
+  it("别人的私有模板缺 owner_nickname 时回落到「自定义/Custom」（旧数据兼容）", () => {
+    expect(render({ tpl: { ...TPL, owner_nickname: null } })).toContain("Custom");
+    const zh = renderToStaticMarkup(
+      <TemplateCard tpl={{ ...TPL, owner_nickname: null }} language="zh" darkMode={false} currentUserId={9}
+        onEdit={noopT10} onDelete={noopT10} onDuplicate={noopT10} />
+    );
+    expect(zh).toContain("自定义");
+  });
+
+  it("「另存为副本」按钮按 i18n 文案渲染（en/zh），删除按钮对公共模板隐藏", () => {
+    expect(render()).toContain("Save as copy");
+    expect(render({ tpl: { ...TPL, is_public: true } })).not.toContain(">Delete<");
+    const zh = renderToStaticMarkup(
+      <TemplateCard tpl={TPL} language="zh" darkMode={false} currentUserId={9}
+        onEdit={noopT10} onDelete={noopT10} onDuplicate={noopT10} />
+    );
+    expect(zh).toContain("另存为副本");
+  });
+
+  it("i18n.reports 命名空间双语对称、无空值（Task 10 新增）", () => {
+    expect(Object.keys(i18n.en.reports).sort()).toEqual(Object.keys(i18n.zh.reports).sort());
+    for (const k of Object.keys(i18n.en.reports)) {
+      expect(i18n.en.reports[k], `en.reports.${k}`).not.toBe("");
+      expect(i18n.zh.reports[k], `zh.reports.${k}`).not.toBe("");
+    }
+  });
 });

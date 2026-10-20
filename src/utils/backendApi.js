@@ -175,13 +175,16 @@ export const backendApi = {
   discoverSubPages: (id) => request(`/sources/${id}/discover-subpages`, { method: "POST" }),
   confirmSubPages: (id, subPages) => request(`/sources/${id}/confirm-subpages`, { method: "POST", body: JSON.stringify({ subPages }) }),
 
-  // Reports
-  getReports: () => request("/reports"),
+  // Reports。all=true → ?scope=all（仅 admin 生效；非 admin 传了也会被服务端忽略、
+  // 返回同默认可见集合）。admin 的列表行额外带 owner_nickname（服务端 JOIN，Task 9）。
+  getReports: (all) => request("/reports" + (all ? "?scope=all" : "")),
   getReport: (id) => request(`/reports/${id}`),
   createReport: (report) => request("/reports", { method: "POST", body: JSON.stringify(report) }),
   updateReport: (id, data) => request(`/reports/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteReport: (id) => request(`/reports/${id}`, { method: "DELETE" }),
-  getReportTemplates: () => request("/reports/templates"),
+  getReportTemplates: (all) => request("/reports/templates" + (all ? "?scope=all" : "")),
+  // 「另存为副本」：源模板必须可见；新行强制私有 + 归属自己（服务端 Task 9 语义）。
+  duplicateReportTemplate: (id) => request(`/reports/templates/${id}/duplicate`, { method: "POST" }),
   createReportTemplate: (data) => request("/reports/templates", { method: "POST", body: JSON.stringify(data) }),
   updateReportTemplate: (id, data) => request(`/reports/templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteReportTemplate: (id) => request(`/reports/templates/${id}`, { method: "DELETE" }),
