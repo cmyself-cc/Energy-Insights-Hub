@@ -257,7 +257,32 @@ ALTER feedback_rules_suggestions ADD submitter_id INTEGER
 | M3 自定义视角 | user_views、情报页视角开关与管理面板、默认视角、与报告候选联动 | 开/关视角在公共池与个人视角间切换正确；视角优先规则符合 VIEW-4/6 |
 | M4 反馈审批 | user_feedback 隔离、提交审批流、FeedbackPage 扩展 | user 反馈不影响全局权重；提交→admin 采纳→filter_rules 生效链路完整 |
 
-### 3.15 Open Questions
+### 3.15 部署 Runbook（M1–M4 上线预案）
+
+**部署前（缺一不可）**
+1. `ADMIN_UNIONID` 必须已配置进 Docker environment：该 UnionID 首次微信扫码登录即成为 admin（免邀请码）。024 迁移的存量回填规则是「当时的第一个 admin」——**迁移在进程启动时跑，早于任何登录**，所以全新部署的存量行 owner_id 会是 NULL；seed 管理员首次登录后必须补跑一次归属回填，否则存量报告/模板不出现在任何人的默认列表里：
+   ```sql
+   UPDATE reports          SET owner_id = (SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1) WHERE owner_id IS NULL;
+   UPDATE report_jobs      SET owner_id = (SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1) WHERE owner_id IS NULL;
+   UPDATE report_templates SET owner_id = (SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1) WHERE owner_id IS NULL;
+   UPDATE user_feedback    SET user_id  = (SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1) WHERE user_id  IS NULL;
+   ```
+2. 微信凭证三件套 `WECHAT_APP_ID` / `WECHAT_APP_SECRET` / `WECHAT_REDIRECT_URI` 进 Docker environment（`~/homelab/compose/docker-compose.yml` 由产品负责人手工加）。
+3. 确认 `cmyself.cc` 下**没有不可信兄弟子域**：登录态是双提交 cookie（state + session 同名不同值），兄弟子域若被攻陷可借同名 cookie 插队（M-3 的固有上限，上线前的静态前提）。
+4. 部署前在测试环境跑 `node scripts/smoke-login-button.mjs http://localhost:5177`（主按钮明暗双态对比度与灰度可分辨的常驻冒烟，exit 0 才可上）。
+
+**升级后首个动作**：用 seed 管理员的微信扫码登录一次（落 admin 行 + 触发上面的回填）。此后才能签发任何普通用户邀请码——补偿控制：`feedback accept` 的 requireAdmin 已随本版本上线（此前任何登录用户都能注入全局过滤规则），但「外发普通用户邀请码」与「push 生产」仍是两个具名重开触发器。
+
+**回滚**：容器指回旧镜像即可——M1–M4 全部表变更都是「只增列/增表」，旧代码按列名取值、INSERT 不带新列走默认值，向后兼容。回滚不需要动数据库。
+
+**日常运维**
+- `sessions` 表只惰性收缩（过期 token 再次被出示才删；成功重放还会新铸一行）。建议 cron 每日：`DELETE FROM sessions WHERE expires_at < datetime('now');`
+- `AUTH_DEV_MODE` **仅非生产**使用；生产不配该变量即真实微信模式。
+- dev 环境的 `WECHAT_REDIRECT_URI` 必须指向 Vite 端口（`:5177`）：指向 `:3001` 会 404——SPA catch-all 只在 production + dist 存在时挂载。生产指向站点域名（80/443）即可。
+- 真实微信扫码联调清单（凭证就绪后）：code 换 UnionID、state cookie 一次性、disabled 账号命中提示页、`/api/auth/me` 会话续期。mock 模式（`AUTH_DEV_MODE=wechat-mock`）覆盖不到这些路径。
+- 已知前提（查兄弟子域时 relevant）：`/api/auth/config` 会采纳并续期客户端送来的**第一个**同名 state cookie（EXP-S1）——不改变结论，但解释了为什么兄弟子域必须是可信的。
+
+### 3.16 Open Questions
 
 - **OQ-1 微信登录形态** ✅已确认（2026-10-14）：微信登录/小程序授权主要为了获得注册信息，**邀请码才是授权的钥匙**；web 端用开放平台扫码，小程序接入后自动弹出授权。待办依赖：确认开放平台资质（网站应用 + 小程序同主体绑定，UnionID 互通）。
 - **OQ-2 邀请码默认策略** ✅已确认（2026-10-14）：邀请码**可复用**，但可设定有效期与可注册用户数上限（均可选，默认不限）。

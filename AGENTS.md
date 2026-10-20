@@ -107,6 +107,9 @@ npm run server
 - `tracker_settings` — key/value: lookback_hours, max_per_source, dedup threshold, required industry keywords, monitoring toggles.
 - `filter_config` — semantic prompts (`type='semantic'`, per purpose) and AI interpretation presets (`type='ai_presets'`).
 - `llm_prompts` — tunable LLM system prompts keyed by use case (`insight_extraction`, `screen_cards`, `clarify_cards`, `generate_manual_prompt`, `manual_prompt_fallback`, `feedback_suggestions`, `ai_interpret_zh`, `ai_interpret_en`). Defaults live in `server/services/promptStore.js` (`DEFAULT_PROMPTS`) and are seeded once at startup — DB edits are never overwritten. Read via `getPrompt(key)` + `fillPrompt(template, vars)` (`{{var}}` placeholders).
+- `users` / `sessions` / `pending_identities` / `invite_codes`（023）— 微信身份与自管会话：token 只存 sha256，HttpOnly+SameSite=Lax cookie，7 天滑动；邀请码可复用、可设 max_uses/expires_at，只携带角色+默认视角。
+- `user_views`（025）— 每用户最多 10 个自定义视角；首个视图自动成为默认。
+- `reports` / `report_jobs` / `report_templates` / `user_feedback` 的 `owner_id`（024）— 归属隔离：列表默认只出本人的，admin 用 `?scope=all` 看全量（行带 `owner_nickname`）；`user_feedback.submit_state`（none/submitted/accepted/rejected）驱动提交审批流。
 
 ## Code style and conventions
 
@@ -155,9 +158,13 @@ npm run server
 - Production image: `Dockerfile` (builds frontend, runs `node server/index.js` with `NODE_ENV=production`).
 - CI: `.github/workflows/` auto-deploys on push to `main` (Mac Mini runner pulls and does `docker compose up -d --force-recreate energy-insights-hub`).
 - Docker Compose 配置位于 `~/homelab/compose/docker-compose.yml`
+- M1 新增环境变量：`ADMIN_UNIONID`（seed 管理员，必需）、`WECHAT_APP_ID` / `WECHAT_APP_SECRET` / `WECHAT_REDIRECT_URI`（微信登录三件套）、`AUTH_DEV_MODE`（仅非生产）。上线 checklist 见 `docs/PRD.md` 3.15 Runbook（含存量 owner 回填 SQL 与回滚预案）。
 
 ## Security considerations
 
 - **LLM API keys live on the server** (env vars / Docker environment: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`), NOT in the browser. The frontend selects among configured model records; keys are never sent to the client.
 - `.env` is gitignored; do not commit real API keys.
 - The user has explicitly stated: **do not delete any data from the database (especially config) without their approval.**
+- 鉴权默认开启：`/api/*` 全部在 `server/apiRoutes.js` 挂载 `requireAuth`（`/api/admin` 额外 `requireAdmin`，feedback 的 accept/reject/generate-suggestions 在路由内再叠一层）。前端角色显隐只是省 403 噪音，**不是**安全边界。
+- `AUTH_DEV_MODE=wechat-mock` 仅供本地/测试，**生产不得配置**；生产管理员由 `ADMIN_UNIONID` 环境变量 seed（该 UnionID 首次微信登录即成 admin）。
+- 登录态是双提交 cookie（state + session），其安全性前提是父域下无不可信兄弟子域（详见 PRD 3.15 Runbook）。
