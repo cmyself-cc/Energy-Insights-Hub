@@ -109,19 +109,34 @@ export default function Header({ darkMode, language, onLanguageToggle, isMobile 
                 )}
               </>
             )}
-            <div
-              title={nickname || auth.logout}
-              style={{
-                width: isMobile ? 26 : 30, height: isMobile ? 26 : 30, borderRadius: "50%",
-                background: COLORS.primaryLight, color: COLORS.primary,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: isMobile ? FONT_SIZES.sm : FONT_SIZES.md, fontWeight: 700,
-                border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
-                flexShrink: 0
-              }}
-            >
-              {avatarChar}
-            </div>
+            {/* 微信头像优先；没有头像（dev-login / 资料接口降级）才回落到首字母圆标 */}
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt=""
+                title={nickname}
+                referrerPolicy="no-referrer"
+                style={{
+                  width: isMobile ? 26 : 30, height: isMobile ? 26 : 30, borderRadius: "50%",
+                  objectFit: "cover", flexShrink: 0,
+                  border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`
+                }}
+              />
+            ) : (
+              <div
+                title={nickname || auth.logout}
+                style={{
+                  width: isMobile ? 26 : 30, height: isMobile ? 26 : 30, borderRadius: "50%",
+                  background: COLORS.primaryLight, color: COLORS.primary,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: isMobile ? FONT_SIZES.sm : FONT_SIZES.md, fontWeight: 700,
+                  border: `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`,
+                  flexShrink: 0
+                }}
+              >
+                {avatarChar}
+              </div>
+            )}
             <button
               onClick={onLogout}
               title={auth.logout}
