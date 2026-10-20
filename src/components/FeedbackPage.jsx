@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { COLORS, FONT_SIZES, BORDER_RADIUS } from "../constants/theme";
+import { i18n } from "../constants/i18n";
 import { backendApi } from "../utils/backendApi";
 
 const REASON_LABELS = {
@@ -152,33 +153,14 @@ export default function FeedbackPage({ darkMode, language }) {
       )}
 
       {suggestions.filter(s => s.status === "pending").map(s => (
-        <div key={s.id} style={{ background: cardBg, border, borderRadius: BORDER_RADIUS.lg, padding: 16, marginBottom: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontWeight: 600, color: text, fontSize: FONT_SIZES.base }}>
-              {s.type}: {s.name}
-            </span>
-            <span style={{ fontSize: FONT_SIZES.sm, color: darkMode ? "#888" : COLORS.text.light }}>
-              {s.purpose || "global"}
-            </span>
-          </div>
-          <p style={{ color: darkMode ? "#bbb" : COLORS.text.secondary, fontSize: FONT_SIZES.sm, marginBottom: 12 }}>
-            {s.reason}
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => handleAccept(s.id)} style={{
-              padding: "6px 12px", borderRadius: BORDER_RADIUS.sm, border: "none",
-              background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.sm, cursor: "pointer"
-            }}>
-              {language === "zh" ? "采纳" : "Accept"}
-            </button>
-            <button onClick={() => handleReject(s.id)} style={{
-              padding: "6px 12px", borderRadius: BORDER_RADIUS.sm, border: `1px solid ${border}`,
-              background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
-            }}>
-              {language === "zh" ? "忽略" : "Reject"}
-            </button>
-          </div>
-        </div>
+        <SuggestionRow
+          key={s.id}
+          s={s}
+          language={language}
+          darkMode={darkMode}
+          onAccept={() => handleAccept(s.id)}
+          onReject={() => handleReject(s.id)}
+        />
       ))}
     </div>
   );
@@ -192,6 +174,61 @@ function StatBox({ label, value, darkMode }) {
     <div style={{ background: bg, border, borderRadius: BORDER_RADIUS.lg, padding: 16, textAlign: "center" }}>
       <div style={{ fontSize: FONT_SIZES.xl, fontWeight: 700, color: COLORS.primary }}>{value}</div>
       <div style={{ fontSize: FONT_SIZES.sm, color: text }}>{label}</div>
+    </div>
+  );
+}
+
+// 待审建议行（Task 13 抽出为纯展示组件，给静态渲染测试观察）。
+// submitter_id 非空 = 用户经「提交给管理员」入队（Task 12 端点）：显示署名 + 徽标 + 补充说明；
+// null = 系统 LLM 批量生成（generate-suggestions），保持旧样式，不加徽标。
+export function SuggestionRow({ s, language, darkMode, onAccept, onReject }) {
+  const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
+  const muted = darkMode ? "#888" : COLORS.text.light;
+  const border = `1px solid ${darkMode ? COLORS.border.dark : COLORS.border.light}`;
+  const userSubmitted = s.submitter_id != null;
+  return (
+    <div style={{ background: darkMode ? COLORS.background.cardDark : COLORS.background.card, border, borderRadius: BORDER_RADIUS.lg, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 600, color: text, fontSize: FONT_SIZES.base }}>
+          {s.type}: {s.name}
+          {userSubmitted && (
+            <span style={{
+              marginLeft: 8, fontSize: 11, fontWeight: 600, padding: "2px 8px",
+              borderRadius: BORDER_RADIUS.sm, background: COLORS.primaryLight, color: COLORS.primary
+            }}>
+              {i18n[language].competitiveIntelligence.fromUserSubmit}
+            </span>
+          )}
+        </span>
+        <span style={{ fontSize: FONT_SIZES.sm, color: muted }}>
+          {s.purpose || "global"}
+          {userSubmitted && s.submitter_nickname ? ` · ${s.submitter_nickname}` : ""}
+        </span>
+      </div>
+      {s.reason && (
+        <p style={{ color: darkMode ? "#bbb" : COLORS.text.secondary, fontSize: FONT_SIZES.sm, marginBottom: 8 }}>
+          {s.reason}
+        </p>
+      )}
+      {userSubmitted && s.evidence && (
+        <p style={{ color: muted, fontSize: FONT_SIZES.sm, marginBottom: 12, fontStyle: "italic" }}>
+          “{s.evidence}”
+        </p>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={onAccept} style={{
+          padding: "6px 12px", borderRadius: BORDER_RADIUS.sm, border: "none",
+          background: COLORS.primary, color: "#fff", fontSize: FONT_SIZES.sm, cursor: "pointer"
+        }}>
+          {language === "zh" ? "采纳" : "Accept"}
+        </button>
+        <button onClick={onReject} style={{
+          padding: "6px 12px", borderRadius: BORDER_RADIUS.sm, border,
+          background: "transparent", color: text, fontSize: FONT_SIZES.sm, cursor: "pointer"
+        }}>
+          {language === "zh" ? "忽略" : "Reject"}
+        </button>
+      </div>
     </div>
   );
 }

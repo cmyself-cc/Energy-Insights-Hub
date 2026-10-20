@@ -167,6 +167,11 @@ export const backendApi = {
     method: "POST",
     body: JSON.stringify({ insightId, action, reason: reason || undefined })
   }),
+  // Task 13 / M4：把卡片提交给管理员审阅（Task 12 端点）。不直接生效，admin 采纳后才进 filter_rules。
+  submitFeedback: (insightId, reason, note) => request(`/feedback/${insightId}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ reason, note: note || undefined })
+  }),
   getFeedbackStats: () => request("/feedback/stats"),
   getFeedbackSuggestions: () => request("/feedback/suggestions"),
   acceptFeedbackSuggestion: (id) => request(`/feedback/suggestions/${id}/accept`, { method: "POST" }),

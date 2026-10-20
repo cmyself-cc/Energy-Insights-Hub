@@ -62,6 +62,8 @@ export default function InsightCard({
   onReclassify,
   onAiInterpret,
   onKeywordClick,
+  userRole,
+  onSubmitToAdmin,
   subjectKeywords = []
 }) {
   const [copied, setCopied] = useState(false);
@@ -129,6 +131,8 @@ export default function InsightCard({
           onReclassify={onReclassify}
           currentPurpose={Array.isArray(item.purposes) ? item.purposes[0] : "competitor"}
           onAiInterpret={() => onAiInterpret()}
+          userRole={userRole}
+          onSubmitToAdmin={onSubmitToAdmin ? (reason, note) => onSubmitToAdmin(item, reason, note) : undefined}
         />
       </div>
 

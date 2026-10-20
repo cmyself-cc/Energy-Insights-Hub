@@ -162,7 +162,11 @@ export const i18n = {
       noResults: "No insights found. Try adjusting filters.",
       loadingMore: "Loading…",
       usersTab: "Users",
-      invitesTab: "Invite Codes"
+      invitesTab: "Invite Codes",
+      submitToAdmin: "Also submit to admin for review",
+      submitNotePlaceholder: "Note (optional)",
+      submittedToast: "Submitted — takes effect after admin review",
+      fromUserSubmit: "User-submitted"
     },
     trackerSettings: {
       title: "Tracker Settings",
@@ -524,7 +528,11 @@ export const i18n = {
       noResults: "未找到相关洞察，请尝试调整筛选条件。",
       loadingMore: "加载中…",
       usersTab: "用户管理",
-      invitesTab: "邀请码"
+      invitesTab: "邀请码",
+      submitToAdmin: "同时提交给管理员审阅",
+      submitNotePlaceholder: "补充说明（可选）",
+      submittedToast: "已提交，管理员审阅后生效",
+      fromUserSubmit: "来自用户提交"
     },
     trackerSettings: {
       title: "跟踪设置",

@@ -197,6 +197,16 @@ export default function App() {
     addToast(newBookmarks.length > bookmarks.length ? t.toasts.addedToBookmarks : t.toasts.removedFromBookmarks, "success");
   };
 
+  // Task 13 / M4：用户把卡片「提交给管理员审阅」（不直接生效，admin 在 Feedback 页 accept 后才进 filter_rules）
+  const submitToAdmin = async (item, reason, note) => {
+    try {
+      await backendApi.submitFeedback(item.id, reason, note);
+      addToast(t.competitiveIntelligence.submittedToast, "success");
+    } catch (e) {
+      addToast(e.message || t.errors.fetchFailed, "error");
+    }
+  };
+
   const hideItem = async (item, reason) => {
     try {
       if (item.id) {
@@ -551,6 +561,8 @@ export default function App() {
               onToggleCart={toggleCart}
               onToggleBookmark={toggleBookmark}
               onHide={hideItem}
+              userRole={user?.role}
+              onSubmitToAdmin={submitToAdmin}
               onReclassify={reclassifyItem}
               onAiInterpret={openAiDrawer}
               onClearCart={clearCart}

@@ -8,6 +8,8 @@ import InviteCodesPage, { InviteForm, InviteRow, InviteList, UsagesPanel } from 
 import { i18n } from "../../constants/i18n";
 import { COLORS } from "../../constants/theme";
 import { buildInvitePayload, backendApi } from "../../utils/backendApi";
+import { HideReasonDialog } from "../CardActions";
+import { SuggestionRow } from "../FeedbackPage";
 
 // Task 7b（PRD 的 ADM-1 / ADM-2）的静态渲染观察者。
 //
@@ -1345,5 +1347,76 @@ describe("ViewsBar — 视角开关与管理（Task 11 / M3）", () => {
         onSelect={noopT10} onSave={noopT10} onUpdateCurrent={noopT10} onDelete={noopT10} onSetDefault={noopT10} />
     );
     expect(zh).toContain(i18n.zh.views.saveAsView);
+  });
+});
+
+// ── Task 13 / M4：提交入口（HideReasonDialog）与审阅署名（SuggestionRow）──
+
+describe("HideReasonDialog — 提交给管理员（Task 13 / M4）", () => {
+  const render = (props = {}) =>
+    renderToStaticMarkup(
+      <HideReasonDialog darkMode={false} language="en" showSubmit
+        submitChecked={false} onToggleSubmit={noopT10} submitNote="" onNoteChange={noopT10}
+        onPick={noopT10} onCancel={noopT10} {...props} />
+    );
+
+  it("role=user（showSubmit=true）时渲染提交 checkbox 与说明输入入口", () => {
+    const html = render();
+    expect(html).toContain(i18n.en.competitiveIntelligence.submitToAdmin);
+    // 未勾选时说明输入不渲染（瞬态条件渲染，不是 display:none）
+    expect(html).not.toContain(i18n.en.competitiveIntelligence.submitNotePlaceholder);
+    const checked = render({ submitChecked: true, submitNote: "重复招标" });
+    expect(checked).toContain("重复招标");
+  });
+
+  it("showSubmit=false（admin/回调缺失）时 checkbox 整组不渲染", () => {
+    const html = render({ showSubmit: false });
+    expect(html).not.toContain(i18n.en.competitiveIntelligence.submitToAdmin);
+  });
+
+  it("四个隐藏原因照常渲染（en/zh 文案）", () => {
+    const html = render();
+    for (const r of ["Irrelevant", "Duplicate / Seen", "Low quality", "Not now"]) {
+      expect(html).toContain(r);
+    }
+    const zh = renderToStaticMarkup(
+      <HideReasonDialog darkMode={false} language="zh" showSubmit={false}
+        submitChecked={false} onToggleSubmit={noopT10} submitNote="" onNoteChange={noopT10}
+        onPick={noopT10} onCancel={noopT10} />
+    );
+    for (const r of ["不相关", "重复/已看过", "质量差", "暂时不感兴趣"]) {
+      expect(zh).toContain(r);
+    }
+  });
+});
+
+describe("SuggestionRow — 审阅队列署名（Task 13 / M4）", () => {
+  const SUG = {
+    id: 1, type: "exclude_keyword", name: "储能", purpose: "tech",
+    reason: "not_now", evidence: "重复招标", status: "pending",
+    submitter_id: 7, submitter_nickname: "Alice"
+  };
+  const render = (s = SUG) =>
+    renderToStaticMarkup(
+      <SuggestionRow s={s} language="en" darkMode={false} onAccept={noopT10} onReject={noopT10} />
+    );
+
+  it("用户提交的行显示「来自用户提交」徽标 + 提交人昵称 + 补充说明", () => {
+    const html = render();
+    expect(html).toContain(i18n.en.competitiveIntelligence.fromUserSubmit);
+    expect(html).toContain("Alice");
+    expect(html).toContain("重复招标");
+  });
+
+  it("系统生成的行（submitter_id=null）无徽标无昵称（旧样式不回归）", () => {
+    const html = render({ ...SUG, submitter_id: null, submitter_nickname: null, evidence: "" });
+    expect(html).not.toContain(i18n.en.competitiveIntelligence.fromUserSubmit);
+    expect(html).not.toContain("Alice");
+  });
+
+  it("缺 reason 的行不留空段落；采纳/忽略按钮恒在", () => {
+    const html = render({ ...SUG, reason: "" });
+    expect(html).toContain("Accept");
+    expect(html).toContain("Reject");
   });
 });
