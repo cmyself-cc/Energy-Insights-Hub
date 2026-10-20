@@ -98,8 +98,9 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
 
       // C7 + C11：计数内嵌进列表，没有独立的 /users/:id/resources 路由
       expect(adm.resource_counts.views).toBe(0);
-      expect(adm.resource_counts.reports).toBeNull();      // owner_id 要等 Task 8 的 024
-      expect(adm.resource_counts.templates).toBeNull();
+      // 🔴 024（Task 8）已合入：owner_id 列存在，计数出真值 0（不再是 "no such column" -> null）。
+      expect(adm.resource_counts.reports).toBe(0);
+      expect(adm.resource_counts.templates).toBe(0);
       expect((await api(port, `/api/admin/users/${user.id}/resources`, admin.id)).status).toBe(404);
 
       // 停用 = 挡登录，数据全保留（OQ-5）
@@ -383,7 +384,7 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
     } finally { await close(); }
   });
 
-  it("C11: resource_counts degrades to null for not-yet-migrated columns, silently", async () => {
+  it("C11: resource_counts degrade to null only for columns that are genuinely missing", async () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { port, close } = await listen(buildApp());
     try {
@@ -398,11 +399,16 @@ describe("/api/admin (requireAuth + requireAdmin)", () => {
       // 025 已合入 -> user_views 出真数
       expect(std.resource_counts.views).toBe(1);
       expect(adm.resource_counts.views).toBe(0);
-      // reports / report_templates 的 owner_id 要等 Task 8 的 024 -> "no such column" -> null，
-      // 这是 countSafe 唯一该静默吞掉的一类；整个列表不许因此 500。
-      expect(std.resource_counts.reports).toBeNull();
-      expect(std.resource_counts.templates).toBeNull();
-      // schema 还没到位是预期状态，不该刷错误日志（否则每个管理员每次打开用户列表都是一屏红）
+      // 🔴 Task 8（024 迁移）已合入 -> reports / report_templates 的 owner_id 列已存在，
+      // countSafe 的 SQL 合法，计数出真值（这两张表里 std/adm 都没有行 -> 0）。
+      // 这是本测试**第三次**换预期：024 之前断言 null（no such column）、024 之后断言 0、
+      // 若未来再有未迁移的列，null 断言照原样加回来。countSafe 唯一该静默吞掉的
+      // 就是 "no such column" 这一类；整个列表不许因此 500。
+      expect(std.resource_counts.reports).toBe(0);
+      expect(std.resource_counts.templates).toBe(0);
+      expect(adm.resource_counts.reports).toBe(0);
+      expect(adm.resource_counts.templates).toBe(0);
+      // 列都到位了更不该刷错误日志（否则每个管理员每次打开用户列表都是一屏红）
       expect(errSpy).not.toHaveBeenCalled();
     } finally { await close(); }
   });
