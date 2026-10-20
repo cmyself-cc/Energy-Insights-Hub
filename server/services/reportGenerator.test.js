@@ -4,7 +4,7 @@ vi.mock("../lib/llmClient.js", () => ({ callLlm: vi.fn(), callLlmJson: vi.fn() }
 vi.mock("../lib/websearch.js", () => ({ webSearch: vi.fn() }));
 
 import db, { initDb } from "../db.js";
-import { createReportJob, getJob, retryJob, runJob, processQueue } from "./reportGenerator.js";
+import { createReportJob, getJob, listJobs, retryJob, runJob, processQueue } from "./reportGenerator.js";
 import { callLlm, callLlmJson } from "../lib/llmClient.js";
 import { webSearch } from "../lib/websearch.js";
 
@@ -22,6 +22,40 @@ describe("reportGenerator", () => {
     db.prepare("DELETE FROM insights WHERE id=11").run();
     callLlm.mockReset(); callLlmJson.mockReset(); webSearch.mockReset();
     seedTemplateAndInsight();
+  });
+
+  it("stamps owner_id on both the report draft and the job (Task 9 / M2)", () => {
+    const job = createReportJob({ templateId: 1, insightIds: [11], resolutions: [], ownerId: 42 });
+    expect(job.owner_id).toBe(42);
+    const report = db.prepare("SELECT owner_id FROM reports WHERE id = ?").get(job.report_id);
+    expect(report.owner_id).toBe(42);
+  });
+
+  it("omitting ownerId keeps NULL ownership (legacy/system callers)", () => {
+    const job = createReportJob({ templateId: 1, insightIds: [11], resolutions: [] });
+    expect(job.owner_id).toBeNull();
+  });
+
+  it("filters listJobs/getJob/retryJob by owner, admin and legacy callers see all", () => {
+    const j1 = createReportJob({ templateId: 1, insightIds: [11], resolutions: [], ownerId: 1 });
+    const j2 = createReportJob({ templateId: 1, insightIds: [11], resolutions: [], ownerId: 2 });
+
+    const user1 = { id: 1, role: "user" };
+    const user2 = { id: 2, role: "user" };
+    const admin = { id: 99, role: "admin" };
+
+    const ids = (user) => listJobs(user).map((j) => j.id);
+    expect(ids(user1)).toEqual([j1.id]);
+    expect(ids(user2)).toEqual([j2.id]);
+    expect(ids(admin).sort()).toEqual([j1.id, j2.id].sort());
+    expect(ids(undefined).sort()).toEqual([j1.id, j2.id].sort()); // 旧调用兼容
+
+    expect(getJob(j1.id, user1).id).toBe(j1.id);
+    expect(getJob(j1.id, user2)).toBeNull();      // 不泄露存在性
+    expect(getJob(j1.id, admin).id).toBe(j1.id);
+
+    expect(() => retryJob(j1.id, user2)).toThrowError(/not found/i);
+    expect(retryJob(j1.id, user1).status).toBe("queued");
   });
 
   it("creates a generating report draft and a queued job", () => {

@@ -34,14 +34,16 @@ describe("reportTemplateService", () => {
     expect(generic.prompt).toContain("{{audience}}");
   });
 
-  it("creates, updates and deletes a custom template", () => {
-    const created = createTemplate({ name: "测试模板", prompt: "编写报告", max_cards: 5, is_public: 0 });
+  it("creates, updates and deletes a custom template (owned by the caller)", () => {
+    const owner = { id: 1, role: "user" };
+    const created = createTemplate({ name: "测试模板", prompt: "编写报告", max_cards: 5, is_public: 1 }, owner);
     expect(created.id).toBeGreaterThan(0);
-    expect(created.is_public).toBe(false);
-    const updated = updateTemplate(created.id, { name: "测试模板2", prompt: "新提示词" });
+    expect(created.is_public).toBe(false);       // user 即使传 is_public 也被强制私有
+    expect(created.owner_id).toBe(1);
+    const updated = updateTemplate(created.id, { name: "测试模板2", prompt: "新提示词" }, owner);
     expect(updated.name).toBe("测试模板2");
-    expect(listTemplates().some(t => t.id === created.id && t.name === "测试模板2")).toBe(true);
-    deleteTemplate(created.id);
+    expect(listTemplates(owner).some(t => t.id === created.id && t.name === "测试模板2")).toBe(true);
+    deleteTemplate(created.id, owner);
     expect(listTemplates().some(t => t.id === created.id)).toBe(false);
   });
 

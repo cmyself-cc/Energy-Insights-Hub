@@ -10,36 +10,46 @@ function setJob(id, patch) {
     .run(...Object.values(patch), id);
 }
 
-export function createReportJob({ templateId, insightIds, resolutions = [], purpose = "", audience = "", theme = "" }) {
+export function createReportJob({ templateId, insightIds, resolutions = [], purpose = "", audience = "", theme = "", ownerId }) {
   const template = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(templateId);
   if (!template) throw new Error("Template not found");
   const ids = (insightIds || []).map(Number).filter(Boolean);
   if (ids.length === 0) throw new Error("insightIds are required");
   const reportResult = db.prepare(
-    "INSERT INTO reports (title, content, items, language, template_id, status) VALUES (?, ?, ?, ?, ?, 'generating')"
-  ).run("报告生成中…", "", JSON.stringify(ids), template.language || "zh", templateId);
+    "INSERT INTO reports (title, content, items, language, template_id, status, owner_id) VALUES (?, ?, ?, ?, ?, 'generating', ?)"
+  ).run("报告生成中…", "", JSON.stringify(ids), template.language || "zh", templateId, ownerId ?? null);
   const screening = JSON.stringify({ resolutions: resolutions || [], purpose: purpose || "", audience: audience || "", theme: theme || "" });
   const jobResult = db.prepare(
-    "INSERT INTO report_jobs (report_id, template_id, status, phase, progress, insight_ids, screening) VALUES (?, ?, 'queued', 'queued', 0, ?, ?)"
-  ).run(reportResult.lastInsertRowid, templateId, JSON.stringify(ids), screening);
+    "INSERT INTO report_jobs (report_id, template_id, status, phase, progress, insight_ids, screening, owner_id) VALUES (?, ?, 'queued', 'queued', 0, ?, ?, ?)"
+  ).run(reportResult.lastInsertRowid, templateId, JSON.stringify(ids), screening, ownerId ?? null);
   const job = db.prepare("SELECT * FROM report_jobs WHERE id = ?").get(jobResult.lastInsertRowid);
   return job;
 }
 
-export function getJob(id) {
-  return db.prepare("SELECT * FROM report_jobs WHERE id = ?").get(id);
+// 归属过滤（Task 9 / M2）：无 user（系统内部兼容）与 admin 全量；普通 user 只看自己的。
+function jobVisible(job, user) {
+  if (!job) return null;
+  if (!user || user.role === "admin") return job;
+  return job.owner_id === user.id ? job : null;
 }
 
-export function listJobs() {
-  return db.prepare("SELECT * FROM report_jobs ORDER BY id DESC LIMIT 50").all();
+export function getJob(id, user) {
+  return jobVisible(db.prepare("SELECT * FROM report_jobs WHERE id = ?").get(id), user);
 }
 
-export function retryJob(id) {
-  const job = getJob(id);
-  if (!job) throw new Error("Job not found");
+export function listJobs(user) {
+  if (!user || user.role === "admin") {
+    return db.prepare("SELECT * FROM report_jobs ORDER BY id DESC LIMIT 50").all();
+  }
+  return db.prepare("SELECT * FROM report_jobs WHERE owner_id = ? ORDER BY id DESC LIMIT 50").all(user.id);
+}
+
+export function retryJob(id, user) {
+  const job = getJob(id, user);
+  if (!job) throw Object.assign(new Error("Job not found"), { status: 404 });
   db.prepare("UPDATE report_jobs SET status='queued', phase='queued', progress=0, error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
   db.prepare("UPDATE reports SET status='generating', error=NULL WHERE id=?").run(job.report_id);
-  return getJob(id);
+  return getJob(id, user);
 }
 
 function loadInsights(ids) {

@@ -137,23 +137,46 @@ function parseRow(row) {
   return { ...row, is_public: row.is_public === 1 };
 }
 
-export function listTemplates() {
-  return db.prepare("SELECT * FROM report_templates ORDER BY is_public DESC, id ASC").all().map(parseRow);
+// 可见集合（Task 9 / M2 归属隔离）：
+//   无 user（旧调用/系统内部）= 全量；admin = 全量；
+//   普通 user = 公共模板 OR 自己的模板（is_public=1 OR owner_id=user.id）。
+// 「不泄露存在性」由路由层的 404 保证，这里只负责集合定义。
+export function listTemplates(user) {
+  if (!user) {
+    return db.prepare("SELECT * FROM report_templates ORDER BY is_public DESC, id ASC").all().map(parseRow);
+  }
+  if (user.role === "admin") return listTemplates(null);
+  return db.prepare(
+    "SELECT * FROM report_templates WHERE is_public = 1 OR owner_id = ? ORDER BY is_public DESC, id ASC"
+  ).all(user.id).map(parseRow);
 }
 
-export function createTemplate(data) {
-  const { name, description = "", purpose = "", prompt, max_cards = 10, language = "zh", is_public = 0 } = data;
-  if (!name || !prompt) throw new Error("name and prompt are required");
+export function createTemplate(data, user) {
+  const { name, description = "", purpose = "", prompt, max_cards = 10, language = "zh" } = data;
+  if (!name || !prompt) throw Object.assign(new Error("name and prompt are required"), { status: 400 });
+  // 普通 user 强制私有 + 归属自己：公共模板只能由 admin 建（Global Constraint 的归属口径）。
+  // admin 不传 is_public 时保持旧的默认 0（「creates a custom template」用例的既有语义）。
+  const isAdmin = user?.role === "admin";
+  const isPublic = isAdmin && data.is_public ? 1 : 0;
+  const ownerId = user?.id ?? null;
   const result = db.prepare(
-    "INSERT INTO report_templates (name, description, purpose, prompt, max_cards, is_public, language) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(String(name), String(description), String(purpose), String(prompt), Number(max_cards) || 10, is_public ? 1 : 0, String(language));
+    "INSERT INTO report_templates (name, description, purpose, prompt, max_cards, is_public, language, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(String(name), String(description), String(purpose), String(prompt), Number(max_cards) || 10, isPublic, String(language), ownerId);
   const row = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(result.lastInsertRowid);
   return parseRow(row);
 }
 
-export function updateTemplate(id, data) {
-  const existing = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(id);
-  if (!existing) throw new Error("Template not found");
+// 归属判定：不存在与非归属统一 404（不泄露存在性）；admin 直通。
+function ownedTemplate(id, user) {
+  const row = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(id);
+  if (!row) throw Object.assign(new Error("Template not found"), { status: 404 });
+  if (user?.role === "admin") return row;
+  if (user && row.owner_id === user.id) return row;
+  throw Object.assign(new Error("Template not found"), { status: 404 });
+}
+
+export function updateTemplate(id, data, user) {
+  const existing = ownedTemplate(id, user);
   const { name, description, purpose, prompt, max_cards, language } = data;
   db.prepare(
     `UPDATE report_templates SET
@@ -172,12 +195,33 @@ export function updateTemplate(id, data) {
   return parseRow(db.prepare("SELECT * FROM report_templates WHERE id = ?").get(id));
 }
 
-export function deleteTemplate(id) {
-  const row = db.prepare("SELECT is_public FROM report_templates WHERE id = ?").get(id);
-  if (!row) throw new Error("Template not found");
-  if (row.is_public === 1) throw new Error("Public templates cannot be deleted");
+export function deleteTemplate(id, user) {
+  const row = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(id);
+  if (!row) throw Object.assign(new Error("Template not found"), { status: 404 });
+  // 公共模板是共享资产：普通 user 一律 403（哪怕它是自己建的——建公共模板本来也只有
+  // admin 能办到，owner 在这里只是记账）；admin 才可删。
+  if (row.is_public === 1 && user?.role !== "admin") {
+    throw Object.assign(new Error("Public templates can only be deleted by an admin"), { status: 403 });
+  }
+  // 私有模板：只有 owner 或 admin（不泄露存在性 → 404）。
+  if (user?.role !== "admin" && row.owner_id !== user?.id) {
+    throw Object.assign(new Error("Template not found"), { status: 404 });
+  }
   db.prepare("DELETE FROM report_templates WHERE id = ?").run(id);
   return { success: true };
+}
+
+// 「另存为副本」（Task 10 前端按钮的消费端）：源模板必须**可见**（公共/自己的/admin），
+// 新行强制私有 + 归属当前用户。名字后缀跟源模板语言走（zh「（副本）」/ en "(Copy)"）。
+export function duplicateTemplate(id, user) {
+  const src = db.prepare("SELECT * FROM report_templates WHERE id = ?").get(id);
+  const visible = src && (user?.role === "admin" || src.is_public === 1 || src.owner_id === user?.id);
+  if (!visible) throw Object.assign(new Error("Template not found"), { status: 404 });
+  const suffix = src.language === "en" ? " (Copy)" : "（副本）";
+  const result = db.prepare(
+    "INSERT INTO report_templates (name, description, purpose, prompt, max_cards, is_public, language, owner_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?)"
+  ).run(src.name + suffix, src.description, src.purpose, src.prompt, src.max_cards, src.language, user?.id ?? null);
+  return parseRow(db.prepare("SELECT * FROM report_templates WHERE id = ?").get(result.lastInsertRowid));
 }
 
 export function seedReportTemplates() {
