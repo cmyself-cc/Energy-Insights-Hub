@@ -133,8 +133,10 @@ export default function LoginGate({ onLoggedIn }) {
   const bg = darkMode ? COLORS.background.dark : "#f8f8fc";
   const cardBg = darkMode ? COLORS.background.cardDark : COLORS.background.card;
   const text = darkMode ? "#e8e8e8" : COLORS.text.primary;
-  // 用 secondary(#555) 而不是 tertiary(#888)：#888 在白底上是 3.54:1，低于 WCAG AA 的 4.5:1。
-  // 暗色下 #888 对 cardDark(#1c1f2b) 是 4.77:1，本来就过线，保持不动。
+  // 用 secondary(#555) 而不是 tertiary(#888)：#888 在白底上是 3.54:1（实测 3.5449），
+  // 低于 WCAG AA 的 4.5:1。暗色下 #888 对 cardDark(#1c1f2b) 实测是 **4.627:1**
+  // （此前这里写的「4.77」是算错的），仍然过线，所以保持不动 —— 但余量只有 **0.127**：
+  // cardDark 稍微调亮一点就会掉出 AA。改那个 token 时必须重算这一对。
   const muted = darkMode ? "#888" : COLORS.text.secondary;
   const border = darkMode ? COLORS.border.dark : COLORS.border.light;
 
@@ -152,25 +154,33 @@ export default function LoginGate({ onLoggedIn }) {
   // off = 按钮处于 disabled（busy 或输入为空）。
   // ⚠️ disabled 态必须在**视觉上**可分辨：只有 disabled 属性、样式却与可点时逐像素相同的话，
   // 用户看不出「为什么点了没反应」，会以为页面卡了。responsive.css 里没有 button:disabled 规则，
-  // 而 inline style 又表达不了伪类，所以由调用方把 disabled 的同一个布尔值传进来。
-  // 用 opacity 而不是换 background：换色会引入 theme.js 之外的字面值，而 disabled 控件本来就
-  // 不受 WCAG 对比度约束，压暗是最省事也最不会与主题打架的做法。
+  // 而 inline style 又表达不了伪类，所以由调用方把 disabled 的**同一个**布尔值传进来 ——
+  // 「disabled 属性与样式由同一个布尔值驱动」才是真正的不变量，别把两者拆开各算一遍。
+  //
+  // 换底色 + 换标签色，而不是压 opacity。原来那版（background 恒为 primary、opacity 0.45）
+  // 的问题出在标签：白字落在「α=0.45 的 primary 与浅色卡片合成」出来的 #98bca7 上只有
+  // **2.08:1**，远低于 WCAG AA 的 4.5:1。而「#555 填充 + 白字」那个候选更糟：#555 与
+  // primary(#1a6b3c) 的亮度差只有 **1.14**，两者几乎同亮度、只靠色相区分 —— 灰度与红绿色盲下
+  // 等于没区分，正好把 A4 原本的缺陷重造一遍。
+  // 现在这一对（background.disabled #f0f0f0 填充 + text.secondary #555 标签）：标签对比
+  // **6.54:1**，且这一对里没有任何随 darkMode 变化的量，所以两种配色模式下是同一个数；
+  // 与启用态填充的亮度差 **5.74**，灰度下依然分得清。两个值都是 theme.js 的 token。
+  // transition 也从 opacity 改成 background-color：opacity 已经不是那个变化量了。
   const primaryBtn = (off) => ({
     width: "100%",
     padding: "11px 16px",
     borderRadius: BORDER_RADIUS.md,
     border: "none",
-    background: COLORS.primary,
-    color: "#fff",
+    background: off ? COLORS.background.disabled : COLORS.primary,
+    color: off ? COLORS.text.secondary : "#fff",
     fontSize: FONT_SIZES.base,
     fontWeight: 600,
     cursor: off ? "not-allowed" : "pointer",
-    opacity: off ? 0.45 : 1,
     textDecoration: "none",
     display: "block",
     textAlign: "center",
     boxSizing: "border-box",
-    transition: `opacity ${TRANSITIONS.fast}`
+    transition: `background-color ${TRANSITIONS.fast}`
   });
   // 与下面 button 的 disabled 用同一个布尔值，避免「属性说禁用了、样式说能点」这种分叉
   const inviteOff = busy || !code.trim();

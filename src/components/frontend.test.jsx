@@ -4,6 +4,7 @@ import Sidebar from "./Sidebar";
 import Header from "./Header";
 import LoginGate from "./LoginGate";
 import { i18n } from "../constants/i18n";
+import { COLORS } from "../constants/theme";
 
 // 这些组件的静态渲染观察者。
 //
@@ -65,6 +66,13 @@ function uninstallBrowserStub() {
 // 泄漏，但显式拆装让「别的套件看到的仍是纯 node 环境」这件事不依赖那个默认值。
 beforeEach(() => { installBrowserStub(); });
 afterEach(() => { uninstallBrowserStub(); });
+
+// React 把 inline style 序列化成 `prop:value;prop:value` 且**不做**大小写或空格归一化，
+// 所以比对前把两边都归一化：转小写 + 抹掉 `;` 与 `:` 周围的空白。这样断言里可以直接写
+// theme.js 的 token，而不是抄一份字面值。
+function normalizeStyle(styleAttr) {
+  return styleAttr.toLowerCase().replace(/\s*([;:])\s*/g, "$1");
+}
 
 const noop = () => {};
 
@@ -170,17 +178,23 @@ describe("Header — 身份块与登出入口", () => {
     expect(html).not.toContain(">B<");
   });
 
+  // 断言挂在 **title 属性**上，不挂在 "No model" 那段文案上。
+  // "No model" 来自 Header.jsx:87 的空态分支，而 server/routes/models.js:81 返回的是
+  // `{ name: process.env.LLM_MODEL || "未配置", isActive: true }` —— 恒为真值，所以真实浏览器里
+  // currentModel 永远不是 null，那个分支是**死代码**（延后项 #3，已折进 Task 6b）。把观察者挂在
+  // 即将消失的代码上，修 models.js 的那天这条断言会跟着一起失效。
+  // title 与那段文案在**同一个** `{!isMobile && isAdmin && (...)}` 块里（Header.jsx:75），
+  // 观察到的是完全相同的门禁，而它在生产里确实渲染。
+  const CHIP_TITLE = "Active model (manage in Settings → Global Config)";
+
   it("admin 才渲染模型芯片（R1：/api/models 整前缀 requireAdmin）", () => {
-    // 静态渲染下 currentModel 恒为 null（它的赋值在 useEffect 里），所以芯片文案固定是
-    // 「No model」。这是 R1 唯一能被静态渲染看到的效果：普通用户不该挂载这个消费者，
-    // 否则它恒显示 No model、tooltip 还指向普通用户进不去的配置页。
-    expect(renderHeader(ADMIN)).toContain("No model");
-    expect(renderHeader(USER)).not.toContain("No model");
-    expect(renderHeader(null)).not.toContain("No model");
+    expect(renderHeader(ADMIN)).toContain(CHIP_TITLE);
+    expect(renderHeader(USER)).not.toContain(CHIP_TITLE);
+    expect(renderHeader(null)).not.toContain(CHIP_TITLE);
   });
 
   it("移动端不渲染模型芯片（即便用户是 admin）", () => {
-    expect(renderHeader(ADMIN, { isMobile: true })).not.toContain("No model");
+    expect(renderHeader(ADMIN, { isMobile: true })).not.toContain(CHIP_TITLE);
   });
 });
 
@@ -198,10 +212,29 @@ describe("LoginGate — 四态都必须渲染真文案", () => {
     expect(html).toContain("Enter your invite code to activate");
     expect(html).toContain("Activate");
     expect(html).toContain("<input");
-    // 输入框为空时按钮必须是 disabled，且样式上与可点态可分辨（A4）
+  });
+
+  it("输入框为空时，disabled 属性与「看得出是禁用」的样式由**同一个布尔值**驱动（A4）", () => {
+    installBrowserStub({ hash: "#invite=abc123" });
+    const html = renderGate();
     expect(html).toContain("disabled");
-    expect(html).toContain("not-allowed");
-    expect(html).toContain("opacity:0.45");
+
+    // 🔴 只取**带 disabled 属性那个元素**的 style。整页 toContain 会是假阳性：
+    // 同页的 <label> 用 color: muted，而浅色模式下 muted 恰好也是 COLORS.text.secondary，
+    // 于是「按钮标签色」这条断言即使按钮的 color 分支被删掉也照样通过。
+    const offStyle = normalizeStyle(/<button[^>]*\sdisabled[^>]*style="([^"]*)"/.exec(html)?.[1] || "");
+    expect(offStyle, "带 disabled 的按钮必须真的存在，且带 style").not.toBe("");
+    // 引用 theme.js 的 token 本身，而不是抄一份字面值：日后调 token 不会红，
+    // 但在组件里换一个 token 会红。
+    expect(offStyle).toContain(`background:${COLORS.background.disabled.toLowerCase()}`);
+    expect(offStyle).toContain(`color:${COLORS.text.secondary.toLowerCase()}`);
+    expect(offStyle).toContain("cursor:not-allowed");
+    // 禁用态不能同时带着启用态的填充色（否则就是「两个分支都写上了」那种变异）
+    expect(offStyle).not.toContain(`background:${COLORS.primary.toLowerCase()}`);
+    // 标签对比度是这一对的全部意义所在（#555 on #f0f0f0 = 6.54:1，两种配色模式同值）。
+    // 白字是旧实现（primary 填充 + opacity 0.45，标签对比只有 2.08:1）的痕迹，必须不再出现。
+    expect(offStyle).not.toContain("color:#fff");
+    expect(offStyle).not.toContain("opacity");
   });
 
   it("#state_expired 渲染超时提示，而不是白屏", () => {

@@ -253,7 +253,10 @@ describe("/api/views", () => {
   // 两处一起才对）」——**那条修复当时并不存在**（该文件只有 beforeEach 里的 resetTables()，
   // 没有 afterAll），所以它每跑完一轮都会在测试库上留下 users=1 / sessions=1 /
   // pending_identities=1（u8 / h1 / p1），连续污染了好几轮。现已补上，用的是那个文件自己的
-  // resetTables() 而不是 clearAuthTables()——后者内部会调 initDb() 重跑整套迁移，不该给一个
-  // 迁移测试再加一层间接。规则口径也一并收窄为「凡是写 auth 表的测试文件才需要这个钩子」。
+  // resetTables() 而不是 clearAuthTables()——后者内部会调 initDb()，而 initDb() 会尝试执行任何
+  // **尚未记录在 _migrations 里**的迁移（已记录的会在 server/db.js:42 被 `continue` 跳过，所以
+  // 「重跑整套迁移」这个说法是错的，这里早先也那么写过）。给一个**迁移测试**再挂一层「顺便执行
+  // 未记录迁移」的间接，只会让失败信息指向错误的地方。规则口径也一并收窄为「凡是写 auth 表的
+  // 测试文件才需要这个钩子」。
   afterAll(() => { clearAuthTables(); });
 });

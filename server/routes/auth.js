@@ -203,7 +203,17 @@ function clearOauthStateCookie(res) {
 }
 
 // query 优先（微信回跳的形状），body 兜底（程序化 POST 的形状）。
-// ?state=a&state=b 会被 express 解析成数组，typeof 守卫把它挡在外面。
+//
+// ⚠️ 归属订正：这里早先写着「?state=a&state=b 会被 express 解析成数组，typeof 守卫把它挡在
+// 外面」，把功劳记在了本函数头上 —— 记错了。这条链上有**两层** typeof 检查：stateFrom 自己
+// 这一层，和 validState 里那一层（`typeof v === "string" && OAUTH_STATE_RE.test(v)`）。
+// 数组形状最终是被 **validState** 拒掉的。证据：评审的 G10 变异把本函数的
+// `if (typeof q === "string")` 换成 `if (q !== undefined)`（其余控制流完全不变），
+// **全量套件 SURVIVED** —— 本函数这层是冗余的纵深防御，不是承重墙。
+// （对照：把数组**摊平成首元素**再交给 validState 那种改写是有观察者的，auth.test.js 里
+// 那条 array-shaped state 用例会红 —— 区别在于摊平之后 validState 看到的就是合法字符串了。）
+// 冗余本身没问题、多一层不多花什么，但注释不该替它冒领功劳：否则日后有人「简化」掉
+// validState 那层时，会以为这里还兜着。
 function stateFrom(req) {
   const q = req.query?.state;
   if (typeof q === "string") return validState(q);

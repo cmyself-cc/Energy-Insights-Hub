@@ -11,7 +11,15 @@ export const COLORS = {
     light: "#f7f8f9",
     dark: "#0f1117",
     card: "#fff",
-    cardDark: "#1c1f2b"
+    cardDark: "#1c1f2b",
+    // 禁用控件的填充色。字面值与 border.light 相同，但**刻意不复用**那个 token：
+    // 一个是「分隔线」一个是「控件填充」，语义不同；复用会让日后调边框色的人
+    // 顺手改掉所有禁用按钮的底色。
+    // 配 COLORS.text.secondary 作标签：#555 on #f0f0f0 = 6.54:1（两种配色模式下同一个值，
+    // 这一对与 darkMode 无关），且与启用态的 primary(#1a6b3c) 亮度差 5.74 —— 灰度/色盲下
+    // 仍然分得清。禁用控件属于 WCAG 1.4.11 的 inactive 豁免，所以它与卡片的低对比
+    // （浅色 1.14 / 深色 14.39）不是缺陷。
+    disabled: "#f0f0f0"
   },
   border: {
     light: "#f0f0f0",

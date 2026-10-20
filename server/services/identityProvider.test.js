@@ -1,9 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { isMockMode, exchangeIdentity, exchangeIdentityWechat, getAuthorizeUrl } from "./identityProvider.js";
-// 刻意**不** import ../testUtils.js：clearAuthTables() 内部会调 initDb()，而 initDb() 会遍历
-// server/migrations/ 跑整套迁移 —— 那等于把「identityProvider 的纯逻辑单测」绑到「所有迁移
-// 都健康」上。本文件一行 DB 都不写（只桩打向微信上游的 outbound fetch），被测模块的唯一 import
-// 是 node:crypto，清理钩子在这里收益为零、耦合为实。
+// 刻意**不** import ../testUtils.js。本文件一行 DB 都不写（只桩打向微信上游的 outbound
+// fetch），被测模块的唯一 import 是 node:crypto，清理钩子在这里收益为零、耦合为实。
+//
+// ⚠️ 措辞订正：这里早先写的是「clearAuthTables() → initDb() 会遍历 migrations 跑整套迁移」，
+// **机制说错了**（结论不变）。initDb() 对已记录在 _migrations 里的迁移是
+// `if (isApplied.get(file)) continue;`（server/db.js:42）直接跳过的 —— 在一个健康的测试库上，
+// 它的全部代价就是一次 readdirSync 加 N 条 SELECT。真正的耦合是下面两条：
+//   (a) 那个 DB 文件必须能打开；
+//   (b) 任何**未记录 / 新加的 / 写坏了的**迁移都会被尝试执行 —— 于是一个与 identityProvider
+//       毫不相干的迁移问题，会把这个纯逻辑单测文件搞红，而且失败信息指向错误的地方。
 // 规则是「凡是写 auth 表的测试文件才必须 afterAll(clearAuthTables)」，本文件不属于那一类。
 
 // WECHAT_TIMEOUT_MS 也在列：它决定上游 fetch 的 AbortSignal 何时触发，泄漏出去会让

@@ -1,10 +1,20 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import db from "../db.js";
 import { createSession, resolveSession, destroySession } from "./sessions.js";
 import { insertTestUser, clearAuthTables } from "../testUtils.js";
 
 describe("sessions", () => {
   beforeEach(() => { clearAuthTables(); });
+
+  // 文件级清理（R2 规则：凡是写 auth 表的测试文件都要带这个钩子）。
+  // beforeEach 只保证**本文件内**每个用例从干净状态开始，管不到文件跑完之后：
+  // 最后一个用例（destroySession）删掉的是 session 行，不是 user 行，所以本文件单跑
+  // 会在测试库留下 users=1（u4）。实测过：`npx vitest run server/lib/sessions.test.js`
+  // 加这个钩子之前留 users=1，之后 5 张 auth 表全 0。
+  // 全量跑之所以看起来干净，只是因为 023_users_auth.test.js 恰好在写 auth 表的文件里
+  // **最后完成**、它的 beforeEach 顺手擦掉了残留 —— 而 vitest 不承诺完成顺序。
+  // initDb() 的耦合顾虑在这里不成立：本文件的 beforeEach 早就在调 clearAuthTables() 了。
+  afterAll(() => { clearAuthTables(); });
 
   it("creates and resolves a session, sliding expiry", () => {
     const u = insertTestUser({ unionid: "u1" });
