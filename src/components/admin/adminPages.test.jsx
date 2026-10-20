@@ -1372,10 +1372,11 @@ describe("ViewsBar — 视角控件（嵌监控框内布局，产品负责人定
     expect(html).toContain(COLORS.status.warning); // 黄色 = theme status.warning 字面值
   });
 
-  it("下拉第一项是「回公共池」（与开关等价的双重关闭入口）；默认视角带 ★", () => {
+  it("下拉第一项是「回公共池」（与开关等价的双重关闭入口）；option 不带 ★（默认标记由星标按钮表达）", () => {
     const html = renderBar({ activeViewId: 1 });
     expect(html).toMatch(/<option value="">/);
-    expect(html).toContain("光伏追踪 ★");
+    expect(html).toMatch(/<option[^>]*>光伏追踪<\/option>/);
+    expect(html).not.toContain("光伏追踪 ★");
   });
 
   it("drift 条仅「开启 + drift」时出现", () => {

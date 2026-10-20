@@ -113,10 +113,10 @@ export default function ViewsBar({
               }}
             >
               <option value="">{t.views.backToPublic}</option>
+              {/* option 不带 ★：默认标记由下拉外的星标按钮表达（产品负责人 2026-10-21），
+                  一处信号源，避免两处同步漂移 */}
               {(views || []).map((v) => (
-                <option key={v.id} value={String(v.id)}>
-                  {v.name}{v.is_default ? " ★" : ""}
-                </option>
+                <option key={v.id} value={String(v.id)}>{v.name}</option>
               ))}
             </select>
             {/* 设为默认 = 可选中五角星（产品负责人 2026-10-21）：非默认=空心 ☆，

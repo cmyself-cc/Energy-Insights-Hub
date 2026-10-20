@@ -344,9 +344,12 @@ export default function App() {
         setFetched(true);
         const count = newData.length;
         const msg = language === "zh" ? `成功获取 ${count} 条洞察` : `Fetched ${count} insights`;
+        // 时间窗去重（2026-10-21 产品负责人要求）：3 秒内**任何**成功提示只留一条。
+        // 登录时默认视角自动启用会连发两次 fetch（默认筛选 + 视角筛选，条数不同、
+        // key 不同，旧的同文案 2s 去重挡不住）；快速连续刷新同理。错误 toast 走另一条
+        // 分支不受影响。
         const now = Date.now();
-        const last = lastToastRef.current;
-        if (!(last && last.key === msg && now - last.ts < 2000)) {
+        if (now - lastToastRef.current.ts > 3000) {
           addToast(msg, "success");
           lastToastRef.current = { key: msg, ts: now };
         }
