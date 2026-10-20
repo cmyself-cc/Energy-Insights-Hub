@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import ConfigurationPage from "../ConfigurationPage";
 import { ReportRow, TemplateCard } from "../ReportsPage";
+import ViewsBar from "../ViewsBar";
 import UsersPage, { UserRow, UsersList } from "./UsersPage";
 import InviteCodesPage, { InviteForm, InviteRow, InviteList, UsagesPanel } from "./InviteCodesPage";
 import { i18n } from "../../constants/i18n";
@@ -1008,10 +1009,12 @@ describe("backendApi — 只暴露 7b 真正消费的 6 个 admin 方法", () =>
     }
   });
 
-  it("🔴 视角那 5 个方法一个都没加（属于 Task 11，现在加进来就是死代码）", () => {
-    // brief 原文写「Task 7b 自己拥有全部 11 个 backendApi 方法」，控制器派发时已收窄成 6 个。
+  it("视角那 5 个方法属于 Task 11 —— 7b 阶段不该有；Task 11 落地后必须存在且为函数", () => {
+    // brief 原文写「Task 7b 自己拥有全部 11 个 backendApi 方法」，控制器派发时收窄成 6 个，
+    // 这条在 7b 评审时防过死代码；Task 11（c347ede 之后的功能 commit）已正式接线视角，
+    // 断言随之翻转 —— 它现在防的是「视角方法被误删」。
     for (const m of ["getViews", "createView", "updateView", "deleteView", "setDefaultView"]) {
-      expect(m in backendApi, `backendApi.${m} 不该存在`).toBe(false);
+      expect(typeof backendApi[m], `backendApi.${m}`).toBe("function");
     }
   });
 });
@@ -1287,5 +1290,60 @@ describe("TemplateCard — 归属徽标与另存为（Task 10 / M2）", () => {
       expect(i18n.en.reports[k], `en.reports.${k}`).not.toBe("");
       expect(i18n.zh.reports[k], `zh.reports.${k}`).not.toBe("");
     }
+  });
+});
+
+// ── Task 11 / M3：ViewsBar 视角开关与管理条 ─────────────────────
+//
+// 覆盖边界：ViewsBar 是纯展示组件（数据/动作全走 props），可静态观察列表/激活态/偏离条。
+// 无观察者：保存/更新/删除/设默认的真实请求在 handler 里（事件无法静态派发）、
+// 「忽略」与错误提示是组件内部瞬态。诚实缺口照实登记。
+const VIEWS = [
+  { id: 1, name: "光伏追踪", filters: { purposes: "tech" }, is_default: true },
+  { id: 2, name: "竞品雷达", filters: {}, is_default: false }
+];
+const renderBar = (props = {}) =>
+  renderToStaticMarkup(
+    <ViewsBar darkMode={false} language="en" views={VIEWS} activeViewId={null} drift={false}
+      onSelect={noopT10} onSave={noopT10} onUpdateCurrent={noopT10} onDelete={noopT10} onSetDefault={noopT10}
+      {...props} />
+  );
+
+describe("ViewsBar — 视角开关与管理（Task 11 / M3）", () => {
+  it("下拉列出全部视角，默认视角带 ★，首项是「回公共池」", () => {
+    const html = renderBar();
+    expect(html).toContain("光伏追踪 ★");
+    expect(html).toContain("竞品雷达");
+    expect(html).toContain(i18n.en.views.backToPublic);
+  });
+
+  it("激活视角后显示名字 + 设默认/删除按钮，未激活时不显示", () => {
+    const active = renderBar({ activeViewId: 2 });
+    expect(active).toContain(i18n.en.views.setDefault);
+    expect(active).toContain(i18n.en.views.deleteView);
+    const inactive = renderBar();
+    expect(inactive).not.toContain(`>${i18n.en.views.deleteView}<`);
+  });
+
+  it("drift=true 且视角激活时显示偏离提示条（更新/忽略），drift=false 或视角未激活时不显示", () => {
+    expect(renderBar({ activeViewId: 1, drift: true })).toContain(i18n.en.views.driftHint);
+    expect(renderBar({ activeViewId: 1, drift: true })).toContain(i18n.en.views.updateView);
+    expect(renderBar({ activeViewId: 1, drift: false })).not.toContain(i18n.en.views.driftHint);
+    expect(renderBar({ drift: true })).not.toContain(i18n.en.views.driftHint);
+  });
+
+  it("列表为空且未激活时开关禁用（aria-checked=false + disabled）", () => {
+    const html = renderBar({ views: [] });
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain("disabled");
+  });
+
+  it("「保存为视角」入口按 i18n 文案渲染（en/zh）；views 9 键现已有消费者", () => {
+    expect(renderBar()).toContain(i18n.en.views.saveAsView);
+    const zh = renderToStaticMarkup(
+      <ViewsBar darkMode={false} language="zh" views={VIEWS} activeViewId={null} drift={false}
+        onSelect={noopT10} onSave={noopT10} onUpdateCurrent={noopT10} onDelete={noopT10} onSetDefault={noopT10} />
+    );
+    expect(zh).toContain(i18n.zh.views.saveAsView);
   });
 });

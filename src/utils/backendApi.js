@@ -139,6 +139,13 @@ export const backendApi = {
   // ADM-2 的「查看使用记录」：返回用这张码注册的用户（id/unionid/nickname/created_at）。
   getInviteCodeUsages: (id) => request(`/admin/invite-codes/${id}/usages`),
 
+  // Views（Task 5 后端 CRUD，Task 11 前端接线）。上限 10/人（后端 400 "view limit reached"）。
+  getViews: () => request("/views"),
+  createView: (data) => request("/views", { method: "POST", body: JSON.stringify(data) }),
+  updateView: (id, data) => request(`/views/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteView: (id) => request(`/views/${id}`, { method: "DELETE" }),
+  setDefaultView: (id) => request(`/views/${id}/default`, { method: "POST" }),
+
   // Insights
   getInsights: (params = {}) => {
     const filtered = Object.entries(params).reduce((acc, [key, value]) => {

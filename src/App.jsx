@@ -7,6 +7,8 @@ import IntelligencePage from "./components/IntelligencePage";
 import AiDrawer from "./components/AiDrawer";
 import ReportsPage from "./components/ReportsPage";
 import ReportGeneratorModal from "./components/ReportGeneratorModal";
+import ViewsBar from "./components/ViewsBar";
+import { filtersToView, viewToFilters, isDrift } from "./utils/viewFilters";
 import ConfigurationPage from "./components/ConfigurationPage";
 import LoginGate from "./components/LoginGate";
 import { ToastContainer } from "./components/Toast";
@@ -21,6 +23,11 @@ import "./styles/responsive.css";
 
 export default function App() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  // Task 11 / M3 自定义视角：activeViewId=null 表示公共池（VIEW-4）
+  const [views, setViews] = useState([]);
+  const [activeViewId, setActiveViewId] = useState(null);
+  const activeView = views.find((v) => v.id === activeViewId) || null;
+  const viewDrift = activeView ? isDrift(activeView.filters, filters) : false;
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -113,6 +120,16 @@ export default function App() {
     if (!userId) return;
     loadInsightsFromBackend();
     backendApi.getReportTemplates(user?.role === "admin").then(r => setReportTemplates(r.data || [])).catch(() => {});
+    // 视角列表 + 默认视角自动启用（VIEW-5）：用户显式关过（view_off_<id>）则尊重其选择
+    backendApi.getViews().then(r => {
+      const list = r.data || [];
+      setViews(list);
+      const def = list.find((v) => v.is_default);
+      if (def && !localStorage.getItem(`view_off_${userId}`)) {
+        setActiveViewId(def.id);
+        setFilters(viewToFilters(def.filters));
+      }
+    }).catch(() => {});
     // 主体关键词：用于洞察卡片标题中突出显示主体
     // 来源：企业/主体规则（competitor/policy/tech）+ 行业初筛关键词（industry）
     Promise.all([backendApi.getFilterRules(), backendApi.getIndustryCategories()])
@@ -250,6 +267,35 @@ export default function App() {
     date.setDate(date.getDate() - d);
     return { dateFrom: date.toISOString().split("T")[0] };
   }
+
+  // ── Task 11 / M3 视角处理器 ──────────────────────────────
+  const reloadViews = async () => {
+    try { const r = await backendApi.getViews(); setViews(r.data || []); } catch { /* 列表刷新失败不打断主流程 */ }
+  };
+  const applyView = (view) => {
+    setFilters(viewToFilters(view.filters));
+    setActiveViewId(view.id);
+    localStorage.removeItem(`view_off_${userId}`);   // 显式选择 = 撤销「关掉默认视角」的记忆
+  };
+  const exitView = () => {
+    setActiveViewId(null);
+    setFilters(DEFAULT_FILTERS);                      // 回公共池 = 不筛选（VIEW-4）
+    localStorage.setItem(`view_off_${userId}`, "1");
+  };
+  const saveViewAs = async (name) => {
+    try {
+      await backendApi.createView({ name, filters: filtersToView(filters) });
+      await reloadViews();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e?.message || "" };  // 超限（400 view limit reached）走这条
+    }
+  };
+  const updateCurrentView = async () => {
+    if (!activeView) return;
+    await backendApi.updateView(activeView.id, { filters: filtersToView(filters) });
+    await reloadViews();
+  };
 
   const fetchInsights = useCallback(async (append = false) => {
     if (!append) {
@@ -475,6 +521,20 @@ export default function App() {
             <IntelligencePage
               darkMode={darkMode}
               language={language}
+              viewsBar={
+                <ViewsBar
+                  darkMode={darkMode}
+                  language={language}
+                  views={views}
+                  activeViewId={activeViewId}
+                  drift={viewDrift}
+                  onSelect={(v) => (v ? applyView(v) : exitView())}
+                  onSave={saveViewAs}
+                  onUpdateCurrent={updateCurrentView}
+                  onDelete={async (v) => { await backendApi.deleteView(v.id); if (activeViewId === v.id) exitView(); await reloadViews(); }}
+                  onSetDefault={async (v) => { await backendApi.setDefaultView(v.id); await reloadViews(); }}
+                />
+              }
               subTab={subTab}
               onSubTabChange={setSubTab}
               subjectKeywords={subjectKeywords}

@@ -106,7 +106,10 @@ export default function IntelligencePage(props) {
   return (
     <div>
       {subTab === "feed" && (
-        <FilterBar darkMode={darkMode} language={language} filters={filters} onChange={onFilterChange} onSearch={onSearch} loading={loading} />
+        <>
+          {props.viewsBar}
+          <FilterBar darkMode={darkMode} language={language} filters={filters} onChange={onFilterChange} onSearch={onSearch} loading={loading} />
+        </>
       )}
 
       {cart.length > 0 && subTab === "feed" && (
