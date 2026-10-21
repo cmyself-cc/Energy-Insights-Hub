@@ -78,16 +78,20 @@ export const SUBJECT_CATEGORIES = {
   ]
 };
 
+// 注意：这里的 key 是发给后端 `sourceType=` 筛选的**原始值**，后端做
+// `source_type = key` 精确等值匹配，必须与 server/services/tracker.js 的
+// SOURCE_TYPE_MAP 写入 insights.source_type 的中文标签逐字一致（2026-10-21 生产审计：
+// 带 " / English" 后缀导致两个选项恒筛空）。语言差异只体现在 label 上。
 export const SOURCE_TYPES = {
   en: [
     { key: "all", label: "All" },
-    { key: "新闻门户 / News Portal", label: "News Portal" },
-    { key: "微信公众号 / WeChat Official Account", label: "WeChat Official Account" }
+    { key: "新闻门户", label: "News Portal" },
+    { key: "微信公众号", label: "WeChat Official Account" }
   ],
   zh: [
     { key: "all", label: "全部" },
-    { key: "新闻门户 / News Portal", label: "新闻门户" },
-    { key: "微信公众号 / WeChat Official Account", label: "微信公众号" }
+    { key: "新闻门户", label: "新闻门户" },
+    { key: "微信公众号", label: "微信公众号" }
   ]
 };
 
