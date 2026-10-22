@@ -108,20 +108,27 @@ function buildNgrams(str, n = 2) {
   return set;
 }
 
-export function fuzzyTitleSimilarity(a, b) {
-  const na = normalizeForFuzzy(a);
-  const nb = normalizeForFuzzy(b);
-  if (!na || !nb) return 0;
-  if (na === nb) return 1;
+// 预计算标题签名（归一化文本 + n-gram 集合），供批量去重复用。
+// dedup 会把库内历史标题一次性签好名，避免每条候选比较时重复构建集合
+// （2026-10-22 优化：原实现每条候选 × 每条库内标题都重建两侧 n-gram）。
+export function titleSignature(title) {
+  const norm = normalizeForFuzzy(title);
+  return { norm, ngrams: buildNgrams(norm) };
+}
 
-  const ga = buildNgrams(na);
-  const gb = buildNgrams(nb);
+export function fuzzyTitleSimilarityFromSignatures(sigA, sigB) {
+  if (!sigA.norm || !sigB.norm) return 0;
+  if (sigA.norm === sigB.norm) return 1;
   let intersection = 0;
-  for (const g of ga) {
-    if (gb.has(g)) intersection++;
+  for (const g of sigA.ngrams) {
+    if (sigB.ngrams.has(g)) intersection++;
   }
   if (intersection === 0) return 0;
-  return (2 * intersection) / (ga.size + gb.size);
+  return (2 * intersection) / (sigA.ngrams.size + sigB.ngrams.size);
+}
+
+export function fuzzyTitleSimilarity(a, b) {
+  return fuzzyTitleSimilarityFromSignatures(titleSignature(a), titleSignature(b));
 }
 
 export function decompressIfNeeded(buffer, contentType = "", url = "") {

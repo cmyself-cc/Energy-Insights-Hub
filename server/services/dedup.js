@@ -1,5 +1,5 @@
 import db from "../db.js";
-import { fuzzyTitleSimilarity, normalizeUrl } from "../crawlers/utils.js";
+import { fuzzyTitleSimilarityFromSignatures, titleSignature, normalizeUrl } from "../crawlers/utils.js";
 
 function normalizeTitle(title) {
   return String(title || "")
@@ -27,12 +27,17 @@ export function deduplicateItems(items, options = {}) {
   const recentRawUrlSet = new Set(
     recent.map(r => (r.url || "").toLowerCase().trim()).filter(Boolean)
   );
-  const recentTitles = recent.map(r => r.title).filter(Boolean);
+  // 库内标题签名只构建一次；候选标题签名每条构建一次（原为每条候选 × 每条库内
+  // 标题都重建两侧 n-gram，2026-10-22 收敛为 O(N+M) 次构建 + O(N×M) 次集合交集）。
+  const recentSigs = recent
+    .map(r => titleSignature(r.title))
+    .filter(s => s.norm);
 
   const result = [];
   const seenUrls = new Set();
   const seenRawUrls = new Set();
   const seenTitles = new Set();
+  const batchSigs = [];
 
   for (const item of items) {
     const urlKey = item.url ? normalizeUrl(item.url) : null;
@@ -50,15 +55,17 @@ export function deduplicateItems(items, options = {}) {
     if (normTitle) {
       if (seenTitles.has(normTitle)) continue;
 
-      const dbDuplicate = recentTitles.some(
-        t => fuzzyTitleSimilarity(normTitle, t) >= threshold
+      const sig = titleSignature(item.title);
+      const dbDuplicate = recentSigs.some(
+        s => fuzzyTitleSimilarityFromSignatures(sig, s) >= threshold
       );
       if (dbDuplicate) continue;
 
-      const batchDuplicate = result.some(
-        r => fuzzyTitleSimilarity(item.title, r.title) >= threshold
+      const batchDuplicate = batchSigs.some(
+        s => fuzzyTitleSimilarityFromSignatures(sig, s) >= threshold
       );
       if (batchDuplicate) continue;
+      batchSigs.push(sig);
     }
 
     if (urlKey) seenUrls.add(urlKey);

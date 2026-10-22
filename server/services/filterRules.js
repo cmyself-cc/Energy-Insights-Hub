@@ -79,9 +79,29 @@ function keywordTerms(k) {
  * Return the first keyword term that matches the item text (case-insensitive substring).
  * Returns null when nothing matches. Useful for trace logging.
  */
+// 匹配文本缓存（2026-10-22 性能优化）：同一条 item 在行业预筛→关键词门被多个
+// purpose 桶反复匹配，原实现每次调用都重建小写文本。WeakMap 按 item 身份缓存，
+// 并记录来源字段——title/summary/rawContent 任一变更即失效重算（Phase 3 会覆写
+// title/summary，缓存返回陈旧文本是绝对禁止的，见 dedup 无关的 filterRules 测试）。
+const matchTextCache = new WeakMap();
+
+function itemMatchText(item, { withBody = false } = {}) {
+  const t = item.title || "";
+  const s = item.summary || "";
+  const rawFull = withBody ? String(item.rawContent || item.content || "") : null;
+  const cached = matchTextCache.get(item);
+  if (cached && cached.t === t && cached.s === s && cached.rawFull === rawFull) {
+    return cached.text;
+  }
+  const body = rawFull === null ? "" : rawFull.slice(0, 8000);
+  const text = (withBody ? `${t} ${s} ${body}` : `${t} ${s}`).toLowerCase();
+  matchTextCache.set(item, { t, s, rawFull, text });
+  return text;
+}
+
 export function findMatchedKeyword(item, keywords) {
   if (!keywords || keywords.length === 0) return null;
-  const text = `${item.title || ""} ${item.summary || ""}`.toLowerCase();
+  const text = itemMatchText(item);
   for (const k of keywords) {
     for (const term of keywordTerms(k)) {
       if (text.includes(String(term).toLowerCase())) return term;
@@ -101,8 +121,7 @@ export function matchesAnyKeyword(item, keywords) {
 // findMatchedKeyword（title+summary，召回语义不变）。
 export function findMatchedExcludingKeyword(item, keywords) {
   if (!keywords || keywords.length === 0) return null;
-  const body = String(item.rawContent || item.content || "").slice(0, 8000);
-  const text = `${item.title || ""} ${item.summary || ""} ${body}`.toLowerCase();
+  const text = itemMatchText(item, { withBody: true });
   for (const k of keywords) {
     for (const term of keywordTerms(k)) {
       if (text.includes(String(term).toLowerCase())) return term;

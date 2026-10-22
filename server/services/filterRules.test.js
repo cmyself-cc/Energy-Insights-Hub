@@ -183,3 +183,28 @@ describe("resolveMatchedPurposes", () => {
     ).toEqual([]);
   });
 });
+
+import { findMatchedKeyword, findMatchedExcludingKeyword } from "./filterRules.js";
+
+// 匹配文本缓存（2026-10-22 性能优化）的正确性护栏：item 被复用匹配多次
+// （行业预筛→关键词门多 purpose 桶）时缓存生效；但 item 文本若被改写，
+// 后续匹配必须读到新文本——流水线 Phase 3 会覆写 title/summary，缓存绝不允许
+// 返回陈旧文本。
+describe("匹配文本缓存 — 变更可见性", () => {
+  it("findMatchedKeyword：item.title 改写后再次匹配反映新文本", () => {
+    const item = { title: "原标题", summary: "" };
+    expect(findMatchedKeyword(item, ["原标题"])).toBe("原标题");
+    item.title = "改写后的标题";
+    expect(findMatchedKeyword(item, ["原标题"])).toBeNull();
+    expect(findMatchedKeyword(item, ["改写"])).toBe("改写");
+  });
+
+  it("findMatchedExcludingKeyword：正文与标题改写后再次匹配反映新文本", () => {
+    const item = { title: "标题", summary: "", rawContent: "正文含旧词" };
+    expect(findMatchedExcludingKeyword(item, ["旧词"])).toBe("旧词");
+    item.rawContent = "正文已清洗";
+    expect(findMatchedExcludingKeyword(item, ["旧词"])).toBeNull();
+    item.title = "招聘：标题含新词";
+    expect(findMatchedExcludingKeyword(item, ["招聘"])).toBe("招聘");
+  });
+});

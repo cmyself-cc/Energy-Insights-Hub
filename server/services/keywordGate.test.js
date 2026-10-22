@@ -82,3 +82,31 @@ describe("applyKeywordGate — exclude 匹配扩展到正文", () => {
     expect(gate.excluded).toBe(1);
   });
 });
+
+import { applyIndustryFilter } from "./keywordGate.js";
+
+// 2026-10-22：删除 DEFAULT_INDUSTRY_KEYWORDS 旧口径兜底表（taxonomy 对齐后的
+// 漂移隐患）。applyIndustryFilter 收到空/未定义关键词表时必须原样放行——
+// 旧实现会退回默认表把不含行业词的条目滤掉，该行为就此钉死废除。
+describe("applyIndustryFilter — 空关键词表原样放行（无默认兜底表）", () => {
+  const items = [{ title: "一篇没有任何行业关键词的杂文", summary: "全文无关" }];
+
+  it("空数组 → 原样返回", () => {
+    expect(applyIndustryFilter(items, [])).toEqual(items);
+  });
+
+  it("undefined → 原样返回", () => {
+    expect(applyIndustryFilter(items, undefined)).toEqual(items);
+  });
+
+  it("显式关键词表仍正常过滤", () => {
+    const out = applyIndustryFilter(
+      [
+        { title: "储能电站投运", summary: "" },
+        { title: "无关杂文", summary: "" }
+      ],
+      [{ name: "储能", aliases: ["电池"] }]
+    );
+    expect(out.map((i) => i.title)).toEqual(["储能电站投运"]);
+  });
+});

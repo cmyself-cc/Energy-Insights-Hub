@@ -1,12 +1,6 @@
 import { matchesAnyKeyword, findMatchedKeyword, findMatchedExcludingKeyword } from "./filterRules.js";
 import db from "../db.js";
 
-const DEFAULT_INDUSTRY_KEYWORDS = [
-  "电力", "氢能", "储能", "光伏", "油气", "CCS", "LNG", "天然气",
-  "风电", "核电", "电池", "充电", "碳中和", "碳捕集",
-  "生物燃料", "润滑油", "化工", "炼化"
-];
-
 const TRACE_KEYWORD_GATE = process.env.TRACE_KEYWORD_GATE === "1";
 
 /**
@@ -30,11 +24,12 @@ export function loadIndustryKeywordsWithAliases() {
   return result;
 }
 
+// 无关键词表 = 不过滤（原 DEFAULT_INDUSTRY_KEYWORDS 兜底表已删：它是旧口径混合
+// 清单，与 industry_categories 双源漂移，2026-10-22 taxonomy 对齐时摘除）。
 export function applyIndustryFilter(items, industryKeywords) {
-  const keywords = industryKeywords && industryKeywords.length > 0 ? industryKeywords : DEFAULT_INDUSTRY_KEYWORDS;
-  if (!keywords || keywords.length === 0) return items;
+  if (!industryKeywords || industryKeywords.length === 0) return items;
   return items.filter(item => {
-    const ok = findMatchedKeyword(item, keywords) !== null;
+    const ok = findMatchedKeyword(item, industryKeywords) !== null;
     if (TRACE_KEYWORD_GATE && !ok) {
       console.log(`[industry-filter] EXCLUDED: "${(item.title||'').slice(0,50)}" — no industry keyword in: ${(item.title||'').slice(0,40)} ${(item.summary||'').slice(0,60)}`);
     }

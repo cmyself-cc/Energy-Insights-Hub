@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripBoilerplate, truncateAtSentence } from "./utils.js";
+import { stripBoilerplate, truncateAtSentence, fuzzyTitleSimilarity, titleSignature, fuzzyTitleSimilarityFromSignatures } from "./utils.js";
 
 describe("stripBoilerplate", () => {
   it("returns empty string for empty input", () => {
@@ -72,5 +72,35 @@ describe("truncateAtSentence", () => {
     const out = truncateAtSentence(text);
     expect(out.length).toBeLessThanOrEqual(200);
     expect(out.endsWith("。")).toBe(true);
+  });
+});
+
+
+// dedup 性能优化（2026-10-22）：库内历史标题的 n-gram 集合改为一次性预计算签名，
+// 比较时复用。签名路径必须与原字符串路径逐点一致（行为保持型优化）。
+describe("titleSignature / fuzzyTitleSimilarityFromSignatures", () => {
+  const PAIRS = [
+    ["国家能源局发布新型储能发展指导意见", "国家能源局发布新型储能发展指导意见"],
+    ["国家能源局发布新型储能发展指导意见", "国家能源局印发新型储能发展指导意见"],
+    ["Shell 发布润滑油新品", "中石油签署 LNG 长协"],
+    ["  Hello   World ", "hello world"],
+    ["", "非空标题"],
+  ];
+
+  it("签名路径与原字符串路径在所有样本对上结果一致", () => {
+    for (const [a, b] of PAIRS) {
+      const sigA = titleSignature(a);
+      const sigB = titleSignature(b);
+      const viaStrings = fuzzyTitleSimilarity(a, b);
+      const viaSigs = fuzzyTitleSimilarityFromSignatures(sigA, sigB);
+      expect(viaSigs).toBe(viaStrings);
+      expect(viaSigs).toBe(fuzzyTitleSimilarityFromSignatures(sigB, sigA)); // 对称
+    }
+  });
+
+  it("完全相同的标题签名相似度为 1，空标题为 0", () => {
+    const sig = titleSignature("完全相同的标题");
+    expect(fuzzyTitleSimilarityFromSignatures(sig, titleSignature("完全相同的标题"))).toBe(1);
+    expect(fuzzyTitleSimilarityFromSignatures(titleSignature(""), titleSignature("任意"))).toBe(0);
   });
 });
